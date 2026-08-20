@@ -21,25 +21,36 @@ its tests come before the UI that calls it — because a wrong balance is invisi
 
 
 Create the Next.js application and every piece of tooling the rest of the build assumes.
+**No Supabase login, link, or migration happens here** — provisioning moves to Phase 2, where
+feature 10 already calls for it. This feature is done when every command in `CLAUDE.md` → Commands
+that does not need a database exits zero.
 
 **Logic:**
 
-- `pnpm create next-app` with TypeScript, App Router, `src/` directory, and the `@/*` path alias.
-- Tailwind CSS v4 via `@tailwindcss/postcss`; `globals.css` with `@import "tailwindcss"`.
-- ESLint, Prettier with `prettier-plugin-tailwindcss`, and the strict `tsconfig.json` flags from `code-standards.md`.
-- Vitest configured for `src/**/*.test.ts`.
-- Folder skeleton exactly as `architecture.md` describes, with `.gitkeep` where empty.
-- **Hosted Supabase project created and linked** (`pnpm supabase link`) — no Docker on this machine, so there is no local stack. Every later feature that writes a migration depends on this existing now.
-- `supabase/migrations/` initialised and an empty baseline migration applied, proving the link works.
-- `.env.example` listing every variable in `code-standards.md` → Environment Variables, with dummy values; `.env.local` and `.env.test.local` in `.gitignore`.
-- `src/lib/env.ts` validating required variables at startup with Zod.
+- `pnpm create next-app` with TypeScript, App Router, `src/` directory, and the `@/*` path alias — scaffolded into a temp directory and copied in, because `create-next-app` refuses a folder containing `context/`, `CLAUDE.md` or `AGENTS.md`, and its template would overwrite `README.md`. Git init disabled; the repo already exists.
+- Every dependency **pinned exactly**, no caret ranges, matching the version table in `architecture.md`.
+- Tailwind CSS v4 via `@tailwindcss/postcss`; `globals.css` with `@import "tailwindcss"`; no `tailwind.config.js` anywhere.
+- ESLint 10 flat config (`eslint.config.mjs`), Prettier with `prettier-plugin-tailwindcss` pointed at `globals.css` via the v4 stylesheet option, and the strict `tsconfig.json` flags from `code-standards.md` — `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`.
+- Vitest configured for `src/**/*.test.ts`: node environment, no jsdom and no Testing Library (neither is an approved dependency, and tier 1 covers pure logic only), with the `@/` alias resolved explicitly.
+- Scripts limited to the ones this feature can make real — `dev`, `build`, `start`, `lint`, `typecheck`, `test`. The database and race scripts land in feature 09 alongside the harness they invoke, rather than shipping as broken stubs.
+- Folder skeleton exactly as `architecture.md` describes, with `.gitkeep` where empty, including `supabase/` even though nothing connects to it yet.
+- `.env.example` listing every variable in `code-standards.md` → Environment Variables, with dummy values; `.env*.local` in `.gitignore`.
+- **Environment validation is split in two.** `src/lib/env.ts` validates the three `NEXT_PUBLIC_*` variables and is safe to import anywhere; `src/lib/env.server.ts` carries `import 'server-only'` and validates `SUPABASE_SERVICE_ROLE_KEY` plus the optional `TWELVE_DATA_API_KEY` and `TEST_DATABASE_URL`. A client-side import of the secrets becomes a build error rather than a runtime throw — the same guard `architecture.md` already mandates for `admin.ts`. `code-standards.md` → Environment Variables is updated in the same commit, since it names a single `env.ts`.
+- `src/instrumentation.ts` exporting `register()`, calling both validators inside a `NEXT_RUNTIME === 'nodejs'` guard. Next.js runs this once per server instance before it serves a request, and deliberately skips it during `next build` — so a bad env breaks `dev` and `start` by name while `build` stays green without secrets present.
+- The `supabase` CLI as a dev dependency so `pnpm supabase` resolves, but never logged in or linked.
 
 **Verify:**
 
-- `pnpm dev` serves the default page at `localhost:3000` with no console errors.
-- `pnpm supabase migration list` shows the linked project and the baseline migration applied.
-- `pnpm lint`, `pnpm typecheck`, and `pnpm test` all exit zero.
-- Deleting a required variable from `.env.local` makes startup fail with a named error, not a runtime `undefined`.
+- `pnpm dev` serves the default page at `localhost:3000` — `curl -sI localhost:3000` returns 200 and the dev server output carries no warnings.
+- `pnpm build` exits zero.
+- `pnpm lint`, `pnpm typecheck`, and `pnpm test` all exit zero, and `test` runs at least one real assertion rather than passing on `passWithNoTests`.
+- Deleting a required variable from `.env.local` makes startup fail with a named error, not a runtime `undefined`: remove `NEXT_PUBLIC_SUPABASE_URL`, run `pnpm dev`, and read that the error names that variable.
+- **The service-role secret cannot reach the browser:** temporarily import `env.server.ts` from a `'use client'` file and confirm `pnpm build` *fails* with the `server-only` error, then revert. A guard never observed failing is not a guard.
+- `ls tailwind.config.*` returns nothing — configuration is CSS, per `library-docs.md` → Tailwind CSS v4.
+- `grep -E '"\^' package.json` returns nothing; every version is exactly pinned.
+- `find src supabase tests -type d | sort` matches the tree in `architecture.md` → Folder Structure.
+- `git status --porcelain` shows no modification to `CLAUDE.md`, `AGENTS.md`, `LICENSE`, `README.md` or `context/`.
+- Creating `.env.local` and `.env.test.local` leaves `git status --porcelain` listing neither.
 
 ### 02 Design system and theme tokens
 

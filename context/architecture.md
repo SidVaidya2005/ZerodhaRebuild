@@ -10,7 +10,7 @@
 | ----- | ---- | ------- |
 | Framework | Next.js 16.3.1 (App Router) | Marketing pages, terminal routes, Server Actions, route handlers |
 | UI runtime | React 19.2.8 | Server Components by default; Client Components for live price surfaces |
-| Language | TypeScript 7.0.2, `strict` | All application and Edge Function code |
+| Language | TypeScript 6.0.3, `strict` | All application and Edge Function code. **Not 7.x**: `typescript-eslint` refuses to load against the TS 7 API, so `pnpm lint` cannot run on it (F01) |
 | Styling | Tailwind CSS 4.3.3 + `@tailwindcss/postcss` | CSS-first theming via `@theme`; design tokens derived from `context/DESIGN.md` |
 | Type | Inter + IBM Plex Sans via `next/font` | Editorial type and tabular numerals; substitutes named in `DESIGN.md` |
 | Components | shadcn/ui (Radix) + `lucide-react` 1.33.0 | Dialogs (order ticket), tabs, dropdowns, toasts, command palette (search) |
@@ -28,7 +28,7 @@
 | Tests — logic | Vitest 4.1.11 | Charge estimator, provider chain, market-hours, parsers |
 | Tests — database | pgTAP via `supabase test db --db-url` | RLS, grants, constraints, function correctness |
 | Tests — concurrency | `pg` 8.23.0, two live connections | Row-lock races the other tiers cannot express |
-| Tooling | pnpm 11, ESLint 10, Prettier 3.9.6 | Install, lint, format |
+| Tooling | pnpm 11, ESLint 9.39.5, Prettier 3.9.6 | Install, lint, format. **Not ESLint 10**: `eslint-plugin-react` 7.37.5 — the newest release, pulled in by `eslint-config-next` — crashes on ESLint 10's rule-context API (F01) |
 | Hosting | Render (free web service) + hosted Supabase | Deployment target |
 
 **Free-tier constraints that shaped this architecture.** Render's free tier has no cron jobs and no

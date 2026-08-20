@@ -1,0 +1,11 @@
+.next
+node_modules
+pnpm-lock.yaml
+next-env.d.ts
+coverage
+supabase/migrations
+
+# Markdown is hand-maintained prose — CLAUDE.md, AGENTS.md and the context/ docs are
+# the project's source of truth, and reflowing their tables and paragraphs creates
+# large diffs that bury the actual edit. Format them by hand.
+*.md
