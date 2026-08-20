@@ -57,27 +57,39 @@ that does not need a database exits zero.
 
 
 Establish the visual language before any page is built, so nothing needs restyling later.
+shadcn's token vocabulary is **bridged onto** this project's, never allowed to replace it.
 
 **UI:**
 
 - The full `@theme` token set from `library-docs.md` → Tailwind: brand, trading semantics, surfaces, text, chart ramp, type scale, radius.
 - Dark values on `:root` with `.light` overriding them, plus `@custom-variant light`. There is no `dark:` variant in this project.
-- `next-themes` provider in the root layout, `attribute="class"`, `defaultTheme="dark"`, no flash on load.
-- Fonts wired through `next/font`: Inter as `--font-inter`, IBM Plex Sans as `--font-plex`, with `tabular-nums` on the numeric class.
-- shadcn/ui initialised and the base primitives added, restyled to the system's density — 14px body, 6px radius, 1px hairlines, 40px controls.
-- A `/dev/styleguide` page rendering every token, button variant, and table density in both themes.
+- A `@theme inline` **bridge block** mapping the token names shadcn's components expect onto this project's palette — `--color-background` → `var(--color-canvas)`, `--color-primary` → `var(--color-brand)`, `--color-border` → `var(--color-hairline)`, and so on. Bridge tokens exist so `shadcn add` keeps working; **project code never uses them** and keeps using `bg-canvas`, `text-muted`, `border-hairline`.
+- **`--color-muted` stays this project's text grey.** shadcn uses that same name for a *surface* and puts the text colour in `--color-muted-foreground` — the same name with the opposite role, and the one genuine collision in the set. `--color-muted-foreground` is defined to the same value, so `text-muted` and `text-muted-foreground` both resolve correctly and only `bg-muted` is left wrong; that is hand-fixed to `bg-surface-elevated` on add. The full mapping is recorded in `library-docs.md` → shadcn/ui so every future `shadcn add` is mechanical.
+- `next-themes` provider in the root layout, `attribute="class"`, `defaultTheme="dark"`, `enableSystem={false}` so the OS cannot override the intended default, `disableTransitionOnChange`, and `suppressHydrationWarning` on `<html>`. Theme persists to `localStorage` only — `profiles.theme` is feature 35's job.
+- Fonts wired through `next/font`: Inter as `--font-inter`, IBM Plex Sans as `--font-plex`, with `tabular-nums` on the numeric class and display line-heights reduced ~3% per `DESIGN.md`'s substitution note.
+- shadcn/ui initialised and the base primitives added — `button dialog dropdown-menu tabs input select command table skeleton sonner` — restyled to the system's density: 14px body, 6px radius, 1px hairlines, 40px controls. Styling changes freely; **component APIs do not**.
+- **Every `dark:` utility is stripped from added components, not left inert.** Tailwind v4 ships a built-in `dark:` variant bound to `prefers-color-scheme`, so a leftover `dark:bg-input/30` responds to the visitor's OS rather than this project's theme class. That is a live bug, not dead code.
+- A `/dev/styleguide` page rendering every token, button variant, and table density in both themes, plus a right-aligned numeric column proving tabular alignment. It calls `notFound()` in production: it sits outside both route groups, so `proxy.ts` will never guard it.
 
 **Logic:**
 
-- `src/lib/utils.ts` with `cn()` and the `formatCurrency` / `formatPercent` / `formatQuantity` helpers using `en-IN` locale and the ₹ symbol.
+- `src/lib/utils.ts` with `cn()` and the `formatCurrency` / `formatSignedCurrency` / `formatPercent` / `formatQuantity` helpers using `en-IN` locale and the ₹ symbol. `Intl.NumberFormat` produces Indian digit grouping natively — verified — so no hand-rolled grouping.
+- `formatCurrency` always renders the symbol and 2dp; `formatSignedCurrency` renders an explicit `+` or `−` for figures whose sign carries meaning, giving feature 38's "sign must be visible, not only colour" requirement a dedicated home.
+- `src/components/theme-provider.tsx` — app-level chrome, so not in `ui/`, `marketing/`, `terminal/` or `charts/`.
 
 **Verify:**
 
-- `/dev/styleguide` renders every token swatch in both themes; toggling theme changes all of them with no hardcoded colour left behind.
-- Brand yellow and the up/down greens and reds are byte-identical in both themes; only canvas, surface and text tones flip.
-- Numbers render in `--font-plex` with `tabular-nums` and align in a column; body copy renders in `--font-inter`.
-- `formatCurrency(1234567.5)` returns `₹12,34,567.50` — Indian digit grouping, asserted in a test.
+- Brand and trading colours are byte-identical in both themes, asserted mechanically rather than by eye: a test parses `globals.css` and confirms the `.light` block redefines **none** of `--color-brand`, `--color-brand-active`, `--color-on-brand`, `--color-up`, `--color-down`, and **does** redefine canvas, surface and ink.
+- `formatCurrency(1234567.5)` returns `₹12,34,567.50` and `formatCurrency(100000)` returns `₹1,00,000.00`, asserted in a test.
+- `formatSignedCurrency(-1234.5)` leads with `−` and `formatSignedCurrency(1234.5)` with `+`, asserted in a test.
 - Grepping `src/` for `#` hex literals inside `className` returns nothing.
+- `grep -rn 'dark:' src` returns nothing — the guard against the `prefers-color-scheme` bug above.
+- `grep -rn 'bg-background\|text-foreground\|bg-primary\|text-muted-foreground' src --include=*.tsx` returns hits only under `src/components/ui/`; no bridge name has leaked into project code.
+- `grep -rn 'bg-muted' src/components/ui` returns nothing.
+- `/dev/styleguide` renders every token swatch in both themes; toggling changes all of them with none left behind, and a reload keeps the choice with no flash of the wrong theme.
+- Numbers render in `--font-plex` with `tabular-nums` and align in a right-aligned column of varying-width prices; body copy renders in `--font-inter`.
+- Built and served with `NODE_ENV=production`, `/dev/styleguide` returns HTTP 404.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` all exit zero.
 
 ### 03 Public layout shell
 
