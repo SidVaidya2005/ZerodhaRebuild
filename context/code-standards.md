@@ -464,7 +464,10 @@ Approved dependencies for this project:
 - `typescript` — language
 - `tailwindcss`, `@tailwindcss/postcss`, `postcss` — styling
 - `class-variance-authority`, `clsx`, `tailwind-merge` — shadcn/ui's styling utilities
-- `@radix-ui/*` — the primitives shadcn/ui pulls in per component
+- `radix-ui` — the unified Radix primitives package. The shadcn CLI moved from per-component `@radix-ui/*` packages to this single one; `shadcn init -b radix` is what selects Radix over Base UI or React Aria (F02)
+- `shadcn` — **a runtime dependency, not just the CLI.** It ships `shadcn/tailwind.css`, which `globals.css` imports for the scroll-fade, shimmer and no-scrollbar utilities its components rely on (F02)
+- `tw-animate-css` — animation utilities the shadcn dialog, dropdown and command components depend on; added by `shadcn init` (F02)
+- `cmdk` — the command-palette primitive behind `components/ui/command.tsx`, used for stock search (F02)
 - `lucide-react` — icons
 - `@supabase/supabase-js`, `@supabase/ssr` — database, auth, realtime
 - `zod` — validation

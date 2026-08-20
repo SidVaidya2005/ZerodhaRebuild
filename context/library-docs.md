@@ -381,9 +381,20 @@ const plex = IBM_Plex_Sans({
 ### Setup
 
 ```bash
-pnpm dlx shadcn@latest init
-pnpm dlx shadcn@latest add button dialog dropdown-menu tabs input select command table skeleton sonner
+# Verified working 2026-08-21 with shadcn 4.18.0. The CLI now picks a component
+# base (Base UI / Radix / React Aria) and prompts for a style preset that -y does
+# NOT skip, so both are passed explicitly. architecture.md specifies Radix.
+pnpm dlx shadcn@4.18.0 init -b radix -t next -p nova --css-variables -y
+pnpm dlx shadcn@4.18.0 add button dialog dropdown-menu tabs input select command table skeleton sonner -y
 ```
+
+`init` writes `components.json`, creates `src/lib/utils.ts`, **rewrites `globals.css`**, and
+**injects Geist into the root layout** — the last two must be reverted, since this project's tokens
+and fonts are its own.
+
+`shadcn` is a **runtime dependency**, not only a CLI: `globals.css` imports `shadcn/tailwind.css`
+for the scroll-fade, shimmer and no-scrollbar utilities its components use. It defines no colour
+tokens, so it does not collide with the palette.
 
 **Rules:**
 
@@ -391,7 +402,34 @@ pnpm dlx shadcn@latest add button dialog dropdown-menu tabs input select command
 - Change styling, never a component's public API. A `Button` that takes different props than upstream breaks every future `shadcn add`.
 - No domain logic and no Supabase imports inside `src/components/ui/`. Trading components compose these primitives from `src/components/terminal/`.
 - The order ticket is a `Dialog`; stock search is `Command`; Orders page tabs are `Tabs`; notifications are `sonner`, not the deprecated shadcn toast.
-- TODO: verify `shadcn@4.18.0 init` prompts and generated `components.json` against current docs at scaffold time — the CLI's Tailwind v4 handling changed across recent majors.
+
+### The token bridge — run this on every `shadcn add`
+
+shadcn's components are written against their own token vocabulary. `globals.css` carries a
+`@theme inline` bridge mapping it onto this project's palette, so most components work untouched.
+Three things still need doing by hand after every add, and a component that skips them fails
+silently rather than loudly:
+
+| Found in an added component | Rewrite to | Why |
+| --- | --- | --- |
+| `dark:*` (any utility) | delete it | Tailwind v4 binds `dark:` to `prefers-color-scheme`. This project's dark is the *base* and `.light` overrides, so a `dark:` class would follow the visitor's OS instead of the theme. The variant is also redefined to match nothing, so these are inert — but they must still go |
+| `bg-muted`, `bg-muted/50` | `bg-surface-elevated` | shadcn means a *surface* by `muted`; this project means the *text* grey. `--color-muted` is deliberately absent from the bridge for exactly this reason |
+| `var(--secondary)` | `var(--color-surface-elevated)` | Bare custom properties are **not** defined here. Our tokens are `--color-*` via `@theme`, so each of these resolves to nothing |
+| `var(--foreground)` | `var(--color-body)` | as above |
+| `var(--popover)` | `var(--color-surface)` | as above |
+| `var(--popover-foreground)` | `var(--color-body)` | as above |
+| `var(--border)` | `var(--color-hairline)` | as above |
+| `var(--radius)` | `var(--radius-lg)` | this project defines `--radius-xs…xl`, never a bare `--radius` |
+
+`var(--radius-md)` and friends **are** defined and need no rewrite.
+
+Density pass on controls: `h-8`/`h-9` → `h-10` (40px), `rounded-lg` → `rounded-md` (6px),
+`border-input` → `border-hairline`.
+
+**Scope any bulk rewrite to double-quoted string literals.** A whitespace regex run over a whole
+source file mangles the code around the class strings — this cost a full regeneration once already.
+
+- `text-muted-foreground` needs no rewrite: the bridge aliases it to this project's `--color-muted`.
 
 ---
 
