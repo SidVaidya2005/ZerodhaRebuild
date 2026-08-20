@@ -14,7 +14,7 @@ drift across sessions.
 
 - `strict: true`, plus `noUncheckedIndexedAccess` and `noImplicitOverride`. Never relax a compiler flag to make an error go away.
 - `any` is banned. Use `unknown` at boundaries and narrow with Zod. A genuinely unavoidable `any` needs an inline comment explaining why.
-- No non-null assertions (`!`) on values that could actually be null. The exception is `process.env.X!` for variables validated at startup in `src/lib/env.ts`.
+- No non-null assertions (`!`) on values that could actually be null. The exception is `process.env.X!` for variables validated at startup in `src/lib/env.ts` or `src/lib/env.server.ts`.
 - Type external data, never trust it: every upstream HTTP response and every Server Action input is parsed by a Zod schema before use.
 - Prefer `type` aliases for domain shapes; use `interface` only when declaration merging is needed.
 - Discriminated unions over optional-field grab bags — `ActionResult<T>` is the canonical example.
@@ -406,7 +406,12 @@ the second pass never selects the order.
 ## Environment Variables
 
 Never hardcode a key, URL, project reference, or secret. Everything below is read through
-`src/lib/env.ts`, which validates the set at startup and fails loudly if one is missing.
+two modules, both validating with Zod and both failing loudly at startup if a value is missing.
+
+- **`src/lib/env.ts`** holds the three `NEXT_PUBLIC_*` variables. Next.js inlines them into the browser bundle, so this module is safe to import from anywhere. It names each key explicitly rather than spreading `process.env`, because Next substitutes only literal member accesses.
+- **`src/lib/env.server.ts`** holds `SUPABASE_SERVICE_ROLE_KEY` and the two optional secrets, and carries `import 'server-only'`. A Client Component that imports it fails the **build** rather than throwing at runtime — the same guard `admin.ts` carries, applied one level earlier so the service-role key cannot be reached from the browser at all.
+
+Validation is forced at boot by `register()` in `src/instrumentation.ts`. Next.js runs that once per server instance before the first request and skips it during `next build`, so a missing variable breaks `dev` and `start` by name while `build` stays green on a machine holding no secrets.
 
 | Variable | Used In | Secret? |
 | -------- | ------- | ------- |

@@ -17,8 +17,8 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 1 — Foundation & Public Site
-**Last completed:** Nothing yet — build not started
-**Next:** 01 Project scaffold and tooling
+**Last completed:** 01 Project scaffold and tooling — lint, typecheck, test and build all green; env guards verified by falsification
+**Next:** 02 Design system and theme tokens
 
 ---
 
@@ -26,7 +26,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ### Phase 1 — Foundation & Public Site
 
-- [ ] 01 Project scaffold and tooling
+- [x] 01 Project scaffold and tooling
 - [ ] 02 Design system and theme tokens
 - [ ] 03 Public layout shell
 - [ ] 04 Home page
@@ -92,4 +92,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
-_None yet._
+- **TypeScript is pinned to 6.0.3 and ESLint to 9.39.5, both below their available latest.** `typescript-eslint` refuses to load against the TS 7 API, and `eslint-plugin-react` 7.37.5 crashes on ESLint 10's rule-context API — each breaks `pnpm lint` outright. Re-test both when those upstreams ship support; `architecture.md`'s version table carries the reason. (F01)
+- **Supabase provisioning is deferred out of F01 to Phase 2.** The free plan caps active projects at two per org and both slots already hold unrelated projects (`NextBnb` active, `SpotifyAgain` paused). F10 already calls for creating and linking the project, so F01 and F10 were duplicating the step. (F01)
+- **F07 (Support form) conflicts with that deferral and is unresolved.** It sits in Phase 1 and needs a `support_messages` migration, so Phase 1 cannot complete without a Supabase project existing. Decide this when F07 is architected — do not discover it mid-build. (F01)
+- **Environment validation is split across two modules**, deviating from `code-standards.md`'s single `env.ts`, which was updated to match. `env.ts` holds the `NEXT_PUBLIC_*` variables and is safe anywhere; `env.server.ts` carries `import 'server-only'` so a client-side import of the service-role key fails the build instead of throwing at runtime. Validation is forced at boot by `register()` in `src/instrumentation.ts`, which Next.js skips during `next build` — so `build` stays green without secrets while `dev` and `start` fail by name. (F01)
+- **Dependencies are pinned exactly, with no caret ranges.** Every version in `architecture.md` was verified to equal the current registry `latest`, so the table, the lockfile and `package.json` all agree and can only diverge by a deliberate edit. (F01)
+- **Tier 1 tests run in Vitest's node environment with no jsdom and no Testing Library.** Neither is an approved dependency, and `code-standards.md` scopes tier 1 to pure logic. Component behaviour is proven in the browser, not in a simulated DOM. (F01)
