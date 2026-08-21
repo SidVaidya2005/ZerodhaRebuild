@@ -24,7 +24,7 @@ export function SiteFooter() {
         <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-4">
           <div>
             <p className="text-title-sm font-bold text-brand">ZerodhaRebuild</p>
-            <p className="mt-2 text-body-sm text-muted">
+            <p className="mt-2 text-body-sm text-body">
               A paper-trading terminal for NSE equities, built as a portfolio project.
             </p>
           </div>
@@ -54,14 +54,14 @@ export function SiteFooter() {
           </FooterColumn>
         </div>
 
-        <p className="mt-10 border-t border-hairline pt-6 text-caption text-muted">
+        <p className="mt-10 border-t border-hairline pt-6 text-caption text-body">
           ZerodhaRebuild is an independent portfolio project and is{' '}
           <span className="font-medium text-body">
             not affiliated with, endorsed by, or connected to Zerodha Broking Ltd.
           </span>{' '}
           in any way. All trading is simulated with fictional money. Nothing here is financial
           advice. See the{' '}
-          <Link href="/legal" className="text-brand hover:underline">
+          <Link href="/legal" className="text-brand underline underline-offset-4">
             full disclaimer
           </Link>
           .

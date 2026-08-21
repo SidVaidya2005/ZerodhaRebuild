@@ -1,13 +1,25 @@
-// Placeholder so the shell has something to wrap. Feature 04 replaces this file
-// wholesale with the real home page.
+import type { Metadata } from 'next'
+
+import { ClosingCta } from '@/components/marketing/ClosingCta'
+import { DataHonesty } from '@/components/marketing/DataHonesty'
+import { FeatureGrid } from '@/components/marketing/FeatureGrid'
+import { Hero } from '@/components/marketing/Hero'
+import { ProductComparison } from '@/components/marketing/ProductComparison'
+
+export const metadata: Metadata = {
+  title: 'ZerodhaRebuild — paper trading for NSE equities',
+  description:
+    'Learn how Indian equity trading works against real NSE prices with simulated money. Market and limit orders, CNC and MIS, margin and charges — none of it real.',
+}
+
 export default function HomePage() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-section md:px-6">
-      <h1 className="text-display-sm font-semibold text-ink">ZerodhaRebuild</h1>
-      <p className="mt-4 max-w-prose text-body text-muted">
-        The public shell is up. The home page lands in feature 04, and the pages it links to in
-        features 05 to 08.
-      </p>
-    </div>
+    <>
+      <Hero />
+      <FeatureGrid />
+      <ProductComparison />
+      <DataHonesty />
+      <ClosingCta />
+    </>
   )
 }
