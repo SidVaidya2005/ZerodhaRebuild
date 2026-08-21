@@ -29,12 +29,16 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Build plan sequencing
 
+- **F07 moves behind F09.** Its verify is a tier-2 pgTAP check and `support_messages` accepts anonymous writes, so it should not ship behind a one-off manual check. Phase 1 closes as 01–06 plus 08; F07 is built once the harness exists. (F08)
+
 - **Every link the public shell points at is stubbed in F03**, including `/auth/login`, so the shell's own verify can pass and F04's "every CTA routes to `/auth/login`" has a destination. Each stub is a heading plus one line of copy, replaced wholesale by F05–F08 and F12. `src/app/page.tsx` moves into `(marketing)/` in the same change — two files claiming `/` would fail the build. (F03)
 
 - **Supabase provisioning is deferred out of F01 to Phase 2.** The free plan caps active projects at two per org and both slots already hold unrelated projects (`NextBnb` active, `SpotifyAgain` paused). F10 already calls for creating and linking the project, so F01 and F10 were duplicating the step. (F01)
 
 - **F07 (Support form) is deferred to Phase 2, after F09.** It needs a `support_messages` migration, and its verify ("signed out, a select returns zero rows") is a tier-2 pgTAP check that F09's harness makes runnable. `support_messages` accepts anonymous writes, so it is the last table that should ship behind a one-off manual check. (F01, resolved F08)
-- **The two-active-project limit is no longer the blocker it was at F01.** That constraint assumed both free slots in `SidVaidya2005's Org` were taken by `NextBnb` and `SpotifyAgain`; provisioning now happens in a **separate Supabase account with an empty org**, which the MCP in this workspace cannot see — the CLI must be authenticated with a personal access token instead. (F08)
+- **There is exactly one Supabase project and it is the real one:** `zerodha-rebuild-dev` / `kefggygenlprjzhiocai` / ap-south-1, in a **separate Supabase account** (`wolfgunblood214@gmail.com's Org`) that the workspace MCP cannot see — the CLI is authenticated by personal access token instead. A second test project was created and deliberately deleted: one project is simpler to operate and cannot silently pause while the other stays warm. (F08, revised 1.00.03)
+- **Because of that, tier 3 commits into the production database.** It cannot be avoided — proving two connections cannot both fill an order requires the first to commit. Three guards are mandatory and none is optional: `ALLOW_RACE_TESTS` must be set or `pnpm test:race` exits, seeded rows carry a recognisable prefix, and `afterEach` cleanup runs on failure too. A crashed process can still strand rows; that is the accepted residual risk. (1.00.03)
+- **`TEST_DATABASE_URL` must use the session-mode pooler, port 5432.** Tier 3 holds a transaction open across statements; the transaction-mode pooler on 6543 structurally cannot express that. The port is load-bearing. (1.00.03)
 
 ## Environment and secrets
 
@@ -57,6 +61,7 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **Every text token clears WCAG AA against canvas, surface and surface-elevated in both themes, and `theme-tokens.test.ts` computes the ratios rather than trusting the eye.** The muted tones flip in `.light` and invert relative to dark, because on a light ground "more prominent" means darker. Changing any of these values without running `pnpm test` will go red. (fixed 1.00.01)
 - **Measure a theme by loading it, not by toggling the class from script.** Elements with `transition-colors` return stale computed colours after a scripted class change, which fabricates failures that do not exist. Set the stored theme, reload, then measure. (1.00.01)
 - **`text-brand` is only legible on dark surfaces, and this is the one contrast failure still open.** Brand yellow is 11–13.5:1 as text on dark and 1.37–1.43:1 on light, because F02's invariant deliberately keeps `--color-brand` byte-identical across themes. Use `text-ink` for figures and headings; reserve brand for CTA *backgrounds* (`bg-brand text-on-brand`), which pass in both. The wordmark and inline prose links still use it — filed against F38 as a design decision. (F06, still open after 1.00.01)
+- **Lighthouse cannot audit the 404**: it returns `ERRORED_DOCUMENT_REQUEST` for any non-200 document. That page is verified structurally and by measured contrast instead. (F08)
 - **`pnpm audit:a11y` only ever sees the dark theme.** A clean Lighthouse score is not evidence the light theme is accessible; the contrast assertions in `theme-tokens.test.ts` are what cover it. (F06)
 - **The marketing footer is `bg-surface`, not DESIGN.md's always-light `#fafafa`.** `--color-surface` already *is* `#fafafa` in the light theme, so the source system's value is reached through the token rather than hardcoded, and in dark it reads as the elevation step the flat-colour-block philosophy calls for. An always-light token pair would exist only to break the theme contract. (F03)
 

@@ -18,7 +18,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 **Phase:** Phase 1 — Foundation & Public Site
 **Last completed:** 1.00.01 muted token contrast fix — both tokens now flip and clear AA on every surface in both themes, machine-checked; every public route now scores Lighthouse 100 with zero contrast failures
-**Next:** 09 Test harness, once the Supabase CLI is authenticated and the dev + test projects exist. F07 (Support) then follows F09 rather than preceding it — its RLS check is tier 2
+**Next:** 09 Test harness — Supabase is provisioned and both connections verified, so this is unblocked. Start with the pgTAP spike in its Verify block. F07 (Support) follows F09; its RLS check is tier 2
 
 ---
 
@@ -92,10 +92,11 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
-- **F07 moves behind F09.** Its verify is a tier-2 pgTAP check and `support_messages` accepts anonymous writes, so it should not ship behind a one-off manual check. Phase 1 closes as 01–06 plus 08; F07 is built once the harness exists. (F08)
+- **One Supabase project, not two.** The test project was created and then deleted at the user's direction: a single project is simpler to operate and cannot silently pause while the other stays warm. `code-standards.md`, `CLAUDE.md`, `.env.example` and F09 were all rewritten in the same change, since all four mandated a second project. (1.00.03)
+- **Tier 3 therefore commits into the production database, and is gated behind `ALLOW_RACE_TESTS`.** It cannot roll back — proving two connections cannot both fill an order requires the first to commit. Recognisable seed prefix and failure-safe `afterEach` cleanup are the other two mandatory guards. (1.00.03)
+
 - **The 404 carries full public chrome; the error boundary carries none.** A mistyped URL is ordinary navigation and wants the nav, so `PublicShell` was extracted and shared — an unmatched URL never enters the `(marketing)` group, so the route-group layout cannot supply it. An error means this subtree already failed, so the fallback depends on as little as possible and stays a small client bundle. (F08)
 - **A Server Component throw renders nothing server-side; the boundary appears on hydration.** `curl` shows an empty body and a 500, which looks like the white screen the criterion forbids — the check only means something in a browser. Proven with a temporary throwing route, then deleted. (F08)
-- **Lighthouse cannot audit the 404**: it returns `ERRORED_DOCUMENT_REQUEST` for any non-200 document. That page is verified structurally and by measured contrast instead. (F08)
 
 
 - **The About page's stack table renders from a typed `src/lib/stack.ts` guarded by a bidirectional drift test.** Every `installed` row's version must equal `package.json`'s, and every `planned` row's package must be absent from it — so upgrading a dependency without touching the page fails the suite, and so does installing a planned package without flipping its row. (F05)

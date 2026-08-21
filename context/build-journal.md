@@ -43,6 +43,18 @@ At that phase's checkpoint, the whole phase collapses to:
 
 ## Phase 1 — Foundation & Public Site
 
+### 1.00.03 — Consolidate to one Supabase project  *(2026-08-21)*
+- Provisioned two projects (`zerodha-rebuild-dev`, `zerodha-rebuild-test`, both ap-south-1) per `code-standards.md`, then **deleted the test project at the user's direction**: one project is simpler to operate and cannot silently pause while the other stays warm. The deleted project was empty — freshly created, no migrations pushed — so nothing was lost.
+- Consequence, raised before acting rather than after: **tier 3 now commits into the production database.** It cannot roll back, because proving two connections cannot both fill the same order requires the first one to actually commit. That test is the headline engineering claim of the project, so dropping it was never an option.
+- Decision: three mandatory guards instead. `pnpm test:race` exits unless `ALLOW_RACE_TESTS` is set, so a bare `pnpm test:all` or a CI run can never write; seeded rows carry a recognisable prefix; `afterEach` cleanup runs on failure as well as success. The residual risk — a hard crash stranding rows — is accepted and written down rather than hidden.
+- Gotcha: **four documents mandated the second project**, not one. `code-standards.md` (Environment + the env var table), `CLAUDE.md` (environment notes and three command descriptions), `.env.example`, and `build-plan.md` F09 all had to be reconciled in the same change. A grep for "second hosted", "two active projects" and "test project" was what found them; the last four hits were stale phrasing rather than stale rules, which is exactly the kind of thing that survives a careless sweep.
+- Gotcha: `supabase link` writes `supabase/.temp/`, which was not gitignored. It holds no secret — the pooler URL there carries no password — but it is per-machine CLI state. Fixed in 1.00.02.
+- Gotcha: the CLI stores its token where `~/.supabase/` shows nothing, so the absence of a file proves nothing about auth state. `supabase projects list` failing is the only reliable check. There are also **two CLIs on this machine** — Homebrew 2.111.0 and the project's 2.115.0 dev dependency — and authenticating one does not authenticate the other.
+- Verified: the single project is reachable both as the linked project (`pnpm supabase migration list`) and through `TEST_DATABASE_URL` (`--db-url`), and `pnpm start` boots against the real credentials with env validation passing — those were dummy values until now.
+- Verified: `TEST_DATABASE_URL` uses the **session-mode** pooler on port 5432. Tier 3 holds a transaction open across statements, which the transaction-mode pooler on 6543 structurally cannot express. Recorded in three places because it will look like an arbitrary port choice later.
+- Verified: `.env.local`, `.env.test.local` and `.env.db-passwords.local` are all matched by the `.env*` ignore rule; `git status` is clean apart from the intended doc changes.
+- Note: the access token used to authenticate was pasted into the session transcript and should be rotated.
+
 ### 1.00.01 — Muted token contrast fix  *(2026-08-21)*
 Not a numbered feature: F38's palette work, pulled forward because every page shipped in Phase 1 was failing it.
 - Decision: **both muted tokens change in both themes**, not just light. The measurement that prompted this was the light-mode failure, but `--color-muted` at #707a8a was also 3.02:1 on `--color-surface-elevated` in dark — the token had never cleared AA anywhere. Dark becomes muted #929aa5 / muted-strong #b6bec9; light becomes muted #5a6472 / muted-strong #3d4552.

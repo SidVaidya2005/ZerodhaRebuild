@@ -295,7 +295,9 @@ Stand up all three test tiers before the schema they will police exists, so no l
 
 **Logic:**
 
-- A **second** hosted Supabase project created as the test target; `TEST_DATABASE_URL` in `.env.test.local` (gitignored) and named in `.env.example`. The free plan allows two active projects — this is the second.
+- **Provisioning is already done** (2026-08-21): one project, `zerodha-rebuild-dev` / `kefggygenlprjzhiocai` / ap-south-1, linked, with `.env.local` and `.env.test.local` written and both verified connecting. There is deliberately **no second project** — a throwaway test target was created and then deleted, because one project is simpler to operate and cannot silently pause while the other stays warm.
+- **`TEST_DATABASE_URL` therefore points at the real database, and tier 3 commits into it.** Three guards, all mandatory: `pnpm test:race` exits unless `ALLOW_RACE_TESTS` is set, every seeded row carries a recognisable prefix, and `afterEach` cleanup runs on failure as well as success. `code-standards.md` → Testing is authoritative.
+- The connection string must use the **session-mode** pooler (port 5432). Tier 3 holds a transaction open across statements on two connections, which transaction-mode pooling (6543) structurally cannot express — the port is load-bearing, not incidental.
 - `pnpm db:push:test` applying the full migration history with `supabase db push --db-url "$TEST_DATABASE_URL" --include-all`.
 - Scripts: `pnpm test` (tier 1, Vitest), `pnpm test:db` (tier 2, `supabase test db --db-url`), `pnpm test:race` (tier 3, Vitest driving `pg`), and `pnpm test:all` chaining all three.
 - `supabase/tests/00-helpers.sql` enabling the pgTAP extension and holding shared fixtures.
@@ -304,11 +306,13 @@ Stand up all three test tiers before the schema they will police exists, so no l
 
 **Verify:**
 
-- **Run this first, as a spike.** `pnpm test:db` executes a trivial `select plan(1); select ok(true); select * from finish();` against the test project and reports TAP success. A probe here showed `supabase test db --db-url` connects to the database before anything else and fails on connection, with no Docker error — but whether `pg_prove` itself needs a container after a *successful* connect is unproven, and this machine has no Docker.
+- **Run this first, as a spike.** `pnpm test:db` executes a trivial `select plan(1); select ok(true); select * from finish();` against the project and reports TAP success. A probe here showed `supabase test db --db-url` connects to the database before anything else and fails on connection, with no Docker error — but whether `pg_prove` itself needs a container after a *successful* connect is unproven, and this machine has no Docker.
 - If that spike fails on a container requirement, fall back without redesigning anything: the tier 2 files are plain SQL with pgTAP assertions, so run them through the same `pg` client tier 3 already uses and read the TAP output from the result set. Record which path was taken in the build journal.
 - `pnpm test:race` opens two connections and proves they are distinct backends — `select pg_backend_pid()` returns different values — then closes both.
-- `pnpm db:push:test` applies cleanly to the empty test project, and re-running it is a no-op.
+- `pnpm db:push:test` applies cleanly to the (currently empty) project, and re-running it is a no-op.
 - `TEST_DATABASE_URL` pointed at a paused or wrong project fails with a clear connection error, never a silent skip or an empty pass.
+- **`pnpm test:race` with `ALLOW_RACE_TESTS` unset exits without opening a connection** — proven by running it and confirming no rows appear. A guard that has never been observed refusing is not a guard.
+- A race test that throws mid-run still leaves the database clean: kill one deliberately and confirm `afterEach` removed its seeded rows.
 - `.env.test.local` is gitignored: creating it leaves `git status` clean.
 
 ### 10 Database schema: identity and market data

@@ -290,19 +290,27 @@ other two cannot reach.
 ### Environment
 
 There is **no Docker on this machine**, so `supabase start` and `supabase test db --local` are
-unavailable. Both database tiers run against a **second hosted Supabase project** used only for tests,
-addressed by `TEST_DATABASE_URL`:
+unavailable. Both database tiers therefore run against the **hosted project**, addressed by
+`TEST_DATABASE_URL`.
+
+**There is exactly one Supabase project, and it is the real one.** An earlier version of this
+document required a second, throwaway project for tests. That was reversed deliberately: one project
+is simpler to operate and cannot silently pause while the other stays warm. The cost is that tier 3
+writes into the real database, which is managed rather than avoided — see the tier 3 rules below.
 
 ```bash
-# Apply the full migration history to the test project
+# Apply the full migration history
 pnpm supabase db push --db-url "$TEST_DATABASE_URL" --include-all
 
 # Tier 2
 pnpm supabase test db --db-url "$TEST_DATABASE_URL" supabase/tests
 ```
 
-- The Supabase free plan allows **two active projects per organisation** — dev and test, exactly. Never point `TEST_DATABASE_URL` at the dev project; tier 3 commits.
-- Free projects **pause after a week of inactivity**. A test run failing to connect usually means the test project is paused, not that the code broke.
+- **Tier 3 commits into the real database.** It cannot do otherwise: proving two connections cannot both fill the same order requires the first one to actually commit. Three rules make that safe, and all three are mandatory:
+  1. **`pnpm test:race` refuses to run unless `ALLOW_RACE_TESTS` is set.** A bare `pnpm test:all` must never write to the database by accident, and neither must CI.
+  2. Every row a race test creates is seeded under a **recognisable prefix**, so anything it leaves behind is identifiable at a glance.
+  3. Cleanup runs in `afterEach` **whether the test passed or failed**. A crashed process can still strand rows; that is the residual risk of a single project, and it is cleared by hand or by `reset_account`.
+- Free projects **pause after a week of inactivity**. A run failing to connect usually means the project is paused, not that the code broke.
 - `TEST_DATABASE_URL` is a secret and lives only in `.env.test.local`, which is gitignored.
 
 ### Tier 2 — pgTAP
@@ -420,7 +428,8 @@ Validation is forced at boot by `register()` in `src/instrumentation.ts`. Next.j
 | `NEXT_PUBLIC_SITE_URL` | OAuth redirect target for `/auth/callback` | No |
 | `SUPABASE_SERVICE_ROLE_KEY` | `src/lib/supabase/admin.ts` and the `market-tick` Edge Function | **Yes** |
 | `TWELVE_DATA_API_KEY` | Optional second quote provider; the chain skips it when unset | **Yes** |
-| `TEST_DATABASE_URL` | Tiers 2 and 3; the **test** Supabase project's connection string. Never the dev project — tier 3 commits | **Yes** |
+| `TEST_DATABASE_URL` | Tiers 2 and 3. The project's connection string, on the **session-mode** pooler (port 5432) — tier 3 holds a transaction open across statements, which transaction-mode pooling cannot express | **Yes** |
+| `ALLOW_RACE_TESTS` | Set to run tier 3. Unset, `pnpm test:race` exits without touching the database | No |
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically inside Edge Functions and
 must not be added to `supabase/functions/.env`. `.env.example` lists every variable with a dummy
