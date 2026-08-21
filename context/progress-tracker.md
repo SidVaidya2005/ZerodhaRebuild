@@ -17,10 +17,8 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 2 — Data Foundation & Auth
-**Last completed:** 11 Database schema: funds, orders, and portfolio — five enums, six tables, three §12 identities encoded as CHECK constraints, `select`-only grants, and 62 new pgTAP assertions falsified seven ways. Found that a CHECK passes when its expression is NULL, which had made identity 6 bypassable
-**In progress:** 12 Google sign-in and route protection — **built, partly verified**. Server-initiated OAuth (a `<form>` to a Server Action, so sign-in works without JavaScript), the guard in `src/proxy.ts` over a pure `isTerminalPath()`/`safeNext()` module, all four Supabase clients, a minimal `/dashboard` to land on, and the three carried-over items: the `<main>` landmark taking `/auth/login` to Lighthouse 100, the `authenticated` arm of the `support_messages` suite, and the `SupportForm` banner fix. Guard, callback error branch, a11y, `admin.ts`'s server-only guard and both banner branches are all verified.
-
-**Blocked:** end-to-end sign-in cannot be verified until the Google Cloud OAuth client (redirect URI `https://kefggygenlprjzhiocai.supabase.co/auth/v1/callback`) and the Supabase Google provider and URL configuration are set up by hand. `build-journal.md` gets its F12 entry, and the checkbox its tick, once that passes.
+**Last completed:** 12 Google sign-in and route protection — server-initiated OAuth so sign-in works without JavaScript, the guard in `src/proxy.ts` over a pure `isTerminalPath()`/`safeNext()` module, all four Supabase clients, and a minimal `/dashboard` to land on. Verified end to end in the browser, including sign-out revoking the session server-side. Closed three carried-over items: `/auth/login` now scores 100, the `support_messages` suite covers `authenticated`, and `SupportForm` keys its banner off the field-error count. Two failures cost real time — a blank page that was a 16 KB header limit hit by other projects' localhost cookies, and a documented Supabase snippet that hardcodes `https://` and breaks a local production build
+**Next:** 13 Account bootstrap on first sign-in — the `handle_new_user` trigger creating the `profiles` row, a `ZR######` client ID with bounded retries, the `funds` row at `OPENING_BALANCE`, the `SIGNUP_CREDIT` ledger entry and a default watchlist. There is already one row in `auth.users` with no profile, so the trigger needs a backfill path or that account reset
 
 ---
 
@@ -43,7 +41,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 - [x] 09 Test harness
 - [x] 10 Database schema: identity and market data
 - [x] 11 Database schema: funds, orders, and portfolio
-- [ ] 12 Google sign-in and route protection
+- [x] 12 Google sign-in and route protection
 - [ ] 13 Account bootstrap on first sign-in
 - [ ] 14 Instrument and holiday calendar seed
 - [ ] 15 Quote provider chain

@@ -76,6 +76,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 - **Nothing sweeps the non-money documents, so the phase checkpoint is where they get reconciled.** `trading-contract.md` §13 has a sweep because money rules are restated in four files; the same restatement problem exists outside money with no equivalent guard. The 1.00.06 checkpoint found four statements describing a model already replaced — `supabase test db` named as the tier-2 runner in two files, and the support form still shown as react-hook-form in `architecture.md`'s stack table and data-flow diagram. Re-read the non-money docs against the code at every checkpoint. (1.00.06)
 
+## Local development environment
+
+- **A blank white page on `localhost:3000` is usually HTTP 431, not a rendering bug.** Cookies are scoped by host, ignoring port and project, so every Supabase app ever run on `localhost` piles its `sb-<ref>-auth-token` chunks into one jar. Three foreign projects left 14.8 KB there; adding this project's own 4.5 KB session crossed Node's default 16 KB `--max-http-header-size` and every request died with a zero-byte 431 **before Next.js saw it** — no error page, no log line, nothing in the server output. The same limit silently kills Server Action POSTs, so a form appears to do nothing when clicked. Diagnose with `document.cookie.length` in the browser, not by reading application code; clear the foreign `sb-*` cookies, or raise the limit with `NODE_OPTIONS=--max-http-header-size=32768`. (F12)
+
 ## Verification routine
 
 - **Kill `next start` by PID from `lsof -nP -iTCP:3000 -sTCP:LISTEN` before trusting any post-rebuild check.** `pkill` does not reliably stop it, and the surviving process keeps port 3000 and serves the *previous* build — which has silently invalidated a verification pass twice. (F03, F04)
