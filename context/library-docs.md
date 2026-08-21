@@ -61,40 +61,80 @@ The RSC/Server-Action client and the proxy client are the golden patterns in
 
 ### Google OAuth sign-in
 
-```ts
-'use client'
-import { createClient } from '@/lib/supabase/client'
+**Sign-in is started server-side** (F12), not from the browser client. A plain `<form>` posts to a
+Server Action, so it works with JavaScript disabled — the standard F07B set for the support form —
+and the PKCE code verifier is written by the same server client that reads it back in the callback.
+On the server `signInWithOAuth` performs no redirect of its own; it returns the URL to send the user to.
 
-export async function signInWithGoogle() {
-  const supabase = createClient()
-  await supabase.auth.signInWithOAuth({
+```ts
+// src/server/actions/auth.ts
+'use server'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+
+export async function signInWithGoogle(formData: FormData) {
+  const next = safeNext(formData.get('next')?.toString())
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/dashboard`,
+      redirectTo: `${env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=${encodeURIComponent(next)}`,
     },
   })
+
+  if (error || !data.url) {
+    console.error('[auth.signInWithGoogle]', error)
+    redirect('/auth/login?error=auth')
+  }
+
+  redirect(data.url)  // outside any try — redirect() works by throwing
 }
 ```
 
 ```ts
 // src/app/auth/callback/route.ts
 import { NextResponse, type NextRequest } from 'next/server'
+import { safeNext } from '@/lib/auth/routes'
 import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/dashboard'
+  // Never `searchParams.get('next') ?? '/dashboard'`: that value reaches a
+  // redirect, so `//evil.com` would walk straight through it.
+  const next = safeNext(searchParams.get('next'))
 
   if (code) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) return NextResponse.redirect(`${origin}${next}`)
+
+    if (!error) {
+      // Render terminates TLS at a load balancer, so `origin` is the internal host there.
+      const forwardedHost = request.headers.get('x-forwarded-host')
+      const base =
+        process.env.NODE_ENV === 'development' || !forwardedHost
+          ? origin
+          : `https://${forwardedHost}`
+      return NextResponse.redirect(`${base}${next}`)
+    }
+    console.error('[auth.callback]', error)
   }
 
   return NextResponse.redirect(`${origin}/auth/login?error=auth`)
 }
 ```
+
+**Rules for this flow:**
+
+- The browser client (`lib/supabase/client.ts`) is **not** how sign-in starts. It exists for the
+  Realtime surfaces from F19 onwards.
+- `redirect()` throws `NEXT_REDIRECT` by design. Call it outside every `try`, or the redirect is
+  swallowed and the user sits on a page that silently did nothing.
+- `redirectTo` is built from `NEXT_PUBLIC_SITE_URL`, not from the incoming request, because Supabase
+  matches it against a configured allow-list.
+- Any `next` parameter is re-validated by `safeNext()` at **both** ends — the login page and the
+  callback. It rejects absolute URLs, `//host` and `/\host`.
 
 ### Calling a database function
 

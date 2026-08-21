@@ -458,30 +458,91 @@ no bootstrap (F13), no seed.
 
 ### 12 Google sign-in and route protection
 
-
+Google OAuth through Supabase Auth, session refresh and a route guard in `src/proxy.ts`, and a
+minimal signed-in landing page so `/dashboard` is a real destination rather than a 404. Sign-in is
+**initiated server-side** — a `<form>` posting to a Server Action that calls `signInWithOAuth` and
+redirects to Google — so it works with JavaScript disabled, the standard F07B set for the support
+form. `library-docs.md` → Google OAuth sign-in showed the client-side variant and is corrected here.
 
 **UI:**
 
-- `/auth/login` with a single Google button, loading state, and error display.
-- Signed-in avatar and sign-out control in the header.
-- **Carried over from the Phase 1 checkpoint: the page this replaces has no `<main>` landmark**, and it is the only public route scoring below 100 on Lighthouse (97, `landmark-one-main`). The F03 stub was a bare `<div>`; the real page must render `<main>` and take the route to 100.
+- `/auth/login`: a Server Component with a `<main>` landmark, a single Google button submitted by a
+  form action, and an error region reading `?error=auth` from the awaited `searchParams`.
+- **The signed-in identity and sign-out control live on the `/dashboard` stub, not the public
+  header.** Reading the session in the `(marketing)` layout would force dynamic rendering on `/`,
+  `/about`, `/pricing` and `/support` and break `architecture.md`'s "public, session-free pages"
+  boundary. `SiteHeader` is untouched; F17 owns the terminal avatar menu.
+- `src/app/(terminal)/dashboard/page.tsx`: minimal — a `getUser()` guard, the Google name and email,
+  and a sign-out form. No group layout, no data, no shell. F17 replaces it wholesale.
+- **Carried over from the Phase 1 checkpoint: the page this replaces has no `<main>` landmark**, and
+  it is the only public route scoring below 100 on Lighthouse (97, `landmark-one-main`). The F03 stub
+  was a bare `<div>`; the real page must render `<main>` and take the route to 100.
 
 **Logic:**
 
-- Google OAuth configured in Supabase; redirect URLs registered for local and Render origins.
-- The three Supabase clients from `architecture.md` → Key Patterns.
-- `/auth/callback` route handler exchanging the code for a session.
-- `src/proxy.ts` refreshing the session and guarding terminal prefixes.
+- Google OAuth configured in Supabase; `https://kefggygenlprjzhiocai.supabase.co/auth/v1/callback`
+  registered in the Google Cloud console, and Site URL plus additional redirect URLs covering the
+  local and Render origins. This is console work, and nothing downstream verifies without it.
+- `src/lib/auth/routes.ts` — `TERMINAL_PREFIXES`, `isTerminalPath()` and `safeNext()` as pure
+  functions. `src/proxy.ts` cannot be reached by tier 1, but these two are where a bug is silent and
+  expensive: an unguarded route, or an open redirect. The proxy imports them; tier 1 tests them.
+- All four Supabase clients from `architecture.md` → Key Patterns: `client.ts`, `proxy.ts` and
+  `admin.ts` join the existing `server.ts`, copied verbatim — the cookie handling is not re-derived.
+  `admin.ts` ships with `import 'server-only'` and no caller in this feature, so its guard is proven
+  by hand rather than assumed.
+- `src/server/actions/auth.ts` — `signInWithGoogle` (redirectTo `${NEXT_PUBLIC_SITE_URL}/auth/callback`
+  carrying `next`) and `signOut`. **Both deviate from the standard Server Action shape**: no `input`,
+  no `ActionResult`, ending in `redirect()`. `code-standards.md` carries the exception beside the
+  `useActionState` one. `redirect()` is called outside any `try` — catching `NEXT_REDIRECT` would
+  break the flow silently.
+- `/auth/callback` route handler exchanging the code for a session, honouring `x-forwarded-host`
+  outside development (Render sits behind a proxy), and sending failures to `/auth/login?error=auth`.
+- `src/proxy.ts` refreshing the session and guarding the terminal prefixes, redirecting to
+  `/auth/login?next=<pathname>`. **The intended destination survives sign-in**: the callback honours
+  `next` only when `safeNext()` accepts it — a single leading `/` — and falls back to `/dashboard`.
+  That guard is what stops the callback becoming an open redirect.
+- `SupportForm.tsx` keys its form-level banner off `Object.keys(fields).length === 0`, fixing the
+  carried-over bug below.
 
 **Verify:**
 
-- Signing in redirects to `/dashboard` with a session cookie set.
-- Visiting `/holdings` signed out redirects to `/auth/login`.
-- Visiting `/pricing` signed out renders normally and is not intercepted.
-- Sign-out clears the session; the terminal is no longer reachable.
-- `pnpm audit:a11y /auth/login` scores **100**, closing the `landmark-one-main` failure the Phase 1 checkpoint recorded.
-- **`supabase/tests/01-rls-support-messages.sql` gains an `authenticated` arm.** This feature is what makes that role reachable on the contact form: the server client carries request cookies, so from here on a signed-in visitor inserts as `authenticated` rather than `anon`. The policy already names both, but only `anon` has ever been tested — so the role most submissions will use would otherwise ship with zero coverage. Assert insert allowed, and select / update / delete refused with `42501`, exactly as the `anon` arm does.
-- Also carried over: `SupportForm.tsx` suppresses the form-level error banner whenever `state.error.fields` is truthy, and `{}` is truthy. Any Zod issue with an empty path — a schema-level `.refine()`, an `unrecognized_keys` — would re-render the form with no visible explanation. Latent today because the schema has no such rule; key the banner off `Object.keys(fields).length === 0` before adding one.
+- Signed-out terminal requests are guarded and remember their destination:
+  `curl -sI localhost:3000/holdings` returns **307** with `Location: /auth/login?next=%2Fholdings`.
+- Public routes are not intercepted: `curl -sI` on `/`, `/pricing` and `/support` each return **200**
+  with no `Location` header.
+- The callback's failure branch is provable without Google: `curl -sI
+  'localhost:3000/auth/callback?code=bogus'` redirects to `/auth/login?error=auth`, and that page
+  renders the error copy.
+- **The callback is not an open redirect** — `pnpm test`: `safeNext()` rejects `https://evil.com`,
+  `//evil.com` and `javascript:…`, returning `/dashboard` for each.
+- Every terminal prefix is covered and no public path is — `pnpm test`: `isTerminalPath` over all
+  eight prefixes plus four public paths.
+- Sign-in works end to end, verified manually in a browser: signing in at `/auth/login` lands on
+  `/dashboard`, the page renders the Google name, and an `sb-*-auth-token` cookie is set.
+- Deep-link intent survives: visiting `/positions` signed out and then signing in lands on
+  `/positions`, not `/dashboard`.
+- Sign-out really ends the session: the button returns to `/`, the `sb-*-auth-token` cookie is gone,
+  and `/dashboard` redirects to `/auth/login`.
+- `pnpm audit:a11y /auth/login` scores **100**, closing the `landmark-one-main` failure the Phase 1
+  checkpoint recorded — confirmed by reading `finalDisplayedUrl` out of the report, not by trusting
+  the score (F05).
+- **`supabase/tests/01-rls-support-messages.sql` gains an `authenticated` arm.** This feature is what
+  makes that role reachable on the contact form: the server client carries request cookies, so from
+  here on a signed-in visitor inserts as `authenticated` rather than `anon`. The policy already names
+  both, but only `anon` has ever been tested — so the role most submissions will use would otherwise
+  ship with zero coverage. Assert insert allowed, and select / update / delete refused with `42501`,
+  exactly as the `anon` arm does. Falsified once by flipping an assertion and confirming the runner
+  names the file and the assertion.
+- Clients are constructed in exactly one place: `grep -rn "createServerClient\|createBrowserClient" src/`
+  returns only files under `src/lib/supabase/`.
+- **`admin.ts`'s server-only guard is observed, not assumed**: importing it into a Client Component
+  fails `pnpm build`; reverted after (the F01 falsifiability precedent).
+- Also carried over: `SupportForm.tsx` suppresses the form-level error banner whenever
+  `state.error.fields` is truthy, and `{}` is truthy. Any Zod issue with an empty path — a
+  schema-level `.refine()`, an `unrecognized_keys` — would re-render the form with no visible
+  explanation. Proven fixed by adding a temporary empty-path `.refine()`, confirming the banner
+  appears, and reverting.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` all exit zero.
 
 ### 13 Account bootstrap on first sign-in
 

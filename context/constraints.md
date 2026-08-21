@@ -58,6 +58,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Security and RLS
 
+- **No `anon` grant on any reference table.** Every surface showing an instrument or a price is under `(terminal)`, and F04 already decided the marketing site quotes no prices. The publishable key ships in the browser bundle, so granting `anon` select would publish the entire Nifty 200 universe to anyone who reads the JavaScript. (F10)
+
+- **A table's write path ships with the feature that uses it, not with the table.** `symbol_demand` lands in F10 with RLS on and no way for a client to write it; `touch_symbol_demand`, its grant and its test all arrive together in F18. A granted, callable, untested function with no caller for eight features is the thing being avoided. (F10)
+
 - **A CHECK constraint passes when its expression evaluates to NULL, not only when it is true.** Any operand that can be NULL turns the constraint into a suggestion. Proven on `trades`: a missing `charge_breakdown` key made the identity-6 sum NULL and a trade with `charges = 999.99` against a one-key breakdown was accepted. Wrap anything nullable — `coalesce(jsonb_typeof(...), '')` — and evaluate the expression in a plain `SELECT` against malformed input before trusting it. (F11)
 
 - **The money tables grant `select` and nothing else**, with no write policy for any command. `funds`, `fund_ledger`, `orders`, `trades`, `holdings` and `positions` are written only by `security definer` functions. (F11)
@@ -67,6 +71,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **Supabase grants `anon` and `authenticated` ALL privileges on new public tables by default** — verified on `support_messages`: SELECT, UPDATE, DELETE and TRUNCATE were all present, leaving RLS as the single layer. Revoke and grant back only what a role needs. It is defence in depth, and it turns a silent "affects zero rows" into a hard `42501` that a test can actually assert. (F07B)
 - **`support_messages` carries CHECK length bounds and a honeypot, and volume abuse is deliberately unmitigated.** The publishable key ships in the browser bundle, so anyone can write to that table: bounds cap the damage per request, the honeypot stops drive-by bots, and real rate limiting is out of scope for a portfolio contact form. (F07B)
 - **On a public-write table, prefer a missing grant to a filtering policy.** If a permissive policy is ever added by mistake, the absent grant still refuses. (F07B)
+
+## Documentation upkeep
+
+- **Nothing sweeps the non-money documents, so the phase checkpoint is where they get reconciled.** `trading-contract.md` §13 has a sweep because money rules are restated in four files; the same restatement problem exists outside money with no equivalent guard. The 1.00.06 checkpoint found four statements describing a model already replaced — `supabase test db` named as the tier-2 runner in two files, and the support form still shown as react-hook-form in `architecture.md`'s stack table and data-flow diagram. Re-read the non-money docs against the code at every checkpoint. (1.00.06)
 
 ## Verification routine
 
@@ -104,6 +112,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **A Lighthouse 100 is not evidence about tap targets.** Target size is not in its audit set: `/support` scored 100 while every `<summary>` was 20px tall, under WCAG 2.2's 24px minimum. Measure `getBoundingClientRect()` at 375px instead. (F07)
 
 ## Theming and design tokens
+
+- **`profiles.theme` defaults to `'dark'`, and `architecture.md` was wrong.** It said `light` while `project-overview.md` specifies a dark-default terminal and `theme-provider.tsx` ships `defaultTheme="dark"`. CLAUDE.md's conflict order puts the scope document above `architecture.md`, so the doc is corrected rather than the code bent to it. (F10)
 
 - **Every text token clears WCAG AA against canvas, surface and surface-elevated in both themes, and `theme-tokens.test.ts` computes the ratios rather than trusting the eye.** The muted tones flip in `.light` and invert relative to dark, because on a light ground "more prominent" means darker. Changing any of these values without running `pnpm test` will go red. (fixed 1.00.01)
 - **Measure a theme by loading it, not by toggling the class from script.** Elements with `transition-colors` return stale computed colours after a scripted class change, which fabricates failures that do not exist. Set the stored theme, reload, then measure. (1.00.01)
