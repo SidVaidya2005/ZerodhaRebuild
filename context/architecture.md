@@ -257,7 +257,7 @@ All monetary columns are `numeric(14,2)` in rupees. All quantities are `integer`
 | client_id | text unique | Generated `ZR` + 6 digits. The unique constraint is a backstop, not the strategy — the trigger retries on collision (see below) |
 | full_name | text | From the Google profile |
 | avatar_url | text | From the Google profile |
-| theme | text | `light` or `dark`, default `light` |
+| theme | text | `light` or `dark`, `CHECK`-constrained, default **`dark`** — `project-overview.md` specifies a dark-default terminal and `theme-provider.tsx` ships `defaultTheme="dark"`; this row said `light` until F10 (F10) |
 | created_at | timestamptz | Default `now()` |
 
 ### `instruments`

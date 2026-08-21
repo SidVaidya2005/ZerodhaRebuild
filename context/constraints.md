@@ -33,6 +33,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 - **Every link the public shell points at is stubbed in F03**, including `/auth/login`, so the shell's own verify can pass and F04's "every CTA routes to `/auth/login`" has a destination. Each stub is a heading plus one line of copy, replaced wholesale by F05–F08 and F12. `src/app/page.tsx` moves into `(marketing)/` in the same change — two files claiming `/` would fail the build. (F03)
 
+- **`pnpm db:push:test` does not exist and must not be reintroduced.** One database means one push command, and `pnpm supabase db push` already is it. A second script reaching the same place by a different mechanism, named for a test project that no longer exists, is a trap. (F09)
+
+- **F07 shipped as two slices under one number.** Slice A (help content) had no database dependencies; Slice B (form, migration, RLS) waited for F09. Renumbering would have invalidated every journal and commit reference already written — the precedent to follow if another feature turns out to straddle a phase boundary. (F07)
+
 - **Supabase provisioning is deferred out of F01 to Phase 2.** The free plan caps active projects at two per org and both slots already hold unrelated projects (`NextBnb` active, `SpotifyAgain` paused). F10 already calls for creating and linking the project, so F01 and F10 were duplicating the step. (F01)
 
 - **F07 (Support form) is deferred to Phase 2, after F09.** It needs a `support_messages` migration, and its verify ("signed out, a select returns zero rows") is a tier-2 pgTAP check that F09's harness makes runnable. `support_messages` accepts anonymous writes, so it is the last table that should ship behind a one-off manual check. (F01, resolved F08)
@@ -67,6 +71,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Supabase CLI
 
+- **`src/types/database.ts` is in `.prettierignore`, and must stay there.** `supabase gen types` emits double quotes where the project's Prettier config wants single, so formatting the file makes `format:check` fail after every regeneration until someone remembers a manual pass — on a file CLAUDE.md says is never hand-edited. Same treatment as `next-env.d.ts`. (F10)
+
 - **`supabase migration new` can hang past a 120s timeout having already written the file.** Check before assuming it failed and re-running it. (F09)
 
 - **There are two Supabase CLIs on this machine** — Homebrew 2.111.0 and the project's pinned 2.115.0 dev dependency — and authenticating one does not authenticate the other. The CLI also stores its token where `~/.supabase/` shows nothing, so an absent file proves nothing; `supabase projects list` failing is the only reliable check. (1.00.03)
@@ -75,6 +81,7 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 - **`supabase test db` requires Docker even with `--db-url`.** It connects to the remote database, *then* shells out to `pg_prove` in a container and dies with `LegacyDockerRunError`. Tier 2 runs through `scripts/run-pgtap.mts` instead: pgTAP's functions return their TAP output as text rows, so executing a suite through `pg` and reading the rows *is* the TAP stream. (F09)
 - **The tier-2 runner must fail on a plan mismatch, not only on `not ok`.** A suite declaring `plan(2)` that runs one assertion has a bug, and grepping only for `not ok` calls that a pass. All three failure modes — failed assertion, plan mismatch, SQL error — were observed failing before the runner was trusted. (F09)
+- **The tier-2 runner is a standalone TypeScript script with no new runner dependency.** Node 26 strips types natively, so `node scripts/run-pgtap.mts` runs directly; `tsx` would be a dependency for one file. Keeping it out of Vitest also means nothing about tier 2 can be picked up by `pnpm test`. (F09)
 - **Tier 3 is gated by `scripts/run-race.mts`, which decides before Vitest starts**, so an un-permitted run never imports `pg` at all. Proven with both controls: guard off, the module never loads; guard on, it does. (F09)
 - **Prove a negative with a positive control.** A first attempt at that proof used `console.log` and saw nothing in *either* case, because Vitest suppresses it — an absence that looked like evidence and was not. A filesystem marker gave both halves. (F09)
 

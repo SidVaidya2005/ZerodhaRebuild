@@ -372,23 +372,42 @@ itself installed cleanly on the hosted database (1.3.3), so only the *runner* wa
 
 ### 10 Database schema: identity and market data
 
-
+The first real schema migration: two enums, eight tables, their RLS policies and grants, one
+shared `updated_at` trigger, the `quotes` Realtime publication entry, and the pgTAP suites that
+prove the policies hold. No seed data (F14), no bootstrap trigger (F13), and no write path for
+`symbol_demand` (F18) — this feature builds the shape, not the contents.
 
 **Logic:**
 
-- Supabase project created and linked via the CLI.
-- Migration creating the enums, plus `profiles`, `instruments`, `quotes`, `candles`, `candle_sync`, `symbol_demand`, `watchlist_items`, `market_holidays`.
+- The project is already created and linked (2026-08-21, `zerodha-rebuild-dev`); this feature adds the migration, not the provisioning.
+- **Only the two enums this feature's tables reference** — `quote_provider` and `candle_interval`. The other five belong to F11's tables and are created there, so each migration stays reviewable against the tables it creates.
+- `public.touch_updated_at()`, a `before update` trigger function setting `new.updated_at = now()`, attached to `quotes` and reused by F11's `funds`, `holdings` and `positions`. **Postgres owns the column, not the writer**: a writer that forgets it stops Realtime firing silently, and that bug presents as "prices froze" while pointing nowhere near the upsert.
+- Tables in dependency order — `instruments` first, then `quotes`, `candles`, `candle_sync`, `symbol_demand` and `market_holidays`; `profiles` before `watchlist_items`.
 - `quotes` carries `provider` and `provider_ts` and **no `source` column** — freshness is derived at read time, per `architecture.md` → Quote Provenance.
-- RLS enabled on `profiles` with `auth.uid() = id` policies (its primary key *is* the user id) and on `watchlist_items` with `auth.uid() = user_id`; `instruments`, `quotes` and `market_holidays` readable by all authenticated users and writable by none.
-- `quotes` added to the `supabase_realtime` publication.
-- `src/types/database.ts` generated.
+- Constraints: `profiles.client_id` unique, `profiles.theme` `check (theme in ('light','dark'))`, `instruments.is_active` default true.
+- **`profiles.theme` defaults to `'dark'`, not `'light'`.** `architecture.md` said light while `project-overview.md` specifies a dark-default terminal and `theme-provider.tsx` ships `defaultTheme="dark"`; the scope document wins and `architecture.md` is corrected in the same commit.
+- Indexes: `watchlist_items_symbol_idx` on the non-leading foreign key — that table's primary key leads with `user_id`, so symbol lookups are not covered by it. Search indexes on `instruments` wait for F18, which writes the query they would serve.
+- **RLS on all eight, with grants revoked and granted back** per the F07B posture. User-owned tables (`profiles`, `watchlist_items`) are scoped to the owner; the six reference tables get a `select` policy for `authenticated` and **no write policy for any role**.
+- **Policies read `(select auth.uid())`, never bare `auth.uid()`** — the bare call is re-evaluated per row, the subselect once per query (Supabase's Postgres best-practices guide). Semantically identical, so `architecture.md`'s invariant still reads true.
+- **No `anon` grant anywhere.** Every surface showing an instrument or a price is under `(terminal)`, and F04 already decided the marketing site quotes no prices; the publishable key sits in the browser bundle, so an `anon` grant would publish the whole instrument universe.
+- `profiles` gets no `insert` grant — F13's bootstrap trigger runs as definer — and no `delete`, which cascades from `auth.users`.
+- `quotes` added to the `supabase_realtime` publication, keeping **default replica identity**: `payload.new` is fully populated for `postgres_changes`, and `replica identity full` would roughly double WAL for an `old_record` nothing reads.
+- `src/types/database.ts` regenerated.
+- Two pgTAP suites keeping the established `01-rls-<area>.sql` convention: `01-rls-identity.sql` and `01-rls-market-data.sql`.
 
 **Verify:**
 
-- `pnpm supabase db push` applies cleanly to a fresh project.
-- Generated types compile with no `any`.
-- As an authenticated user, an `update` on `quotes`, `candles` or `candle_sync` is refused by RLS.
-- The `quotes` table has no `source` column; attempting to select one fails.
+- `pnpm supabase db push` applies cleanly, a second push reports up to date, and `pnpm supabase migration list` shows exactly three entries.
+- Types regenerate and compile: `pnpm typecheck` exits 0 and `grep -n ': any' src/types/database.ts` returns nothing.
+- The `quotes` table has no `source` column — pgTAP `throws_ok($$select source from public.quotes$$, '42703')`.
+- Signed in as user A, `is_empty()` on both `profiles` and `watchlist_items` targeting user B's ids.
+- As `authenticated`, insert, update and delete on `quotes`, `candles` and `candle_sync` each raise `42501` — a missing grant, not a policy filtering rows away.
+- `anon` reaches nothing: `has_table_privilege('anon', …, 'select')` is false for all six reference tables.
+- **The trigger sets `updated_at`, not the writer**: update a `quotes` row without naming the column and assert the new value exceeds the old.
+- Realtime will actually fire: `pg_publication_tables` has one row for `pubname = 'supabase_realtime'` and `tablename = 'quotes'`.
+- `explain` on a `watchlist_items` query filtering by `symbol` shows an Index Scan rather than a Seq Scan.
+- **The suites are observed failing**: drop one policy and one grant, confirm the named assertion goes red, restore, confirm green.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm build` and `pnpm format:check` all exit 0.
 
 ### 11 Database schema: funds, orders, and portfolio
 
