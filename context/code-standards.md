@@ -299,12 +299,19 @@ is simpler to operate and cannot silently pause while the other stays warm. The 
 writes into the real database, which is managed rather than avoided — see the tier 3 rules below.
 
 ```bash
-# Apply the full migration history
-pnpm supabase db push --db-url "$TEST_DATABASE_URL" --include-all
+# Apply the migration history
+pnpm supabase db push
 
-# Tier 2
-pnpm supabase test db --db-url "$TEST_DATABASE_URL" supabase/tests
+# Tier 2 — our own runner, NOT `supabase test db`
+pnpm test:db
 ```
+
+**`supabase test db` is unusable here, and `--db-url` does not save it.** It connects to the remote
+database and *then* shells out to `pg_prove` in a container, failing with `LegacyDockerRunError`.
+Tier 2 runs through `scripts/run-pgtap.mts` instead: pgTAP's functions return their TAP output as
+text rows, so executing a suite through `pg` and reading the rows *is* the TAP stream. The runner
+fails on a failed assertion, on a plan mismatch, and on a SQL error — all three observed failing
+before it was trusted (F09).
 
 - **Tier 3 commits into the real database.** It cannot do otherwise: proving two connections cannot both fill the same order requires the first one to actually commit. Three rules make that safe, and all three are mandatory:
   1. **`pnpm test:race` refuses to run unless `ALLOW_RACE_TESTS` is set.** A bare `pnpm test:all` must never write to the database by accident, and neither must CI.
@@ -489,7 +496,7 @@ Approved dependencies for this project:
 - `server-only` — build-time guard on server modules
 - `vitest` — tier 1 and tier 3 test runner
 - `lighthouse` — accessibility auditing via `pnpm audit:a11y`; F04's verify commits to a score above 90 and F38's accessibility pass needs the same tooling, so it lands in Phase 1 and every public page is audited as it ships (F04)
-- `pg`, `@types/pg` — direct Postgres connections for tier 3 concurrency tests; never imported by application code
+- `pg`, `@types/pg` — direct Postgres connections for tier 3 concurrency tests **and for the tier-2 pgTAP runner**, since `supabase test db` requires Docker even against a remote database (F09). Never imported by application code
 - `eslint`, `eslint-config-next`, `prettier`, `prettier-plugin-tailwindcss` — linting and formatting
 - `supabase` (CLI, dev dependency) — migrations, type generation, function deploys
 

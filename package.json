@@ -9,6 +9,9 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:db": "node scripts/run-pgtap.mts",
+    "test:race": "node scripts/run-race.mts",
+    "test:all": "pnpm test && pnpm test:db && pnpm test:race",
     "audit:a11y": "a11y() { CHROME_PATH=\"${CHROME_PATH:-/Applications/Brave Browser.app/Contents/MacOS/Brave Browser}\" lighthouse \"http://localhost:3000${1:-/}\" --only-categories=accessibility --chrome-flags=--headless=new --quiet --output=json --output-path=stdout; }; a11y",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -33,11 +36,13 @@
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.2.0",
+    "@types/pg": "8.23.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.1",
     "lighthouse": "13.4.1",
+    "pg": "8.23.0",
     "postcss": "8.5.26",
     "prettier": "3.9.6",
     "prettier-plugin-tailwindcss": "0.8.1",

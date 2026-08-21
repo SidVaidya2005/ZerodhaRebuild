@@ -181,13 +181,13 @@ export const STACK: readonly StackEntry[] = [
     version: null,
     status: 'external',
     purpose:
-      'pgTAP, run against a second hosted project. RLS, grants, constraints, function results.',
+      'pgTAP assertions over RLS, grants, constraints and function results, run by a small in-repo runner because the Supabase CLI needs Docker.',
   },
   {
     layer: 'Tests — concurrency',
     pkg: 'pg',
-    version: null,
-    status: 'planned',
+    version: '8.23.0',
+    status: 'installed',
     purpose:
       'Two live connections racing for a row lock — the thing neither other tier can express.',
   },
