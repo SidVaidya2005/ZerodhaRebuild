@@ -134,6 +134,9 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Testing
 
+- **`fetch-reference-data.mts` treats any probe failure as "this symbol does not exist".** Its own comment argues that conflating "upstream refused us" with a 404 is the bug it was rewritten to fix, but the return path files 5xx and network errors into `broken` alongside genuine 404s, and `main` then refuses to write the seed. One transient Yahoo 5xx therefore kills a ~5-minute 200-symbol run. Only 404 should be a verdict; 5xx and socket errors should retry or abort as "upstream unavailable". Found by the Phase 2 review; not fixed, because the script is manual, rare, and re-runnable. (F14)
+
+
 - **A pgTAP assertion that runs as the owning role is not filtered by RLS, so an unscoped query sees every real row in the database.** `02-constraints-money`'s cascade check ran `select user_id from public.funds` with no `where` and passed only while no account had ever been created; the first live signup broke it. Scope owner-role assertions to their fixture. Assertions under `set local role authenticated` are safe, because RLS does the scoping. (F13)
 
 - **When the function under test is deliberately unscoped, the fixture must clear the world instead** — the F13 rule above cannot be applied, because there is no `where` to add. `select_demanded_symbols` asks what the *whole system* wants refreshed, so `04-market-tick`'s deletes now empty `watchlist_items`, `symbol_demand`, `holdings`, `positions` and `orders` outright rather than for its two fixture users. Scoped deletes passed only while the one real account held an empty watchlist; backfilling it put eight extra symbols into a `bag_eq` naming two. Global deletes are safe here only because the suite always rolls back — verified by re-reading the real rows afterwards. (F16)
@@ -213,6 +216,13 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **The simulator disclaimer is dismissible and remembered, with no flash.** A blocking inline script in the root layout reads `localStorage` and stamps `data-disclaimer="dismissed"` on `<html>` before first paint; CSS hides the strip off that attribute. The same technique `next-themes` already runs here, and it keeps the `(marketing)` layout a Server Component — only the close button is a client island. (F03)
 
 ## Quote providers
+
+- **`quotes.prev_close` never rolls, and until it does no surface may render a day change.** It is written from `instruments.prev_close`, a static bhavcopy seed refreshed only by a manual `pnpm fetch:reference` + `pnpm seed`. Nothing advances it at a session boundary, so a day-change percentage would be measured against a frozen close — and the simulator's ±5% band is anchored to that same frozen value, capping every simulated price forever. F19/F20 need a session roll (at each open, yesterday's closing `ltp` becomes the new `prev_close`) before they can show a day change or a realistic range. Found by the Phase 2 review. (F16)
+
+- **The circuit breaker cannot open across ticks, so it does not yet do the job it was built for.** `createQuoteService` is called inside the Edge Function's request handler, and its failure counts and cool-off timestamps are closure-local — `pg_cron` fires a fresh invocation every minute, so an upstream returning 429 gets a full `failureThreshold` of fresh attempts every minute, forever. That is precisely the 40-minute Yahoo IP block F14 hit and F15 built the breaker to prevent. Harmless while the simulator is the whole chain (it cannot fail), but **the feature that adds Yahoo must move the state somewhere that survives an invocation** — module scope only helps when the isolate happens to be warm, so a table is the honest answer. Found by the Phase 2 review. (F15, F16)
+
+- **The `instruments.prev_close` invariant is narrower than F15 wrote it.** "Nothing writes it into `quotes`" was false as shipped — the tick writes it as `quotes.prev_close`, correctly, because that column means the previous session's close. What still holds absolutely: never an `ltp`, no `NSE_BHAVCOPY` value in `quote_provider`, no provenance derived from it, never rendered as a live price. Corrected by migration `20260821190523` rather than by rewriting applied history. (F15, F16)
+
 
 - **Refresh and seed are separate acts.** `fetch-reference-data.mts` hits NSE and Yahoo and rewrites committed JSON; `seed-reference.mts` reads that JSON and upserts. NSE's endpoints are undocumented — its warm-up URL already 403s from this machine while the API call succeeds — so a seed depending on them live breaks unpredictably and offers no diff to review before ~200 rows change. (F14)
 

@@ -872,6 +872,13 @@ and left in the other. Verified by running tiers 2 and 3 green against a CRLF co
 
 - Search input opening a `Command` palette over the instrument universe.
 - Rows: symbol, exchange tag, LTP, absolute and percentage change, coloured by direction.
+  - **Blocked until `quotes.prev_close` rolls.** This is the first surface to render a day change,
+    and the column it would divide by is a static bhavcopy seed that nothing advances at a session
+    boundary — so the figure would be measured against a frozen close, and the simulator's ±5% band
+    is anchored to that same frozen value. Either this feature adds the session roll (at each open,
+    yesterday's closing `ltp` becomes the new `prev_close`) or the change column waits for the
+    feature that does. Found by the Phase 2 review; `constraints.md` → Quote providers has the
+    detail. F30's holdings day change and F33's header carry the same dependency.
 - Hover reveals B / S / chart / remove actions.
 - Drag to reorder; empty state when the watchlist is cleared.
 

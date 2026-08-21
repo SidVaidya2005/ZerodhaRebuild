@@ -105,9 +105,11 @@ select is(
 );
 
 -- ── The simulator's anchor (F15) ────────────────────────────────────────────
--- `prev_close` is seeded from NSE's published bhavcopy and is what stops the
--- simulator inventing prices. It is a seed and never a quote: nothing writes it
--- into `quotes`, and no surface renders it as a price.
+-- `prev_close` is seeded from NSE's published bhavcopy. It seeds the simulator's
+-- walk and anchors its ±5% band, and the tick writes it to `quotes.prev_close`
+-- as the previous close — which the Phase 2 review found this comment denying.
+-- What still holds absolutely is narrower: it is never an `ltp`, never a
+-- `quote_provider` value, and no surface renders it as a live price.
 
 select is(
   (select count(*)::int from public.instruments where prev_close is null),
