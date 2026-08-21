@@ -41,13 +41,18 @@ insert into auth.users (id, email) values
   ('20000000-0000-0000-0000-000000000001', 'demand-a@example.com'),
   ('20000000-0000-0000-0000-000000000002', 'demand-b@example.com');
 
--- Start from a known watchlist rather than whatever the default contains.
-delete from public.watchlist_items
- where user_id in (
-   '20000000-0000-0000-0000-000000000001',
-   '20000000-0000-0000-0000-000000000002'
- );
+-- **Clear every source, not just this fixture's rows.** The tick asks what the
+-- whole system wants refreshed, so `select_demanded_symbols` has no user filter
+-- and any assertion about its result is an assertion about the entire database.
+-- Scoping these deletes to the two fixture users passed only while the one real
+-- account happened to hold an empty watchlist; the moment it was backfilled,
+-- eight of its symbols appeared in a `bag_eq` that named two. Safe because the
+-- suite runs inside a transaction that always rolls back.
+delete from public.watchlist_items;
 delete from public.symbol_demand;
+delete from public.holdings;
+delete from public.positions;
+delete from public.orders;
 
 insert into public.watchlist_items (user_id, symbol, sort_order) values
   ('20000000-0000-0000-0000-000000000001', 'RELIANCE', 0),
