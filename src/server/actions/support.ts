@@ -13,7 +13,11 @@ import type { ActionResult } from '@/types/domain'
  */
 const supportMessageSchema = z.object({
   name: z.string().trim().min(1, 'Tell us what to call you.').max(100, 'That name is too long.'),
-  email: z.email('That does not look like an email address.').max(254),
+  // Trim BEFORE the format check, not after. `z.email()`'s pattern is anchored,
+  // so a pasted ' ada@example.com ' fails as malformed — and `z.email().trim()`
+  // does not help, because the chain validates first and trims second. Piping a
+  // trimmed string into the email schema is what actually reorders the two.
+  email: z.string().trim().pipe(z.email('That does not look like an email address.').max(254)),
   category: z.enum(['account', 'orders', 'funds', 'technical'], {
     error: 'Pick one of the categories.',
   }),
@@ -39,9 +43,11 @@ export type SupportFormState = ActionResult<{ submitted: true }> | null
 /**
  * The public contact form's only write path.
  *
- * Reads no session deliberately: an unauthenticated request runs as `anon`,
- * which is the role the RLS policy is written against, and the pgTAP suite
- * proves that role can insert and do nothing else.
+ * Reads no session deliberately, but note what that does *not* mean: the client
+ * from `lib/supabase/server.ts` carries the request cookies, so a signed-out
+ * visitor inserts as `anon` and — once F12 ships sign-in — a signed-in one
+ * inserts as `authenticated`. The policy names both roles, so both succeed;
+ * only `anon` currently has pgTAP coverage, and F12 adds the other arm.
  *
  * Takes the previous state as its first argument so it can be driven by
  * `useActionState`, which is also what lets the form work with JavaScript
