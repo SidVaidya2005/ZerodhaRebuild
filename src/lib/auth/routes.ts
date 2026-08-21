@@ -57,3 +57,35 @@ export function safeNext(next: string | null | undefined): string {
   if (next.startsWith('/\\')) return DEFAULT_SIGNED_IN_PATH
   return next
 }
+
+/**
+ * The absolute base URL `/auth/callback` redirects against.
+ *
+ * A proxy that terminates TLS rewrites the host, so the forwarded headers are
+ * what describe the URL the visitor actually typed — but **the scheme must come
+ * from `x-forwarded-proto`, never be assumed**. Hardcoding `https://` when a
+ * forwarded host is present sends a local production build to
+ * `https://localhost:3000`, which fails with ERR_SSL_PROTOCOL_ERROR: Next.js
+ * sets `x-forwarded-host` on every request, so "a forwarded host exists" does
+ * not mean "there is a TLS-terminating proxy in front" (F12).
+ *
+ * Falls back to the request's own origin whenever the pair is incomplete.
+ */
+export function callbackBaseUrl({
+  origin,
+  forwardedHost,
+  forwardedProto,
+}: {
+  origin: string
+  forwardedHost: string | null
+  forwardedProto: string | null
+}): string {
+  if (!forwardedHost || !forwardedProto) return origin
+  // A comma-separated list means the request crossed more than one proxy; the
+  // first entry is the one the client actually spoke to.
+  const proto = forwardedProto.split(',')[0]?.trim()
+  const host = forwardedHost.split(',')[0]?.trim()
+  if (!host) return origin
+  if (proto !== 'http' && proto !== 'https') return origin
+  return `${proto}://${host}`
+}

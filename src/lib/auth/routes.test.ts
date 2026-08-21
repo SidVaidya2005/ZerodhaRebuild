@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SIGNED_IN_PATH,
   TERMINAL_PREFIXES,
+  callbackBaseUrl,
   isTerminalPath,
   safeNext,
 } from '@/lib/auth/routes'
@@ -61,5 +62,51 @@ describe('safeNext', () => {
     expect(safeNext('//evil.com')).toBe(DEFAULT_SIGNED_IN_PATH)
     expect(safeNext('//evil.com/steal')).toBe(DEFAULT_SIGNED_IN_PATH)
     expect(safeNext('/\\evil.com')).toBe(DEFAULT_SIGNED_IN_PATH)
+  })
+})
+
+describe('callbackBaseUrl', () => {
+  const origin = 'http://localhost:3000'
+
+  it('keeps the request origin when nothing is forwarded', () => {
+    expect(callbackBaseUrl({ origin, forwardedHost: null, forwardedProto: null })).toBe(origin)
+  })
+
+  it('does not invent https for a local production build', () => {
+    // The bug this exists to prevent: `pnpm start` runs with NODE_ENV=production
+    // and Next.js sets x-forwarded-host on every request, so assuming https here
+    // redirected sign-in to https://localhost:3000 and failed the TLS handshake.
+    expect(
+      callbackBaseUrl({ origin, forwardedHost: 'localhost:3000', forwardedProto: 'http' })
+    ).toBe('http://localhost:3000')
+  })
+
+  it('follows the proxy when it really is terminating TLS', () => {
+    expect(
+      callbackBaseUrl({
+        origin: 'http://10.0.0.4:10000',
+        forwardedHost: 'zerodha-rebuild.onrender.com',
+        forwardedProto: 'https',
+      })
+    ).toBe('https://zerodha-rebuild.onrender.com')
+  })
+
+  it('reads only the first hop when the request crossed several proxies', () => {
+    expect(
+      callbackBaseUrl({
+        origin: 'http://10.0.0.4:10000',
+        forwardedHost: 'zerodha-rebuild.onrender.com, internal',
+        forwardedProto: 'https, http',
+      })
+    ).toBe('https://zerodha-rebuild.onrender.com')
+  })
+
+  it('falls back to the origin rather than trusting an odd scheme', () => {
+    expect(
+      callbackBaseUrl({ origin, forwardedHost: 'evil.com', forwardedProto: 'javascript' })
+    ).toBe(origin)
+    expect(callbackBaseUrl({ origin, forwardedHost: 'evil.com', forwardedProto: null })).toBe(
+      origin
+    )
   })
 })

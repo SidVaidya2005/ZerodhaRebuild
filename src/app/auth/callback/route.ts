@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-import { LOGIN_PATH, safeNext } from '@/lib/auth/routes'
+import { LOGIN_PATH, callbackBaseUrl, safeNext } from '@/lib/auth/routes'
 import { createClient } from '@/lib/supabase/server'
 
 /**
@@ -21,14 +21,15 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
-      // Render terminates TLS at a load balancer, so `origin` is the internal
-      // host there. In production the forwarded host is the real one; locally
-      // there is no balancer, so `origin` is correct and is used as-is.
-      const forwardedHost = request.headers.get('x-forwarded-host')
-      const base =
-        process.env.NODE_ENV === 'development' || !forwardedHost
-          ? origin
-          : `https://${forwardedHost}`
+      // Render terminates TLS at a load balancer, so `origin` can be the
+      // internal host there. Both forwarded headers are read, and the scheme is
+      // taken from x-forwarded-proto rather than assumed — Next.js sets
+      // x-forwarded-host on every request, including a local `pnpm start`.
+      const base = callbackBaseUrl({
+        origin,
+        forwardedHost: request.headers.get('x-forwarded-host'),
+        forwardedProto: request.headers.get('x-forwarded-proto'),
+      })
 
       return NextResponse.redirect(`${base}${next}`)
     }
