@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -20,7 +21,6 @@ import {
 } from '@/lib/utils'
 
 import { Swatch } from './swatch'
-import { ThemeToggle } from './theme-toggle'
 
 // Tailwind's scanner reads complete class strings out of the source, so an
 // interpolated `bg-chart-${n}` generates nothing at all. Both scales are literal.
