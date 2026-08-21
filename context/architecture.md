@@ -25,7 +25,7 @@
 | Forms | `react-hook-form` 7.85.0 + `@hookform/resolvers` 5.9.1 | Order ticket only. The support form uses React 19's form action + `useActionState`, so it submits without JavaScript (F07B) |
 | Portfolio charts | Recharts 3.10.1 | Top-10 holdings donut, P&L breakdown |
 | Price charts | `lightweight-charts` 5.2.1 | Candlestick chart on stock detail |
-| Quote sources | Yahoo Finance `v8/finance/chart` (keyless) → Twelve Data (optional key) → built-in simulator | Price data with graceful degradation |
+| Quote sources | Built-in simulator today; Yahoo Finance `v8/finance/chart` (keyless) in front of it when it lands | **Twelve Data was dropped in F14**, not deferred — its free plan carries no NSE symbols, verified live with a real key. Yahoo is deferred to the end of the project after a validation probe got this machine's IP blocked, so Phase 3 ships simulator-backed and every price badges `SIMULATED` (F14, F15) |
 | Tests — logic | Vitest 4.1.11 | Charge estimator, provider chain, market-hours, parsers |
 | Tests — database | pgTAP, run by `scripts/run-pgtap.mts` over `pg` | RLS, grants, constraints, function correctness. **Not** `supabase test db`: it needs Docker even with `--db-url` (F09) |
 | Tests — concurrency | `pg` 8.23.0, two live connections | Row-lock races the other tiers cannot express |
@@ -53,14 +53,21 @@ ZerodhaRebuild/
 │   ├── functions/
 │   │   ├── market-tick/index.ts    → the single scheduled job: refresh, match, square off
 │   │   └── _shared/                → the one copy of logic both runtimes need; app reads it via `@shared/*`
-│   ├── tests/                      → tier 2, pgTAP; one numbered file per concern
+│   ├── tests/                      → tier 2, pgTAP. The number is the order a suite
+│   │   │                             arrived in, NOT a reserved slot per concern —
+│   │   │                             the original 03-charges/04-margin/05-execution
+│   │   │                             plan was overtaken by F14 and F16 needing 03 and
+│   │   │                             04 first. New suites take the next free number.
 │   │   ├── 00-smoke.sql            → pgtap reachable; proves the runner hits a real database
-│   │   ├── 01-rls-*.sql            → per-table read/write denial, and grant denial
-│   │   ├── 02-constraints.sql      → planned, with F11
-│   │   ├── 03-charges.sql          → planned, with F22
-│   │   ├── 04-margin.sql           → planned, with F23
-│   │   └── 05-execution.sql        → planned, with F24
-│   └── seed/nifty200.json          → instrument universe seed data
+│   │   ├── 01-rls-*.sql            → per-table read/write denial, and grant denial (F07B, F10, F11)
+│   │   ├── 02-bootstrap.sql        → what exists the moment a user is created (F13)
+│   │   ├── 02-constraints-money.sql → money-shaped CHECK and FK constraints (F11)
+│   │   ├── 03-reference-data.sql   → the seeded universe and NSE calendar are sane (F14)
+│   │   ├── 04-market-tick.sql      → which symbols a tick refreshes, and who may ask (F16)
+│   │   └── …                       → charges (F22), margin (F23), execution (F24) still to come
+│   └── seed/
+│       ├── nifty200.json           → instrument universe seed data
+│       └── nse-holidays.json       → the published NSE closure calendar
 ├── src/
 │   ├── app/
 │   │   ├── (marketing)/            → public site; Server Components, no session required
@@ -100,9 +107,14 @@ ZerodhaRebuild/
 │   │   │   ├── proxy.ts            → session-refreshing client for src/proxy.ts
 │   │   │   └── admin.ts            → service-role client, server-only
 │   │   ├── market/
-│   │   │   ├── providers/          → yahoo.ts, twelve-data.ts, simulator.ts
-│   │   │   ├── quote-service.ts    → provider chain + circuit breaker + rate limiter
-│   │   │   └── market-hours.ts     → NSE session logic, Asia/Kolkata
+│   │   │   └── market-hours.ts     → re-exports `@shared/market-hours.ts`; the app's
+│   │   │                             door onto the session logic. The providers, the
+│   │   │                             quote service and the session core itself live in
+│   │   │                             supabase/functions/_shared/ (F16), because the
+│   │   │                             Edge Function cannot import from src/ and one
+│   │   │                             shared copy beats two kept in step. Twelve Data
+│   │   │                             was dropped in F14, not deferred: its free plan
+│   │   │                             carries no NSE symbols.
 │   │   ├── trading/
 │   │   │   ├── charges.ts          → brokerage, STT, GST, stamp duty
 │   │   │   └── schemas.ts          → Zod schemas for order input
@@ -150,16 +162,20 @@ pg_cron ('* 3-10 * * 1-5' — UTC, ≈ 08:30–16:29 IST; a coarse cost window, 
   └─> net.http_post → Edge Function `market-tick`
         ├─ isTradingSession() — IST clock + NSE holiday calendar
         │    └─ closed? return { ok: true, skipped: 'MARKET_CLOSED' } and write nothing
-        ├─ select symbols from symbol_demand where last_requested_at > now() - 10 min
-        │    ∪ symbols in any holding, position, or OPEN order
-        ├─ token-bucket rate limiter (N symbols per run, staggered)
-        ├─ QuoteService.fetch(symbols)
-        │    ├─ YahooProvider        → on 429/error, open circuit for 5 min
-        │    ├─ TwelveDataProvider   → skipped when TWELVE_DATA_API_KEY unset
-        │    └─ SimulatorProvider    → always succeeds, seeded from last known quote
+        ├─ select_demanded_symbols(MAX_SYMBOLS_PER_TICK)  — a SQL function, so pgTAP
+        │    can test the union directly. OPEN orders ∪ holdings ∪ positions ∪
+        │    symbol_demand ∪ watchlists, deduplicated, ranked, capped. Watchlists
+        │    are in it because symbol_demand has no write path until F18 (F16).
+        ├─ QuoteService.getQuotes(symbols)
+        │    ├─ YahooProvider        → not built yet; deferred to the end (F14)
+        │    └─ SimulatorProvider    → last resort, cannot fail; walks from the last
+        │                              quote, else instruments.prev_close (F15)
         ├─ upsert quotes (ltp, prev_close, ohlc, volume, provider, provider_ts, fetched_at)
-        ├─ match_open_orders()   → fills LIMIT orders whose price is crossed
-        └─ square_off_mis()      → after 15:20 IST, exits every open MIS position
+        ├─ match_open_orders()   → F28 wires this in; not called yet
+        └─ square_off_mis()      → F29 wires this in; not called yet
+
+  The token-bucket limiter is deliberately absent: it caps nothing in front of a
+  local simulator, and waits for a provider that makes outbound requests (F15).
               │
               ▼
       Postgres Changes on `quotes` and `orders`
@@ -692,26 +708,50 @@ export function subscribeToQuotes(symbols: string[]) {
 ### Quote provider chain
 
 ```ts
-// src/lib/market/quote-service.ts
-import type { Quote, QuoteProvider } from '@/types/domain'
+// supabase/functions/_shared/quote-service.ts — shared with the app via `@shared/*`.
+// Deno cannot resolve `@/`, so this module imports only its sibling `.ts` files.
+import type { ProviderQuote, QuoteProvider } from './provider-types.ts'
 
-export class QuoteService {
-  constructor(private readonly providers: QuoteProvider[]) {}
+export function createQuoteService(options: QuoteServiceOptions) {
+  // …failure counts and cool-off timestamps per provider…
+  return {
+    async getQuotes(symbols: readonly string[]): Promise<QuoteResult> {
+      const attempted: QuoteResult['attempted'] = []
 
-  async fetch(symbols: string[]): Promise<Quote[]> {
-    for (const provider of this.providers) {
-      if (!provider.isAvailable()) continue
-      try {
-        return await provider.fetchQuotes(symbols)
-      } catch (error) {
-        console.error(`[quote-service] ${provider.name} failed`, error)
-        provider.tripCircuit()
+      for (const provider of options.providers) {
+        if (circuitState(provider.name) === 'OPEN') {
+          attempted.push({ name: provider.name, outcome: 'OPEN_CIRCUIT' })
+          continue
+        }
+        try {
+          // Declining is not failing: a provider with no key, or no anchor for
+          // these symbols, must not count against its own circuit.
+          if (!(await provider.isAvailable(symbols))) {
+            attempted.push({ name: provider.name, outcome: 'UNAVAILABLE' })
+            continue
+          }
+          const quotes = await provider.fetchQuotes(symbols)
+          if (quotes.length === 0) { /* empty answer counts as a failure */ }
+          failures.delete(provider.name) // consecutive failures, not lifetime
+          return { quotes, provider: provider.name, attempted }
+        } catch {
+          // Swallowed deliberately: the upstream error is the chain's business,
+          // not the caller's. The tick logs the attempt trail instead.
+          attempted.push({ name: provider.name, outcome: 'FAILED' })
+          recordFailure(provider.name)
+        }
       }
-    }
-    throw new Error('[quote-service] every provider failed, including the simulator')
+      return { quotes: [], provider: null, attempted }
+    },
   }
 }
 ```
+
+**It returns rather than throws when every provider declines.** An earlier draft
+of this example threw "every provider failed, including the simulator"; the
+shipped chain reports `{ provider: null }` and lets the tick decide, because the
+simulator is the last resort and a throw would make an empty symbol list
+indistinguishable from a broken upstream (F15).
 
 ---
 
