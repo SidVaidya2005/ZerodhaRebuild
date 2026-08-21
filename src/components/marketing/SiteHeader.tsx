@@ -20,7 +20,7 @@ export function SiteHeader() {
           ZerodhaRebuild
         </Link>
 
-        <nav className="hidden flex-1 items-center gap-6 md:flex">
+        <nav aria-label="Primary" className="hidden flex-1 items-center gap-6 md:flex">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
