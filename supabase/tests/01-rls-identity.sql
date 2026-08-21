@@ -18,9 +18,12 @@ insert into auth.users (id) values
   ('11111111-1111-1111-1111-111111111111'),
   ('22222222-2222-2222-2222-222222222222');
 
-insert into public.profiles (id, client_id, full_name) values
-  ('11111111-1111-1111-1111-111111111111', 'ZR100001', 'Ada'),
-  ('22222222-2222-2222-2222-222222222222', 'ZR100002', 'Grace');
+-- F13's trigger created these rows on the inserts above. The fixture only
+-- pins the values these assertions read; inserting them again would collide.
+update public.profiles set client_id = 'ZR100001', full_name = 'Ada'
+  where id = '11111111-1111-1111-1111-111111111111';
+update public.profiles set client_id = 'ZR100002', full_name = 'Grace'
+  where id = '22222222-2222-2222-2222-222222222222';
 
 insert into public.instruments (symbol, name, yahoo_symbol) values
   ('RELIANCE', 'Reliance Industries Limited', 'RELIANCE.NS'),

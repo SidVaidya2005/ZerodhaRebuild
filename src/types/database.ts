@@ -609,7 +609,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_client_id: { Args: never; Returns: string }
     }
     Enums: {
       candle_interval: "FIVE_MIN" | "THIRTY_MIN" | "ONE_DAY"

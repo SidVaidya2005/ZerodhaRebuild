@@ -17,16 +17,17 @@ insert into auth.users (id) values
   ('11111111-1111-1111-1111-111111111111'),
   ('22222222-2222-2222-2222-222222222222');
 
-insert into public.profiles (id, client_id) values
-  ('11111111-1111-1111-1111-111111111111', 'ZR100001'),
-  ('22222222-2222-2222-2222-222222222222', 'ZR100002');
+-- F13's trigger created the profiles, funds and SIGNUP_CREDIT rows on the
+-- inserts above, so the fixture pins values rather than re-creating rows.
+update public.profiles set client_id = 'ZR100001'
+  where id = '11111111-1111-1111-1111-111111111111';
+update public.profiles set client_id = 'ZR100002'
+  where id = '22222222-2222-2222-2222-222222222222';
 
 insert into public.instruments (symbol, name, yahoo_symbol) values
   ('RELIANCE', 'Reliance Industries Limited', 'RELIANCE.NS');
 
-insert into public.funds (user_id, available_cash, opening_balance) values
-  ('11111111-1111-1111-1111-111111111111', 100000.00, 100000.00),
-  ('22222222-2222-2222-2222-222222222222', 100000.00, 100000.00);
+-- funds: created by the bootstrap trigger at exactly these figures.
 
 insert into public.orders (id, user_id, symbol, side, order_type, product, quantity)
 values
@@ -35,9 +36,7 @@ values
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
    '22222222-2222-2222-2222-222222222222', 'RELIANCE', 'BUY', 'MARKET', 'CNC', 10);
 
-insert into public.fund_ledger (user_id, type, amount, balance_after) values
-  ('11111111-1111-1111-1111-111111111111', 'SIGNUP_CREDIT', 100000.00, 100000.00),
-  ('22222222-2222-2222-2222-222222222222', 'SIGNUP_CREDIT', 100000.00, 100000.00);
+-- fund_ledger: the bootstrap already wrote one SIGNUP_CREDIT row per user.
 
 -- charge_breakdown must sum to charges, so these are real figures: a CNC buy of
 -- 10 @ 1400 carries no brokerage, no DP and no STT-on-buy exemption.
