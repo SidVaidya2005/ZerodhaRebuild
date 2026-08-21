@@ -46,3 +46,6 @@ next-env.d.ts
 
 # test output
 /coverage
+
+# probe cache for scripts/fetch-reference-data.mts
+/.cache

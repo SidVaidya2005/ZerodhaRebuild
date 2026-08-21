@@ -20,7 +20,8 @@ insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111');
 update public.profiles set client_id = 'ZR100001'
   where id = '11111111-1111-1111-1111-111111111111';
 insert into public.instruments (symbol, name, yahoo_symbol)
-  values ('RELIANCE', 'Reliance Industries Limited', 'RELIANCE.NS');
+  values ('RELIANCE', 'Reliance Industries Limited', 'RELIANCE.NS')
+  on conflict (symbol) do nothing;
 -- funds: created by the bootstrap trigger at exactly these figures.
 insert into public.orders (id, user_id, symbol, side, order_type, product, quantity)
   values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',

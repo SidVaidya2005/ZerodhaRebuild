@@ -11,7 +11,8 @@ begin;
 select plan(15);
 
 insert into public.instruments (symbol, name, yahoo_symbol) values
-  ('RELIANCE', 'Reliance Industries Limited', 'RELIANCE.NS');
+  ('RELIANCE', 'Reliance Industries Limited', 'RELIANCE.NS')
+  on conflict (symbol) do nothing;
 
 insert into public.quotes (symbol, ltp, provider, provider_ts) values
   ('RELIANCE', 1402.50, 'YAHOO', now() - interval '2 minutes');

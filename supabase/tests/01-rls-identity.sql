@@ -27,7 +27,17 @@ update public.profiles set client_id = 'ZR100002', full_name = 'Grace'
 
 insert into public.instruments (symbol, name, yahoo_symbol) values
   ('RELIANCE', 'Reliance Industries Limited', 'RELIANCE.NS'),
-  ('INFY', 'Infosys Limited', 'INFY.NS');
+  ('INFY', 'Infosys Limited', 'INFY.NS')
+  on conflict (symbol) do nothing;
+
+-- F13's bootstrap seeded each user a default watchlist from the F14 universe.
+-- This suite asserts on specific rows, so it starts from a known-empty list
+-- rather than from whatever the default happens to contain this quarter.
+delete from public.watchlist_items
+ where user_id in (
+   '11111111-1111-1111-1111-111111111111',
+   '22222222-2222-2222-2222-222222222222'
+ );
 
 insert into public.watchlist_items (user_id, symbol, sort_order) values
   ('11111111-1111-1111-1111-111111111111', 'RELIANCE', 0),

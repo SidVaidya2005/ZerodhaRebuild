@@ -1,0 +1,88 @@
+{
+  "source": "https://www.nseindia.com/api/holiday-master?type=trading",
+  "year": 2026,
+  "note": "Re-fetch every January: NSE publishes the next calendar year separately.",
+  "fetched_on": "2026-08-21",
+  "holidays": [
+    {
+      "trading_date": "2026-01-15",
+      "description": "Municipal Corporation Election - Maharashtra"
+    },
+    {
+      "trading_date": "2026-01-26",
+      "description": "Republic Day"
+    },
+    {
+      "trading_date": "2026-02-15",
+      "description": "Mahashivratri"
+    },
+    {
+      "trading_date": "2026-03-03",
+      "description": "Holi"
+    },
+    {
+      "trading_date": "2026-03-21",
+      "description": "Id-Ul-Fitr (Ramadan Eid)"
+    },
+    {
+      "trading_date": "2026-03-26",
+      "description": "Shri Ram Navami"
+    },
+    {
+      "trading_date": "2026-03-31",
+      "description": "Shri Mahavir Jayanti"
+    },
+    {
+      "trading_date": "2026-04-03",
+      "description": "Good Friday"
+    },
+    {
+      "trading_date": "2026-04-14",
+      "description": "Dr. Baba Saheb Ambedkar Jayanti"
+    },
+    {
+      "trading_date": "2026-05-01",
+      "description": "Maharashtra Day"
+    },
+    {
+      "trading_date": "2026-05-28",
+      "description": "Bakri Id"
+    },
+    {
+      "trading_date": "2026-06-26",
+      "description": "Muharram"
+    },
+    {
+      "trading_date": "2026-08-15",
+      "description": "Independence Day"
+    },
+    {
+      "trading_date": "2026-09-14",
+      "description": "Ganesh Chaturthi"
+    },
+    {
+      "trading_date": "2026-10-02",
+      "description": "Mahatma Gandhi Jayanti"
+    },
+    {
+      "trading_date": "2026-10-20",
+      "description": "Dussehra"
+    },
+    {
+      "trading_date": "2026-11-08",
+      "description": "Diwali Laxmi Pujan*"
+    },
+    {
+      "trading_date": "2026-11-10",
+      "description": "Diwali-Balipratipada"
+    },
+    {
+      "trading_date": "2026-11-24",
+      "description": "Prakash Gurpurb Sri Guru Nanak Dev"
+    },
+    {
+      "trading_date": "2026-12-25",
+      "description": "Christmas"
+    }
+  ]
+}

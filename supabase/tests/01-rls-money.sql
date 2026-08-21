@@ -25,7 +25,8 @@ update public.profiles set client_id = 'ZR100002'
   where id = '22222222-2222-2222-2222-222222222222';
 
 insert into public.instruments (symbol, name, yahoo_symbol) values
-  ('RELIANCE', 'Reliance Industries Limited', 'RELIANCE.NS');
+  ('RELIANCE', 'Reliance Industries Limited', 'RELIANCE.NS')
+  on conflict (symbol) do nothing;
 
 -- funds: created by the bootstrap trigger at exactly these figures.
 

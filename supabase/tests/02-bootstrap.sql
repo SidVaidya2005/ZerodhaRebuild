@@ -33,6 +33,11 @@ select ok(
 );
 
 -- ── A signup with full Google metadata ──────────────────────────────────────
+-- The universe is emptied first, deliberately. Before F14 it was empty by
+-- accident, which made the FK-safe watchlist path below look proven when it was
+-- only untested. The delete rolls back with the rest of the transaction.
+
+delete from public.instruments;
 
 insert into auth.users (id, email, raw_user_meta_data)
 values (
@@ -119,9 +124,8 @@ select is(
 );
 
 -- ── The watchlist, with instruments empty ───────────────────────────────────
--- Feature 14 seeds that table and runs AFTER this feature, so the seed must be
--- a no-op today rather than a foreign key violation. Ada signed up above with
--- nothing seeded, which is exactly that case.
+-- The seed must be a no-op on an empty universe rather than a foreign key
+-- violation. Ada signed up above with the table emptied, which is that case.
 
 select is(
   (select count(*)::int from public.watchlist_items
