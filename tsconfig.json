@@ -37,5 +37,13 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  // The Edge Function *entrypoint* is Deno code: `jsr:` specifiers and the
+  // `Deno` global, neither of which this compiler knows. Deno typechecks it on
+  // `functions deploy`, so a bad edit still fails before it ships.
+  //
+  // Only the entrypoint is excluded. `_shared/` stays in, because the app
+  // imports those modules through `@shared/*` and they must typecheck against
+  // the same rules as everything else — they are the reason there is one copy
+  // of the session logic rather than two.
+  "exclude": ["node_modules", "supabase/functions/market-tick"]
 }
