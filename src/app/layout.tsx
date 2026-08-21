@@ -3,6 +3,7 @@ import { IBM_Plex_Sans, Inter } from 'next/font/google'
 import type { ReactNode } from 'react'
 
 import { ThemeProvider } from '@/components/theme-provider'
+import { DISCLAIMER_ATTRIBUTE, DISCLAIMER_DISMISSED, DISCLAIMER_STORAGE_KEY } from '@/lib/constants'
 
 import './globals.css'
 
@@ -30,9 +31,22 @@ type RootLayoutProps = {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    // suppressHydrationWarning is required by next-themes: it writes the theme
-    // class on the client before React hydrates.
+    // suppressHydrationWarning covers two pre-hydration writes to this element:
+    // next-themes' theme class, and the disclaimer attribute stamped below.
     <html lang="en" suppressHydrationWarning className={`${inter.variable} ${plex.variable}`}>
+      <head>
+        {/* Stamps the dismissal before first paint, so a returning visitor never
+            sees the disclaimer strip flash in and out. globals.css hides the
+            banner off this attribute. Next.js documents this exact pattern for
+            preventing a flash before hydration; next-themes runs the same trick
+            one element over. Inline and synchronous on purpose — a deferred
+            script would run after the first frame, which is the whole problem. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{if(localStorage.getItem(${JSON.stringify(DISCLAIMER_STORAGE_KEY)})===${JSON.stringify(DISCLAIMER_DISMISSED)})document.documentElement.setAttribute(${JSON.stringify(DISCLAIMER_ATTRIBUTE)},${JSON.stringify(DISCLAIMER_DISMISSED)})}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body>
         <ThemeProvider>{children}</ThemeProvider>
       </body>

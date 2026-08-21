@@ -154,6 +154,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The simulator disclaimer, hidden for a visitor who has already dismissed it.
+   The attribute is stamped on <html> by a synchronous script in the root layout
+   before first paint, so the strip never flashes in and back out. Doing this in
+   CSS rather than React state is what keeps the (marketing) layout a Server
+   Component — only the close button ships as a client island. */
+[data-disclaimer='dismissed'] [data-slot='disclaimer-banner'] {
+  display: none;
+}
+
 @layer base {
   body {
     background-color: var(--color-canvas);
