@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { LOGIN_PATH } from '@/lib/auth/routes'
 import { createClient } from '@/lib/supabase/server'
+import { formatCurrency } from '@/lib/utils'
 import { signOut } from '@/server/actions/auth'
 
 export const metadata: Metadata = {
@@ -28,15 +29,39 @@ export default async function DashboardPage() {
 
   if (!user) redirect(LOGIN_PATH)
 
-  // Google's own claims, straight from the identity — F13 is what copies these
-  // into a `profiles` row and opens the account with its ₹1,00,000.
-  const name = (user.user_metadata.full_name as string | undefined) ?? 'Signed in'
+  // Two reads through the user's own session, and they are the first time a
+  // money table is read that way: `funds` grants `select` and nothing else, and
+  // its policy is scoped to auth.uid(). Until now only pgTAP had touched either.
+  const [{ data: profile }, { data: funds }] = await Promise.all([
+    supabase.from('profiles').select('client_id, full_name').single(),
+    supabase.from('funds').select('available_cash').single(),
+  ])
+
+  // Prefer the profile the bootstrap wrote; fall back to Google's claim so the
+  // page still says who is signed in if the row is somehow absent.
+  const name =
+    profile?.full_name ?? (user.user_metadata.full_name as string | undefined) ?? 'Signed in'
 
   return (
     <main className="mx-auto flex min-h-screen max-w-7xl flex-col justify-center px-4 py-16">
       <div className="max-w-prose">
         <h1 className="text-display-sm font-semibold text-ink">{name}</h1>
         <p className="mt-4 text-body text-muted-strong">{user.email}</p>
+
+        <dl className="mt-8 flex gap-10">
+          <div>
+            <dt className="text-body-sm text-muted">Client ID</dt>
+            <dd className="mt-1 text-title-sm font-semibold text-ink tabular-nums">
+              {profile?.client_id ?? '—'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-body-sm text-muted">Available cash</dt>
+            <dd className="mt-1 text-title-sm font-semibold text-ink tabular-nums">
+              {funds ? formatCurrency(Number(funds.available_cash)) : '—'}
+            </dd>
+          </div>
+        </dl>
 
         <p className="mt-8 text-body">
           Signed in. The terminal itself — watchlist, orders, holdings — arrives in Phase 3; this
