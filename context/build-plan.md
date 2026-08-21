@@ -95,24 +95,35 @@ shadcn's token vocabulary is **bridged onto** this project's, never allowed to r
 
 
 
-The chrome every marketing page sits inside.
+The chrome every marketing page sits inside: disclaimer banner, top navigation, mobile sheet nav,
+and footer, wrapped in the `(marketing)` route group layout. Every link target the shell points at
+is stubbed here so nothing 404s, and each stub is replaced wholesale by the feature that owns it.
 
 **UI:**
 
-- Header with logo, nav (Home, About, Pricing, Support), and a "Sign in with Google" button.
-- Mobile hamburger nav.
-- Footer with sections, project links, and the "not affiliated with Zerodha" disclaimer.
-- A persistent banner stating this is a simulator with no real money.
+- `Sheet` added via `shadcn add sheet` and put through the bridge pass in `library-docs.md` → shadcn/ui — strip every `dark:`, `bg-muted` → `bg-surface-elevated`, bare `var(--foreground)` / `var(--border)` / `var(--radius)` rewritten to the `--color-*` / `--radius-lg` equivalents, controls to `h-10` and `rounded-md`. Sheet is Radix Dialog, already installed; no new dependency.
+- `SiteHeader` — 64px tall on `bg-canvas`: text wordmark in `--color-brand` (no logo asset; the branding deviation in `library-docs.md` forbids reproducing anyone's mark), the four nav links (Home, About, Pricing, Support) hidden below `md`, and a right-side cluster carrying the theme toggle and a "Sign in with Google" CTA. The CTA is `bg-brand text-on-brand` and `rounded-full` — DESIGN.md reserves the pill radius for the top-of-page sign-up action and nothing else.
+- `MobileNav` — client component, `Sheet`-backed, hamburger trigger visible only below `md`. Full-screen sheet with the same four links and the sign-in CTA anchored at the bottom, per DESIGN.md → Collapsing Strategy.
+- `DisclaimerBanner` — the simulator disclaimer strip, **dismissible and remembered**. A blocking inline `<script>` in the root layout reads the `localStorage` key and stamps `data-disclaimer="dismissed"` on `<html>` before first paint; a `globals.css` rule hides the strip off that attribute. Same technique `next-themes` already runs here, so a returning visitor never sees it flash. Only the close button is a client island — the layout stays a Server Component.
+- `SiteFooter` — `bg-surface` with a top hairline, columns 1-up on mobile and multi-column at `md`, project links carrying `rel="noreferrer"`, and the "not affiliated with Zerodha" disclaimer linking to `/legal`. **Not** DESIGN.md's literal always-light `#fafafa` footer: `--color-surface` already *is* `#fafafa` in the light theme, so the source value is reached through the token instead of hardcoded, and in dark it reads as the elevation step the flat-colour-block philosophy calls for. An always-light token pair would exist only to break the theme contract.
+- `ThemeToggle` promoted out of `app/dev/styleguide/` to `src/components/ThemeToggle.tsx` — app-level chrome, so beside `theme-provider.tsx`, not in `ui/`. DESIGN.md's `top-nav-dark` lists the toggle in the right-side cluster, and the Phase 1 checkpoint walks every public route in both themes.
 
 **Logic:**
 
-- `(marketing)` route group layout. No `cookies()` call anywhere inside it, so pages stay statically renderable.
+- `(marketing)` route group layout composing banner → header → children → footer, content capped at 1280px and centred. **No `cookies()` call anywhere inside it**, so pages stay statically renderable.
+- `src/app/page.tsx` moves to `src/app/(marketing)/page.tsx` — leaving both would make two files claim `/`.
+- Stub pages so no link in the shell 404s: `(marketing)/about`, `(marketing)/pricing`, `(marketing)/support`, `(marketing)/legal`, and `auth/login` (outside the group, per `architecture.md` → Folder Structure). Each is a heading plus one line of honest copy, replaced wholesale by F05–F08 and F12.
+- No `loading.tsx`: `code-standards.md` requires one only for segments that fetch data, and none of these do.
 
 **Verify:**
 
-- All four nav links resolve; none 404.
-- The marketing layout renders with no session and no Supabase request in the network tab.
-- Header and footer are usable at 375px width.
+- Every link target resolves: `pnpm build && pnpm start`, then `for p in / /about /pricing /support /legal /auth/login; do curl -s -o /dev/null -w "$p %{http_code}\n" localhost:3000$p; done` returns seven `200`s.
+- The marketing layout is static and touches no Supabase: `pnpm build` marks `/`, `/about`, `/pricing`, `/support` and `/legal` as `○` (static), not `ƒ`; and `grep -rn "cookies()\|createClient\|supabase" "src/app/(marketing)" src/components/marketing` returns nothing.
+- The banner survives dismissal with no flash: close it, reload, and confirm it never paints — throttle CPU 6× and watch that no strip appears at any point during load. Clear the key in DevTools, reload, confirm it returns.
+- Header and footer are usable at 375px: the desktop links are hidden, the hamburger opens the sheet, all four links and the sign-in CTA are reachable, Escape closes it, focus is trapped while open, and `document.documentElement.scrollWidth === 375` — no horizontal overflow.
+- Both themes render: toggling from the header on `/` flips banner, header, sheet and footer, with the sign-in CTA's yellow and its black label byte-identical across both.
+- No token rule broken by the new files: `grep -rn 'dark:' src` returns nothing; `grep -rn 'bg-background\|text-foreground\|bg-primary\|text-muted-foreground' src --include=*.tsx` hits only under `src/components/ui/`; `grep -rn 'bg-muted' src/components/ui` returns nothing; no `#` hex literal inside any `className`.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` all exit zero.
 
 ### 04 Home page
 

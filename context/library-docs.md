@@ -386,6 +386,10 @@ const plex = IBM_Plex_Sans({
 # NOT skip, so both are passed explicitly. architecture.md specifies Radix.
 pnpm dlx shadcn@4.18.0 init -b radix -t next -p nova --css-variables -y
 pnpm dlx shadcn@4.18.0 add button dialog dropdown-menu tabs input select command table skeleton sonner -y
+# `sheet` was added later, for the public mobile nav (F03). `-y` does NOT skip the
+# "file already exists, overwrite?" prompt for shared files like button.tsx, so pipe
+# `n` rather than passing -y once anything is already in components/ui/:
+#   yes n | pnpm dlx shadcn@4.18.0 add sheet
 ```
 
 `init` writes `components.json`, creates `src/lib/utils.ts`, **rewrites `globals.css`**, and
@@ -430,6 +434,7 @@ Density pass on controls: `h-8`/`h-9` → `h-10` (40px), `rounded-lg` → `round
 source file mangles the code around the class strings — this cost a full regeneration once already.
 
 - `text-muted-foreground` needs no rewrite: the bridge aliases it to this project's `--color-muted`.
+- **Overriding a variant-prefixed class needs the same prefix.** Several primitives style themselves through attribute variants — `sheet` sizes itself with `data-[side=right]:w-3/4`. A plain `w-full` passed via `className` loses on specificity and is silently ignored, because `tailwind-merge` treats the two as different keys and keeps both. Write `data-[side=right]:w-full`. This fails visually rather than loudly, so check the rendered width, not the class list (F03).
 
 ---
 
