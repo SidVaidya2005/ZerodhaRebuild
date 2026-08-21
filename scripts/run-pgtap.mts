@@ -19,6 +19,8 @@ import { exit } from 'node:process'
 
 import { Client } from 'pg'
 
+import { readEnvFile } from './env-file.mts'
+
 const TESTS_DIR = join(process.cwd(), 'supabase', 'tests')
 
 type FileResult = {
@@ -32,15 +34,13 @@ type FileResult = {
 
 /** `.env.test.local` is gitignored and not loaded by anything else. */
 function loadTestEnv(): string {
-  let raw: string
-  try {
-    raw = readFileSync(join(process.cwd(), '.env.test.local'), 'utf8')
-  } catch {
+  const values = readEnvFile()
+  if (!values) {
     fail('.env.test.local is missing. It holds TEST_DATABASE_URL and is gitignored.')
   }
-  const match = raw.match(/^TEST_DATABASE_URL\s*=\s*"?([^"\n]+)"?/m)
-  if (!match?.[1]) fail('TEST_DATABASE_URL is not set in .env.test.local.')
-  return match[1]
+  const url = values.TEST_DATABASE_URL
+  if (!url) fail('TEST_DATABASE_URL is not set in .env.test.local.')
+  return url
 }
 
 function fail(message: string): never {

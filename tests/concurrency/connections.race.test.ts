@@ -51,7 +51,26 @@ test('two connections are separate backends that see each other after commit', a
   expect(afterCommit.rows[0]?.n).toBe(1)
 })
 
-test('cleanup removed everything the previous test committed', async () => {
-  // afterEach dropped the scratch table, so it should not exist at all.
+test('cleanup drops the table and the rows committed into it', async () => {
+  // **Self-contained on purpose.** This used to assert only that
+  // `countScratchRows()` was null after the test above, which is equally true
+  // when the table was never created — run alone it passed without exercising
+  // cleanup at all. Since tier 3's entire justification is that it writes to the
+  // production database, the one assertion covering its cleanup cannot be the
+  // vacuous kind.
+  const [a, b] = await connectPair()
+  clients = [a, b]
+
+  await createScratchTable(a)
+  await a.query(`insert into public.${SCRATCH_TABLE} (id, claimed_by) values ($1, $2)`, [
+    `${RACE_PREFIX}${Date.now()}`,
+    'cleanup-check',
+  ])
+
+  // The positive control: the row is genuinely there first, which is what makes
+  // the null below evidence rather than a coincidence.
+  expect(await countScratchRows()).toBe(1)
+
+  await cleanupScratch()
   expect(await countScratchRows()).toBeNull()
 })

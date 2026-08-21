@@ -12,34 +12,9 @@
  * for a pass.
  */
 import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { exit } from 'node:process'
 
-function readEnvFile(): Record<string, string> {
-  let raw: string
-  try {
-    raw = readFileSync(join(process.cwd(), '.env.test.local'), 'utf8')
-  } catch {
-    console.error('[race] .env.test.local is missing — it holds TEST_DATABASE_URL.')
-    exit(1)
-  }
-  const values: Record<string, string> = {}
-  // Keys may contain digits (a pooler port ends up in one), and an unquoted
-  // value may carry a trailing `# comment` — .env.example encourages annotating
-  // the connection string. A greedy match would fold the comment into the URL
-  // and fail inside connect() with an opaque parse error instead of a named one.
-  for (const line of raw.split(/\r?\n/)) {
-    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/)
-    const key = match?.[1]
-    if (!key) continue
-    let value = (match[2] ?? '').trim()
-    const quoted = value.match(/^"([^"]*)"/) ?? value.match(/^'([^']*)'/)
-    value = quoted ? (quoted[1] ?? '') : (value.split(/\s+#/)[0] ?? '').trim()
-    values[key] = value
-  }
-  return values
-}
+import { readEnvFile } from './env-file.mts'
 
 // A real environment variable wins over the file. `ALLOW_RACE_TESTS=1 pnpm
 // test:race` is the form CLAUDE.md documents and the only one available in CI;
@@ -47,6 +22,10 @@ function readEnvFile(): Record<string, string> {
 // precisely the "a skip is never mistaken for a pass" failure this file exists
 // to prevent.
 const fileEnv = readEnvFile()
+if (!fileEnv) {
+  console.error('[race] .env.test.local is missing — it holds TEST_DATABASE_URL.')
+  exit(1)
+}
 const env: Record<string, string | undefined> = { ...fileEnv, ...process.env }
 
 // An explicit allowlist, never truthiness. `ALLOW_RACE_TESTS=0` is the natural
