@@ -17,7 +17,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 1 — Foundation & Public Site
-**Last completed:** 08 Legal, error, and not-found pages — disclaimer plus six named simulation divergences, branded 404 with full chrome, root error boundary proven to catch a real throw; Lighthouse /legal 96
+**Last completed:** 1.00.01 muted token contrast fix — both tokens now flip and clear AA on every surface in both themes, machine-checked; every public route now scores Lighthouse 100 with zero contrast failures
 **Next:** 09 Test harness, once the Supabase CLI is authenticated and the dev + test projects exist. F07 (Support) then follows F09 rather than preceding it — its RLS check is tier 2
 
 ---

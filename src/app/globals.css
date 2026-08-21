@@ -34,11 +34,15 @@
   --color-surface-elevated: #2b3139; /* nested cards, hovered rows, chart panels */
   --color-hairline: #2b3139; /* 1px borders — borders are surface steps, not ink */
 
-  /* ── Text ── */
+  /* ── Text ── every value below clears WCAG AA (4.5:1) against canvas, surface
+     AND surface-elevated. DESIGN.md's own greys did not: #707a8a measured
+     3.02:1 on surface-elevated, and both muted tones failed outright in the
+     light theme, where they were never overridden at all. theme-tokens.test.ts
+     now computes these ratios, so the palette cannot regress by eye. */
   --color-ink: #ffffff; /* high-contrast headlines */
   --color-body: #eaecef; /* running text; deliberately not pure white */
-  --color-muted: #707a8a; /* captions, column headers, footer links */
-  --color-muted-strong: #929aa5;
+  --color-muted: #929aa5; /* captions, column headers, footer links */
+  --color-muted-strong: #b6bec9; /* second-tier muted: labels, section ledes */
 
   /* ── Info / focus ── */
   --color-info: #3b82f6;
@@ -114,6 +118,14 @@
   --color-hairline: #eaecef;
   --color-ink: #181a20;
   --color-body: #181a20;
+
+  /* The muted tones MUST flip. Leaving them at their dark values put
+     muted-strong at 2.72:1 on this canvas and, being the lighter of the two,
+     made it read as *less* prominent than plain muted — the hierarchy inverted,
+     not merely dimmed. On a light ground "more prominent" means darker, so
+     these invert relative to the dark theme. */
+  --color-muted: #5a6472;
+  --color-muted-strong: #3d4552;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
