@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { ExternalLink } from './ExternalLink'
 import { NAV_LINKS, REPOSITORY_URL } from './nav-links'
 
 const PROJECT_LINKS = [
@@ -97,9 +98,9 @@ function FooterLink({ href, external = false, children }: FooterLinkProps) {
   return (
     <li>
       {external ? (
-        <a href={href} target="_blank" rel="noreferrer" className={className}>
+        <ExternalLink href={href} className={className} showIcon={false}>
           {children}
-        </a>
+        </ExternalLink>
       ) : (
         <Link href={href} className={className}>
           {children}

@@ -1,13 +1,23 @@
-// Placeholder so the public shell has no dead links. Feature 05 replaces
-// this file wholesale — nothing here is meant to survive.
+import type { Metadata } from 'next'
+
+import { AboutIntro } from '@/components/marketing/AboutIntro'
+import { HowItWasBuilt } from '@/components/marketing/HowItWasBuilt'
+import { RealVsSimulated } from '@/components/marketing/RealVsSimulated'
+import { StackTable } from '@/components/marketing/StackTable'
+
+export const metadata: Metadata = {
+  title: 'About — ZerodhaRebuild',
+  description:
+    'Why this paper-trading terminal exists, how it is built, and an honest account of what is real about it and what is simulated.',
+}
+
 export default function AboutPage() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-section md:px-6">
-      <h1 className="text-display-sm font-semibold text-ink">About</h1>
-      <p className="mt-4 max-w-prose text-body text-muted">
-        What this project is, how it was built, and an honest account of what is simulated and what
-        is real. Not written yet.
-      </p>
-    </div>
+    <>
+      <AboutIntro />
+      <HowItWasBuilt />
+      <StackTable />
+      <RealVsSimulated />
+    </>
   )
 }
