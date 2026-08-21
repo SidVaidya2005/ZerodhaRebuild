@@ -7,1201 +7,1401 @@
       "symbol": "360ONE",
       "name": "360 ONE WAM Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "360ONE.NS"
+      "yahoo_symbol": "360ONE.NS",
+      "prev_close": 1199
     },
     {
       "symbol": "ABB",
       "name": "ABB India Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "ABB.NS"
+      "yahoo_symbol": "ABB.NS",
+      "prev_close": 7424
     },
     {
       "symbol": "ABCAPITAL",
       "name": "Aditya Birla Capital Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "ABCAPITAL.NS"
+      "yahoo_symbol": "ABCAPITAL.NS",
+      "prev_close": 413
     },
     {
       "symbol": "ADANIENSOL",
       "name": "Adani Energy Solutions Ltd.",
       "sector": "Power",
-      "yahoo_symbol": "ADANIENSOL.NS"
+      "yahoo_symbol": "ADANIENSOL.NS",
+      "prev_close": 1541.9
     },
     {
       "symbol": "ADANIENT",
       "name": "Adani Enterprises Ltd.",
       "sector": "Metals & Mining",
-      "yahoo_symbol": "ADANIENT.NS"
+      "yahoo_symbol": "ADANIENT.NS",
+      "prev_close": 2997
     },
     {
       "symbol": "ADANIGREEN",
       "name": "Adani Green Energy Ltd.",
       "sector": "Power",
-      "yahoo_symbol": "ADANIGREEN.NS"
+      "yahoo_symbol": "ADANIGREEN.NS",
+      "prev_close": 1320
     },
     {
       "symbol": "ADANIPORTS",
       "name": "Adani Ports and Special Economic Zone Ltd.",
       "sector": "Services",
-      "yahoo_symbol": "ADANIPORTS.NS"
+      "yahoo_symbol": "ADANIPORTS.NS",
+      "prev_close": 1700
     },
     {
       "symbol": "ADANIPOWER",
       "name": "Adani Power Ltd.",
       "sector": "Power",
-      "yahoo_symbol": "ADANIPOWER.NS"
+      "yahoo_symbol": "ADANIPOWER.NS",
+      "prev_close": 205.5
     },
     {
       "symbol": "ALKEM",
       "name": "Alkem Laboratories Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "ALKEM.NS"
+      "yahoo_symbol": "ALKEM.NS",
+      "prev_close": 5400
     },
     {
       "symbol": "AMBUJACEM",
       "name": "Ambuja Cements Ltd.",
       "sector": "Construction Materials",
-      "yahoo_symbol": "AMBUJACEM.NS"
+      "yahoo_symbol": "AMBUJACEM.NS",
+      "prev_close": 414.5
     },
     {
       "symbol": "APLAPOLLO",
       "name": "APL Apollo Tubes Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "APLAPOLLO.NS"
+      "yahoo_symbol": "APLAPOLLO.NS",
+      "prev_close": 2139
     },
     {
       "symbol": "APOLLOHOSP",
       "name": "Apollo Hospitals Enterprise Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "APOLLOHOSP.NS"
+      "yahoo_symbol": "APOLLOHOSP.NS",
+      "prev_close": 8693
     },
     {
       "symbol": "ASHOKLEY",
       "name": "Ashok Leyland Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "ASHOKLEY.NS"
+      "yahoo_symbol": "ASHOKLEY.NS",
+      "prev_close": 173
     },
     {
       "symbol": "ASIANPAINT",
       "name": "Asian Paints Ltd.",
       "sector": "Consumer Durables",
-      "yahoo_symbol": "ASIANPAINT.NS"
+      "yahoo_symbol": "ASIANPAINT.NS",
+      "prev_close": 2640
     },
     {
       "symbol": "ASTRAL",
       "name": "Astral Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "ASTRAL.NS"
+      "yahoo_symbol": "ASTRAL.NS",
+      "prev_close": 1528.5
     },
     {
       "symbol": "ATGL",
       "name": "Adani Total Gas Ltd.",
       "sector": "Oil Gas & Consumable Fuels",
-      "yahoo_symbol": "ATGL.NS"
+      "yahoo_symbol": "ATGL.NS",
+      "prev_close": 646.1
     },
     {
       "symbol": "AUBANK",
       "name": "AU Small Finance Bank Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "AUBANK.NS"
+      "yahoo_symbol": "AUBANK.NS",
+      "prev_close": 1108.2
     },
     {
       "symbol": "AUROPHARMA",
       "name": "Aurobindo Pharma Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "AUROPHARMA.NS"
+      "yahoo_symbol": "AUROPHARMA.NS",
+      "prev_close": 1621.3
     },
     {
       "symbol": "AXISBANK",
       "name": "Axis Bank Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "AXISBANK.NS"
+      "yahoo_symbol": "AXISBANK.NS",
+      "prev_close": 1245.8
     },
     {
       "symbol": "BAJAJ-AUTO",
       "name": "Bajaj Auto Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "BAJAJ-AUTO.NS"
+      "yahoo_symbol": "BAJAJ-AUTO.NS",
+      "prev_close": 11700
     },
     {
       "symbol": "BAJAJFINSV",
       "name": "Bajaj Finserv Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "BAJAJFINSV.NS"
+      "yahoo_symbol": "BAJAJFINSV.NS",
+      "prev_close": 2032.5
     },
     {
       "symbol": "BAJAJHLDNG",
       "name": "Bajaj Holdings & Investment Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "BAJAJHLDNG.NS"
+      "yahoo_symbol": "BAJAJHLDNG.NS",
+      "prev_close": 11320
     },
     {
       "symbol": "BAJFINANCE",
       "name": "Bajaj Finance Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "BAJFINANCE.NS"
+      "yahoo_symbol": "BAJFINANCE.NS",
+      "prev_close": 1095
     },
     {
       "symbol": "BANKBARODA",
       "name": "Bank of Baroda",
       "sector": "Financial Services",
-      "yahoo_symbol": "BANKBARODA.NS"
+      "yahoo_symbol": "BANKBARODA.NS",
+      "prev_close": 247
     },
     {
       "symbol": "BANKINDIA",
       "name": "Bank of India",
       "sector": "Financial Services",
-      "yahoo_symbol": "BANKINDIA.NS"
+      "yahoo_symbol": "BANKINDIA.NS",
+      "prev_close": 142.79
     },
     {
       "symbol": "BDL",
       "name": "Bharat Dynamics Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "BDL.NS"
+      "yahoo_symbol": "BDL.NS",
+      "prev_close": 1359
     },
     {
       "symbol": "BEL",
       "name": "Bharat Electronics Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "BEL.NS"
+      "yahoo_symbol": "BEL.NS",
+      "prev_close": 414
     },
     {
       "symbol": "BHARATFORG",
       "name": "Bharat Forge Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "BHARATFORG.NS"
+      "yahoo_symbol": "BHARATFORG.NS",
+      "prev_close": 2063
     },
     {
       "symbol": "BHARTIARTL",
       "name": "Bharti Airtel Ltd.",
       "sector": "Telecommunication",
-      "yahoo_symbol": "BHARTIARTL.NS"
+      "yahoo_symbol": "BHARTIARTL.NS",
+      "prev_close": 1946
     },
     {
       "symbol": "BHEL",
       "name": "Bharat Heavy Electricals Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "BHEL.NS"
+      "yahoo_symbol": "BHEL.NS",
+      "prev_close": 413
     },
     {
       "symbol": "BIOCON",
       "name": "Biocon Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "BIOCON.NS"
+      "yahoo_symbol": "BIOCON.NS",
+      "prev_close": 415.55
     },
     {
       "symbol": "BLUESTARCO",
       "name": "Blue Star Ltd.",
       "sector": "Consumer Durables",
-      "yahoo_symbol": "BLUESTARCO.NS"
+      "yahoo_symbol": "BLUESTARCO.NS",
+      "prev_close": 1511.9
     },
     {
       "symbol": "BOSCHLTD",
       "name": "Bosch Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "BOSCHLTD.NS"
+      "yahoo_symbol": "BOSCHLTD.NS",
+      "prev_close": 48200
     },
     {
       "symbol": "BPCL",
       "name": "Bharat Petroleum Corporation Ltd.",
       "sector": "Oil Gas & Consumable Fuels",
-      "yahoo_symbol": "BPCL.NS"
+      "yahoo_symbol": "BPCL.NS",
+      "prev_close": 311
     },
     {
       "symbol": "BRITANNIA",
       "name": "Britannia Industries Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "BRITANNIA.NS"
+      "yahoo_symbol": "BRITANNIA.NS",
+      "prev_close": 5365
     },
     {
       "symbol": "BSE",
       "name": "BSE Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "BSE.NS"
+      "yahoo_symbol": "BSE.NS",
+      "prev_close": 3241
     },
     {
       "symbol": "CANBK",
       "name": "Canara Bank",
       "sector": "Financial Services",
-      "yahoo_symbol": "CANBK.NS"
+      "yahoo_symbol": "CANBK.NS",
+      "prev_close": 129.96
     },
     {
       "symbol": "CGPOWER",
       "name": "CG Power and Industrial Solutions Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "CGPOWER.NS"
+      "yahoo_symbol": "CGPOWER.NS",
+      "prev_close": 867
     },
     {
       "symbol": "CHOLAFIN",
       "name": "Cholamandalam Investment and Finance Company Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "CHOLAFIN.NS"
+      "yahoo_symbol": "CHOLAFIN.NS",
+      "prev_close": 1862.9
     },
     {
       "symbol": "CIPLA",
       "name": "Cipla Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "CIPLA.NS"
+      "yahoo_symbol": "CIPLA.NS",
+      "prev_close": 1432.2
     },
     {
       "symbol": "COALINDIA",
       "name": "Coal India Ltd.",
       "sector": "Oil Gas & Consumable Fuels",
-      "yahoo_symbol": "COALINDIA.NS"
+      "yahoo_symbol": "COALINDIA.NS",
+      "prev_close": 405.2
     },
     {
       "symbol": "COCHINSHIP",
       "name": "Cochin Shipyard Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "COCHINSHIP.NS"
+      "yahoo_symbol": "COCHINSHIP.NS",
+      "prev_close": 1480.5
     },
     {
       "symbol": "COFORGE",
       "name": "Coforge Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "COFORGE.NS"
+      "yahoo_symbol": "COFORGE.NS",
+      "prev_close": 1891.7
     },
     {
       "symbol": "COLPAL",
       "name": "Colgate Palmolive (India) Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "COLPAL.NS"
+      "yahoo_symbol": "COLPAL.NS",
+      "prev_close": 1889
     },
     {
       "symbol": "CONCOR",
       "name": "Container Corporation of India Ltd.",
       "sector": "Services",
-      "yahoo_symbol": "CONCOR.NS"
+      "yahoo_symbol": "CONCOR.NS",
+      "prev_close": 515.05
     },
     {
       "symbol": "COROMANDEL",
       "name": "Coromandel International Ltd.",
       "sector": "Chemicals",
-      "yahoo_symbol": "COROMANDEL.NS"
+      "yahoo_symbol": "COROMANDEL.NS",
+      "prev_close": 1996.1
     },
     {
       "symbol": "CUMMINSIND",
       "name": "Cummins India Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "CUMMINSIND.NS"
+      "yahoo_symbol": "CUMMINSIND.NS",
+      "prev_close": 5107.5
     },
     {
       "symbol": "DABUR",
       "name": "Dabur India Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "DABUR.NS"
+      "yahoo_symbol": "DABUR.NS",
+      "prev_close": 400.5
     },
     {
       "symbol": "DIVISLAB",
       "name": "Divi's Laboratories Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "DIVISLAB.NS"
+      "yahoo_symbol": "DIVISLAB.NS",
+      "prev_close": 8597
     },
     {
       "symbol": "DIXON",
       "name": "Dixon Technologies (India) Ltd.",
       "sector": "Consumer Durables",
-      "yahoo_symbol": "DIXON.NS"
+      "yahoo_symbol": "DIXON.NS",
+      "prev_close": 14850
     },
     {
       "symbol": "DLF",
       "name": "DLF Ltd.",
       "sector": "Realty",
-      "yahoo_symbol": "DLF.NS"
+      "yahoo_symbol": "DLF.NS",
+      "prev_close": 678.1
     },
     {
       "symbol": "DMART",
       "name": "Avenue Supermarts Ltd.",
       "sector": "Consumer Services",
-      "yahoo_symbol": "DMART.NS"
+      "yahoo_symbol": "DMART.NS",
+      "prev_close": 3906
     },
     {
       "symbol": "DRREDDY",
       "name": "Dr. Reddy's Laboratories Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "DRREDDY.NS"
+      "yahoo_symbol": "DRREDDY.NS",
+      "prev_close": 1174.7
     },
     {
       "symbol": "EICHERMOT",
       "name": "Eicher Motors Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "EICHERMOT.NS"
+      "yahoo_symbol": "EICHERMOT.NS",
+      "prev_close": 8010
     },
     {
       "symbol": "ENRIN",
       "name": "Siemens Energy India Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "ENRIN.NS"
+      "yahoo_symbol": "ENRIN.NS",
+      "prev_close": 3435.6
     },
     {
       "symbol": "ETERNAL",
       "name": "Eternal Ltd.",
       "sector": "Consumer Services",
-      "yahoo_symbol": "ETERNAL.NS"
+      "yahoo_symbol": "ETERNAL.NS",
+      "prev_close": 328
     },
     {
       "symbol": "EXIDEIND",
       "name": "Exide Industries Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "EXIDEIND.NS"
+      "yahoo_symbol": "EXIDEIND.NS",
+      "prev_close": 459.6
     },
     {
       "symbol": "FEDERALBNK",
       "name": "Federal Bank Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "FEDERALBNK.NS"
+      "yahoo_symbol": "FEDERALBNK.NS",
+      "prev_close": 361
     },
     {
       "symbol": "FORTIS",
       "name": "Fortis Healthcare Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "FORTIS.NS"
+      "yahoo_symbol": "FORTIS.NS",
+      "prev_close": 907.1
     },
     {
       "symbol": "GAIL",
       "name": "GAIL (India) Ltd.",
       "sector": "Oil Gas & Consumable Fuels",
-      "yahoo_symbol": "GAIL.NS"
+      "yahoo_symbol": "GAIL.NS",
+      "prev_close": 172
     },
     {
       "symbol": "GLENMARK",
       "name": "Glenmark Pharmaceuticals Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "GLENMARK.NS"
+      "yahoo_symbol": "GLENMARK.NS",
+      "prev_close": 2317.9
     },
     {
       "symbol": "GMRAIRPORT",
       "name": "GMR Airports Ltd.",
       "sector": "Services",
-      "yahoo_symbol": "GMRAIRPORT.NS"
+      "yahoo_symbol": "GMRAIRPORT.NS",
+      "prev_close": 99.63
     },
     {
       "symbol": "GODFRYPHLP",
       "name": "Godfrey Phillips India Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "GODFRYPHLP.NS"
+      "yahoo_symbol": "GODFRYPHLP.NS",
+      "prev_close": 2117
     },
     {
       "symbol": "GODREJCP",
       "name": "Godrej Consumer Products Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "GODREJCP.NS"
+      "yahoo_symbol": "GODREJCP.NS",
+      "prev_close": 933
     },
     {
       "symbol": "GODREJPROP",
       "name": "Godrej Properties Ltd.",
       "sector": "Realty",
-      "yahoo_symbol": "GODREJPROP.NS"
+      "yahoo_symbol": "GODREJPROP.NS",
+      "prev_close": 2035
     },
     {
       "symbol": "GRASIM",
       "name": "Grasim Industries Ltd.",
       "sector": "Construction Materials",
-      "yahoo_symbol": "GRASIM.NS"
+      "yahoo_symbol": "GRASIM.NS",
+      "prev_close": 3308
     },
     {
       "symbol": "GROWW",
       "name": "Billionbrains Garage Ventures Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "GROWW.NS"
+      "yahoo_symbol": "GROWW.NS",
+      "prev_close": 197.01
     },
     {
       "symbol": "GVT&D",
       "name": "GE Vernova T&D India Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "GVT&D.NS"
+      "yahoo_symbol": "GVT&D.NS",
+      "prev_close": 4127.2
     },
     {
       "symbol": "HAL",
       "name": "Hindustan Aeronautics Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "HAL.NS"
+      "yahoo_symbol": "HAL.NS",
+      "prev_close": 5000
     },
     {
       "symbol": "HAVELLS",
       "name": "Havells India Ltd.",
       "sector": "Consumer Durables",
-      "yahoo_symbol": "HAVELLS.NS"
+      "yahoo_symbol": "HAVELLS.NS",
+      "prev_close": 1268
     },
     {
       "symbol": "HCLTECH",
       "name": "HCL Technologies Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "HCLTECH.NS"
+      "yahoo_symbol": "HCLTECH.NS",
+      "prev_close": 1302.5
     },
     {
       "symbol": "HDFCAMC",
       "name": "HDFC Asset Management Company Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "HDFCAMC.NS"
+      "yahoo_symbol": "HDFCAMC.NS",
+      "prev_close": 2610
     },
     {
       "symbol": "HDFCBANK",
       "name": "HDFC Bank Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "HDFCBANK.NS"
+      "yahoo_symbol": "HDFCBANK.NS",
+      "prev_close": 726.95
     },
     {
       "symbol": "HDFCLIFE",
       "name": "HDFC Life Insurance Company Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "HDFCLIFE.NS"
+      "yahoo_symbol": "HDFCLIFE.NS",
+      "prev_close": 554.8
     },
     {
       "symbol": "HEROMOTOCO",
       "name": "Hero MotoCorp Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "HEROMOTOCO.NS"
+      "yahoo_symbol": "HEROMOTOCO.NS",
+      "prev_close": 5735
     },
     {
       "symbol": "HINDALCO",
       "name": "Hindalco Industries Ltd.",
       "sector": "Metals & Mining",
-      "yahoo_symbol": "HINDALCO.NS"
+      "yahoo_symbol": "HINDALCO.NS",
+      "prev_close": 1034
     },
     {
       "symbol": "HINDPETRO",
       "name": "Hindustan Petroleum Corporation Ltd.",
       "sector": "Oil Gas & Consumable Fuels",
-      "yahoo_symbol": "HINDPETRO.NS"
+      "yahoo_symbol": "HINDPETRO.NS",
+      "prev_close": 363.25
     },
     {
       "symbol": "HINDUNILVR",
       "name": "Hindustan Unilever Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "HINDUNILVR.NS"
+      "yahoo_symbol": "HINDUNILVR.NS",
+      "prev_close": 2015
     },
     {
       "symbol": "HINDZINC",
       "name": "Hindustan Zinc Ltd.",
       "sector": "Metals & Mining",
-      "yahoo_symbol": "HINDZINC.NS"
+      "yahoo_symbol": "HINDZINC.NS",
+      "prev_close": 594.9
     },
     {
       "symbol": "HUDCO",
       "name": "Housing & Urban Development Corporation Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "HUDCO.NS"
+      "yahoo_symbol": "HUDCO.NS",
+      "prev_close": 186.09
     },
     {
       "symbol": "HYUNDAI",
       "name": "Hyundai Motor India Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "HYUNDAI.NS"
+      "yahoo_symbol": "HYUNDAI.NS",
+      "prev_close": 2218.8
     },
     {
       "symbol": "ICICIAMC",
       "name": "ICICI Prudential Asset Management Company Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "ICICIAMC.NS"
+      "yahoo_symbol": "ICICIAMC.NS",
+      "prev_close": 3269.7
     },
     {
       "symbol": "ICICIBANK",
       "name": "ICICI Bank Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "ICICIBANK.NS"
+      "yahoo_symbol": "ICICIBANK.NS",
+      "prev_close": 1420
     },
     {
       "symbol": "ICICIGI",
       "name": "ICICI Lombard General Insurance Company Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "ICICIGI.NS"
+      "yahoo_symbol": "ICICIGI.NS",
+      "prev_close": 1617
     },
     {
       "symbol": "IDEA",
       "name": "Vodafone Idea Ltd.",
       "sector": "Telecommunication",
-      "yahoo_symbol": "IDEA.NS"
+      "yahoo_symbol": "IDEA.NS",
+      "prev_close": 13.94
     },
     {
       "symbol": "IDFCFIRSTB",
       "name": "IDFC First Bank Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "IDFCFIRSTB.NS"
+      "yahoo_symbol": "IDFCFIRSTB.NS",
+      "prev_close": 86.75
     },
     {
       "symbol": "INDHOTEL",
       "name": "Indian Hotels Co. Ltd.",
       "sector": "Consumer Services",
-      "yahoo_symbol": "INDHOTEL.NS"
+      "yahoo_symbol": "INDHOTEL.NS",
+      "prev_close": 730
     },
     {
       "symbol": "INDIANB",
       "name": "Indian Bank",
       "sector": "Financial Services",
-      "yahoo_symbol": "INDIANB.NS"
+      "yahoo_symbol": "INDIANB.NS",
+      "prev_close": 876.9
     },
     {
       "symbol": "INDIGO",
       "name": "InterGlobe Aviation Ltd.",
       "sector": "Services",
-      "yahoo_symbol": "INDIGO.NS"
+      "yahoo_symbol": "INDIGO.NS",
+      "prev_close": 5110
     },
     {
       "symbol": "INDUSINDBK",
       "name": "IndusInd Bank Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "INDUSINDBK.NS"
+      "yahoo_symbol": "INDUSINDBK.NS",
+      "prev_close": 1005.6
     },
     {
       "symbol": "INDUSTOWER",
       "name": "Indus Towers Ltd.",
       "sector": "Telecommunication",
-      "yahoo_symbol": "INDUSTOWER.NS"
+      "yahoo_symbol": "INDUSTOWER.NS",
+      "prev_close": 375.75
     },
     {
       "symbol": "INFY",
       "name": "Infosys Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "INFY.NS"
+      "yahoo_symbol": "INFY.NS",
+      "prev_close": 1121
     },
     {
       "symbol": "IOC",
       "name": "Indian Oil Corporation Ltd.",
       "sector": "Oil Gas & Consumable Fuels",
-      "yahoo_symbol": "IOC.NS"
+      "yahoo_symbol": "IOC.NS",
+      "prev_close": 135.9
     },
     {
       "symbol": "IRCTC",
       "name": "Indian Railway Catering And Tourism Corporation Ltd.",
       "sector": "Consumer Services",
-      "yahoo_symbol": "IRCTC.NS"
+      "yahoo_symbol": "IRCTC.NS",
+      "prev_close": 484.2
     },
     {
       "symbol": "IREDA",
       "name": "Indian Renewable Energy Development Agency Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "IREDA.NS"
+      "yahoo_symbol": "IREDA.NS",
+      "prev_close": 115
     },
     {
       "symbol": "IRFC",
       "name": "Indian Railway Finance Corporation Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "IRFC.NS"
+      "yahoo_symbol": "IRFC.NS",
+      "prev_close": 86.4
     },
     {
       "symbol": "ITC",
       "name": "ITC Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "ITC.NS"
+      "yahoo_symbol": "ITC.NS",
+      "prev_close": 269.4
     },
     {
       "symbol": "JINDALSTEL",
       "name": "Jindal Steel Ltd.",
       "sector": "Metals & Mining",
-      "yahoo_symbol": "JINDALSTEL.NS"
+      "yahoo_symbol": "JINDALSTEL.NS",
+      "prev_close": 1127.8
     },
     {
       "symbol": "JIOFIN",
       "name": "Jio Financial Services Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "JIOFIN.NS"
+      "yahoo_symbol": "JIOFIN.NS",
+      "prev_close": 244
     },
     {
       "symbol": "JSWENERGY",
       "name": "JSW Energy Ltd.",
       "sector": "Power",
-      "yahoo_symbol": "JSWENERGY.NS"
+      "yahoo_symbol": "JSWENERGY.NS",
+      "prev_close": 544.95
     },
     {
       "symbol": "JSWSTEEL",
       "name": "JSW Steel Ltd.",
       "sector": "Metals & Mining",
-      "yahoo_symbol": "JSWSTEEL.NS"
+      "yahoo_symbol": "JSWSTEEL.NS",
+      "prev_close": 1293.7
     },
     {
       "symbol": "JUBLFOOD",
       "name": "Jubilant Foodworks Ltd.",
       "sector": "Consumer Services",
-      "yahoo_symbol": "JUBLFOOD.NS"
+      "yahoo_symbol": "JUBLFOOD.NS",
+      "prev_close": 506.75
     },
     {
       "symbol": "KALYANKJIL",
       "name": "Kalyan Jewellers India Ltd.",
       "sector": "Consumer Durables",
-      "yahoo_symbol": "KALYANKJIL.NS"
+      "yahoo_symbol": "KALYANKJIL.NS",
+      "prev_close": 603.55
     },
     {
       "symbol": "KEI",
       "name": "KEI Industries Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "KEI.NS"
+      "yahoo_symbol": "KEI.NS",
+      "prev_close": 5527.6
     },
     {
       "symbol": "KOTAKBANK",
       "name": "Kotak Mahindra Bank Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "KOTAKBANK.NS"
+      "yahoo_symbol": "KOTAKBANK.NS",
+      "prev_close": 402.8
     },
     {
       "symbol": "KPITTECH",
       "name": "KPIT Technologies Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "KPITTECH.NS"
+      "yahoo_symbol": "KPITTECH.NS",
+      "prev_close": 589.3
     },
     {
       "symbol": "LAURUSLABS",
       "name": "Laurus Labs Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "LAURUSLABS.NS"
+      "yahoo_symbol": "LAURUSLABS.NS",
+      "prev_close": 1802
     },
     {
       "symbol": "LENSKART",
       "name": "Lenskart Solutions Ltd.",
       "sector": "Consumer Services",
-      "yahoo_symbol": "LENSKART.NS"
+      "yahoo_symbol": "LENSKART.NS",
+      "prev_close": 661.4
     },
     {
       "symbol": "LGEINDIA",
       "name": "LG Electronics India Ltd.",
       "sector": "Consumer Durables",
-      "yahoo_symbol": "LGEINDIA.NS"
+      "yahoo_symbol": "LGEINDIA.NS",
+      "prev_close": 1623.3
     },
     {
       "symbol": "LICHSGFIN",
       "name": "LIC Housing Finance Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "LICHSGFIN.NS"
+      "yahoo_symbol": "LICHSGFIN.NS",
+      "prev_close": 497
     },
     {
       "symbol": "LODHA",
       "name": "Lodha Developers Ltd.",
       "sector": "Realty",
-      "yahoo_symbol": "LODHA.NS"
+      "yahoo_symbol": "LODHA.NS",
+      "prev_close": 1242
     },
     {
       "symbol": "LT",
       "name": "Larsen & Toubro Ltd.",
       "sector": "Construction",
-      "yahoo_symbol": "LT.NS"
+      "yahoo_symbol": "LT.NS",
+      "prev_close": 4093
     },
     {
       "symbol": "LTF",
       "name": "L&T Finance Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "LTF.NS"
+      "yahoo_symbol": "LTF.NS",
+      "prev_close": 317.15
     },
     {
       "symbol": "LTM",
       "name": "LTM Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "LTM.NS"
+      "yahoo_symbol": "LTM.NS",
+      "prev_close": 4487.8
     },
     {
       "symbol": "LUPIN",
       "name": "Lupin Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "LUPIN.NS"
+      "yahoo_symbol": "LUPIN.NS",
+      "prev_close": 2201.8
     },
     {
       "symbol": "M&M",
       "name": "Mahindra & Mahindra Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "M&M.NS"
+      "yahoo_symbol": "M&M.NS",
+      "prev_close": 3412.2
     },
     {
       "symbol": "M&MFIN",
       "name": "Mahindra & Mahindra Financial Services Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "M&MFIN.NS"
+      "yahoo_symbol": "M&MFIN.NS",
+      "prev_close": 381.6
     },
     {
       "symbol": "MANKIND",
       "name": "Mankind Pharma Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "MANKIND.NS"
+      "yahoo_symbol": "MANKIND.NS",
+      "prev_close": 2384
     },
     {
       "symbol": "MARICO",
       "name": "Marico Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "MARICO.NS"
+      "yahoo_symbol": "MARICO.NS",
+      "prev_close": 849.25
     },
     {
       "symbol": "MARUTI",
       "name": "Maruti Suzuki India Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "MARUTI.NS"
+      "yahoo_symbol": "MARUTI.NS",
+      "prev_close": 13565
     },
     {
       "symbol": "MAXHEALTH",
       "name": "Max Healthcare Institute Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "MAXHEALTH.NS"
+      "yahoo_symbol": "MAXHEALTH.NS",
+      "prev_close": 1000
     },
     {
       "symbol": "MAZDOCK",
       "name": "Mazagoan Dock Shipbuilders Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "MAZDOCK.NS"
+      "yahoo_symbol": "MAZDOCK.NS",
+      "prev_close": 2552
     },
     {
       "symbol": "MCX",
       "name": "Multi Commodity Exchange of India Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "MCX.NS"
+      "yahoo_symbol": "MCX.NS",
+      "prev_close": 3185
     },
     {
       "symbol": "MFSL",
       "name": "Max Financial Services Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "MFSL.NS"
+      "yahoo_symbol": "MFSL.NS",
+      "prev_close": 1585
     },
     {
       "symbol": "MOTHERSON",
       "name": "Samvardhana Motherson International Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "MOTHERSON.NS"
+      "yahoo_symbol": "MOTHERSON.NS",
+      "prev_close": 169.38
     },
     {
       "symbol": "MOTILALOFS",
       "name": "Motilal Oswal Financial Services Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "MOTILALOFS.NS"
+      "yahoo_symbol": "MOTILALOFS.NS",
+      "prev_close": 990
     },
     {
       "symbol": "MPHASIS",
       "name": "MphasiS Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "MPHASIS.NS"
+      "yahoo_symbol": "MPHASIS.NS",
+      "prev_close": 2430
     },
     {
       "symbol": "MRF",
       "name": "MRF Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "MRF.NS"
+      "yahoo_symbol": "MRF.NS",
+      "prev_close": 132665
     },
     {
       "symbol": "MUTHOOTFIN",
       "name": "Muthoot Finance Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "MUTHOOTFIN.NS"
+      "yahoo_symbol": "MUTHOOTFIN.NS",
+      "prev_close": 3022
     },
     {
       "symbol": "NATIONALUM",
       "name": "National Aluminium Co. Ltd.",
       "sector": "Metals & Mining",
-      "yahoo_symbol": "NATIONALUM.NS"
+      "yahoo_symbol": "NATIONALUM.NS",
+      "prev_close": 394.45
     },
     {
       "symbol": "NAUKRI",
       "name": "Info Edge (India) Ltd.",
       "sector": "Consumer Services",
-      "yahoo_symbol": "NAUKRI.NS"
+      "yahoo_symbol": "NAUKRI.NS",
+      "prev_close": 1350.1
     },
     {
       "symbol": "NESTLEIND",
       "name": "Nestle India Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "NESTLEIND.NS"
+      "yahoo_symbol": "NESTLEIND.NS",
+      "prev_close": 1477.1
     },
     {
       "symbol": "NHPC",
       "name": "NHPC Ltd.",
       "sector": "Power",
-      "yahoo_symbol": "NHPC.NS"
+      "yahoo_symbol": "NHPC.NS",
+      "prev_close": 76.15
     },
     {
       "symbol": "NMDC",
       "name": "NMDC Ltd.",
       "sector": "Metals & Mining",
-      "yahoo_symbol": "NMDC.NS"
+      "yahoo_symbol": "NMDC.NS",
+      "prev_close": 84.61
     },
     {
       "symbol": "NTPC",
       "name": "NTPC Ltd.",
       "sector": "Power",
-      "yahoo_symbol": "NTPC.NS"
+      "yahoo_symbol": "NTPC.NS",
+      "prev_close": 340
     },
     {
       "symbol": "NYKAA",
       "name": "FSN E-Commerce Ventures Ltd.",
       "sector": "Consumer Services",
-      "yahoo_symbol": "NYKAA.NS"
+      "yahoo_symbol": "NYKAA.NS",
+      "prev_close": 334
     },
     {
       "symbol": "OBEROIRLTY",
       "name": "Oberoi Realty Ltd.",
       "sector": "Realty",
-      "yahoo_symbol": "OBEROIRLTY.NS"
+      "yahoo_symbol": "OBEROIRLTY.NS",
+      "prev_close": 1886
     },
     {
       "symbol": "OFSS",
       "name": "Oracle Financial Services Software Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "OFSS.NS"
+      "yahoo_symbol": "OFSS.NS",
+      "prev_close": 11724
     },
     {
       "symbol": "OIL",
       "name": "Oil India Ltd.",
       "sector": "Oil Gas & Consumable Fuels",
-      "yahoo_symbol": "OIL.NS"
+      "yahoo_symbol": "OIL.NS",
+      "prev_close": 475
     },
     {
       "symbol": "ONGC",
       "name": "Oil & Natural Gas Corporation Ltd.",
       "sector": "Oil Gas & Consumable Fuels",
-      "yahoo_symbol": "ONGC.NS"
+      "yahoo_symbol": "ONGC.NS",
+      "prev_close": 236.4
     },
     {
       "symbol": "PAGEIND",
       "name": "Page Industries Ltd.",
       "sector": "Textiles",
-      "yahoo_symbol": "PAGEIND.NS"
+      "yahoo_symbol": "PAGEIND.NS",
+      "prev_close": 35480
     },
     {
       "symbol": "PATANJALI",
       "name": "Patanjali Foods Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "PATANJALI.NS"
+      "yahoo_symbol": "PATANJALI.NS",
+      "prev_close": 348
     },
     {
       "symbol": "PAYTM",
       "name": "One 97 Communications Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "PAYTM.NS"
+      "yahoo_symbol": "PAYTM.NS",
+      "prev_close": 1632
     },
     {
       "symbol": "PERSISTENT",
       "name": "Persistent Systems Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "PERSISTENT.NS"
+      "yahoo_symbol": "PERSISTENT.NS",
+      "prev_close": 5667.5
     },
     {
       "symbol": "PFC",
       "name": "Power Finance Corporation Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "PFC.NS"
+      "yahoo_symbol": "PFC.NS",
+      "prev_close": 363
     },
     {
       "symbol": "PHOENIXLTD",
       "name": "Phoenix Mills Ltd.",
       "sector": "Realty",
-      "yahoo_symbol": "PHOENIXLTD.NS"
+      "yahoo_symbol": "PHOENIXLTD.NS",
+      "prev_close": 1930
     },
     {
       "symbol": "PIDILITIND",
       "name": "Pidilite Industries Ltd.",
       "sector": "Chemicals",
-      "yahoo_symbol": "PIDILITIND.NS"
+      "yahoo_symbol": "PIDILITIND.NS",
+      "prev_close": 1649
     },
     {
       "symbol": "PIIND",
       "name": "PI Industries Ltd.",
       "sector": "Chemicals",
-      "yahoo_symbol": "PIIND.NS"
+      "yahoo_symbol": "PIIND.NS",
+      "prev_close": 2496.8
     },
     {
       "symbol": "PNB",
       "name": "Punjab National Bank",
       "sector": "Financial Services",
-      "yahoo_symbol": "PNB.NS"
+      "yahoo_symbol": "PNB.NS",
+      "prev_close": 116.55
     },
     {
       "symbol": "POLICYBZR",
       "name": "PB Fintech Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "POLICYBZR.NS"
+      "yahoo_symbol": "POLICYBZR.NS",
+      "prev_close": 1795.2
     },
     {
       "symbol": "POLYCAB",
       "name": "Polycab India Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "POLYCAB.NS"
+      "yahoo_symbol": "POLYCAB.NS",
+      "prev_close": 8966
     },
     {
       "symbol": "POWERGRID",
       "name": "Power Grid Corporation of India Ltd.",
       "sector": "Power",
-      "yahoo_symbol": "POWERGRID.NS"
+      "yahoo_symbol": "POWERGRID.NS",
+      "prev_close": 272.4
     },
     {
       "symbol": "POWERINDIA",
       "name": "Hitachi Energy India Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "POWERINDIA.NS"
+      "yahoo_symbol": "POWERINDIA.NS",
+      "prev_close": 34190
     },
     {
       "symbol": "PREMIERENE",
       "name": "Premier Energies Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "PREMIERENE.NS"
+      "yahoo_symbol": "PREMIERENE.NS",
+      "prev_close": 1053
     },
     {
       "symbol": "PRESTIGE",
       "name": "Prestige Estates Projects Ltd.",
       "sector": "Realty",
-      "yahoo_symbol": "PRESTIGE.NS"
+      "yahoo_symbol": "PRESTIGE.NS",
+      "prev_close": 1631
     },
     {
       "symbol": "RADICO",
       "name": "Radico Khaitan Ltd",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "RADICO.NS"
+      "yahoo_symbol": "RADICO.NS",
+      "prev_close": 4639.8
     },
     {
       "symbol": "RECLTD",
       "name": "REC Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "RECLTD.NS"
+      "yahoo_symbol": "RECLTD.NS",
+      "prev_close": 326.65
     },
     {
       "symbol": "RELIANCE",
       "name": "Reliance Industries Ltd.",
       "sector": "Oil Gas & Consumable Fuels",
-      "yahoo_symbol": "RELIANCE.NS"
+      "yahoo_symbol": "RELIANCE.NS",
+      "prev_close": 1316
     },
     {
       "symbol": "RVNL",
       "name": "Rail Vikas Nigam Ltd.",
       "sector": "Construction",
-      "yahoo_symbol": "RVNL.NS"
+      "yahoo_symbol": "RVNL.NS",
+      "prev_close": 225.3
     },
     {
       "symbol": "SAIL",
       "name": "Steel Authority of India Ltd.",
       "sector": "Metals & Mining",
-      "yahoo_symbol": "SAIL.NS"
+      "yahoo_symbol": "SAIL.NS",
+      "prev_close": 173.46
     },
     {
       "symbol": "SBICARD",
       "name": "SBI Cards and Payment Services Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "SBICARD.NS"
+      "yahoo_symbol": "SBICARD.NS",
+      "prev_close": 649
     },
     {
       "symbol": "SBILIFE",
       "name": "SBI Life Insurance Company Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "SBILIFE.NS"
+      "yahoo_symbol": "SBILIFE.NS",
+      "prev_close": 1792.9
     },
     {
       "symbol": "SBIN",
       "name": "State Bank of India",
       "sector": "Financial Services",
-      "yahoo_symbol": "SBIN.NS"
+      "yahoo_symbol": "SBIN.NS",
+      "prev_close": 1048.7
     },
     {
       "symbol": "SHREECEM",
       "name": "Shree Cement Ltd.",
       "sector": "Construction Materials",
-      "yahoo_symbol": "SHREECEM.NS"
+      "yahoo_symbol": "SHREECEM.NS",
+      "prev_close": 24280
     },
     {
       "symbol": "SHRIRAMFIN",
       "name": "Shriram Finance Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "SHRIRAMFIN.NS"
+      "yahoo_symbol": "SHRIRAMFIN.NS",
+      "prev_close": 1130
     },
     {
       "symbol": "SIEMENS",
       "name": "Siemens Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "SIEMENS.NS"
+      "yahoo_symbol": "SIEMENS.NS",
+      "prev_close": 3920
     },
     {
       "symbol": "SOLARINDS",
       "name": "Solar Industries India Ltd.",
       "sector": "Chemicals",
-      "yahoo_symbol": "SOLARINDS.NS"
+      "yahoo_symbol": "SOLARINDS.NS",
+      "prev_close": 19900
     },
     {
       "symbol": "SRF",
       "name": "SRF Ltd.",
       "sector": "Chemicals",
-      "yahoo_symbol": "SRF.NS"
+      "yahoo_symbol": "SRF.NS",
+      "prev_close": 2571.9
     },
     {
       "symbol": "SUNPHARMA",
       "name": "Sun Pharmaceutical Industries Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "SUNPHARMA.NS"
+      "yahoo_symbol": "SUNPHARMA.NS",
+      "prev_close": 1902.4
     },
     {
       "symbol": "SUPREMEIND",
       "name": "Supreme Industries Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "SUPREMEIND.NS"
+      "yahoo_symbol": "SUPREMEIND.NS",
+      "prev_close": 3642
     },
     {
       "symbol": "SUZLON",
       "name": "Suzlon Energy Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "SUZLON.NS"
+      "yahoo_symbol": "SUZLON.NS",
+      "prev_close": 46.71
     },
     {
       "symbol": "SWIGGY",
       "name": "Swiggy Ltd.",
       "sector": "Consumer Services",
-      "yahoo_symbol": "SWIGGY.NS"
+      "yahoo_symbol": "SWIGGY.NS",
+      "prev_close": 282.5
     },
     {
       "symbol": "TATACAP",
       "name": "Tata Capital Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "TATACAP.NS"
+      "yahoo_symbol": "TATACAP.NS",
+      "prev_close": 365.05
     },
     {
       "symbol": "TATACOMM",
       "name": "Tata Communications Ltd.",
       "sector": "Telecommunication",
-      "yahoo_symbol": "TATACOMM.NS"
+      "yahoo_symbol": "TATACOMM.NS",
+      "prev_close": 1655.4
     },
     {
       "symbol": "TATACONSUM",
       "name": "Tata Consumer Products Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "TATACONSUM.NS"
+      "yahoo_symbol": "TATACONSUM.NS",
+      "prev_close": 1049
     },
     {
       "symbol": "TATAELXSI",
       "name": "Tata Elxsi Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "TATAELXSI.NS"
+      "yahoo_symbol": "TATAELXSI.NS",
+      "prev_close": 3708
     },
     {
       "symbol": "TATAINVEST",
       "name": "Tata Investment Corporation Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "TATAINVEST.NS"
+      "yahoo_symbol": "TATAINVEST.NS",
+      "prev_close": 647.95
     },
     {
       "symbol": "TATAPOWER",
       "name": "Tata Power Co. Ltd.",
       "sector": "Power",
-      "yahoo_symbol": "TATAPOWER.NS"
+      "yahoo_symbol": "TATAPOWER.NS",
+      "prev_close": 374.3
     },
     {
       "symbol": "TATASTEEL",
       "name": "Tata Steel Ltd.",
       "sector": "Metals & Mining",
-      "yahoo_symbol": "TATASTEEL.NS"
+      "yahoo_symbol": "TATASTEEL.NS",
+      "prev_close": 183
     },
     {
       "symbol": "TCS",
       "name": "Tata Consultancy Services Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "TCS.NS"
+      "yahoo_symbol": "TCS.NS",
+      "prev_close": 2302
     },
     {
       "symbol": "TECHM",
       "name": "Tech Mahindra Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "TECHM.NS"
+      "yahoo_symbol": "TECHM.NS",
+      "prev_close": 1584
     },
     {
       "symbol": "TIINDIA",
       "name": "Tube Investments of India Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "TIINDIA.NS"
+      "yahoo_symbol": "TIINDIA.NS",
+      "prev_close": 2885.8
     },
     {
       "symbol": "TITAN",
       "name": "Titan Company Ltd.",
       "sector": "Consumer Durables",
-      "yahoo_symbol": "TITAN.NS"
+      "yahoo_symbol": "TITAN.NS",
+      "prev_close": 5086.1
     },
     {
       "symbol": "TMCV",
       "name": "Tata Motors Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "TMCV.NS"
+      "yahoo_symbol": "TMCV.NS",
+      "prev_close": 472.55
     },
     {
       "symbol": "TMPV",
       "name": "Tata Motors Passenger Vehicles Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "TMPV.NS"
+      "yahoo_symbol": "TMPV.NS",
+      "prev_close": 317.9
     },
     {
       "symbol": "TORNTPHARM",
       "name": "Torrent Pharmaceuticals Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "TORNTPHARM.NS"
+      "yahoo_symbol": "TORNTPHARM.NS",
+      "prev_close": 4896.5
     },
     {
       "symbol": "TRENT",
       "name": "Trent Ltd.",
       "sector": "Consumer Services",
-      "yahoo_symbol": "TRENT.NS"
+      "yahoo_symbol": "TRENT.NS",
+      "prev_close": 2924
     },
     {
       "symbol": "TVSMOTOR",
       "name": "TVS Motor Company Ltd.",
       "sector": "Automobile and Auto Components",
-      "yahoo_symbol": "TVSMOTOR.NS"
+      "yahoo_symbol": "TVSMOTOR.NS",
+      "prev_close": 4390
     },
     {
       "symbol": "ULTRACEMCO",
       "name": "UltraTech Cement Ltd.",
       "sector": "Construction Materials",
-      "yahoo_symbol": "ULTRACEMCO.NS"
+      "yahoo_symbol": "ULTRACEMCO.NS",
+      "prev_close": 11570
     },
     {
       "symbol": "UNIONBANK",
       "name": "Union Bank of India",
       "sector": "Financial Services",
-      "yahoo_symbol": "UNIONBANK.NS"
+      "yahoo_symbol": "UNIONBANK.NS",
+      "prev_close": 183.45
     },
     {
       "symbol": "UNITDSPR",
       "name": "United Spirits Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "UNITDSPR.NS"
+      "yahoo_symbol": "UNITDSPR.NS",
+      "prev_close": 1556
     },
     {
       "symbol": "UPL",
       "name": "UPL Ltd.",
       "sector": "Chemicals",
-      "yahoo_symbol": "UPL.NS"
+      "yahoo_symbol": "UPL.NS",
+      "prev_close": 569
     },
     {
       "symbol": "VBL",
       "name": "Varun Beverages Ltd.",
       "sector": "Fast Moving Consumer Goods",
-      "yahoo_symbol": "VBL.NS"
+      "yahoo_symbol": "VBL.NS",
+      "prev_close": 430.1
     },
     {
       "symbol": "VEDL",
       "name": "Vedanta Ltd.",
       "sector": "Metals & Mining",
-      "yahoo_symbol": "VEDL.NS"
+      "yahoo_symbol": "VEDL.NS",
+      "prev_close": 279
     },
     {
       "symbol": "VMM",
       "name": "Vishal Mega Mart Ltd.",
       "sector": "Consumer Services",
-      "yahoo_symbol": "VMM.NS"
+      "yahoo_symbol": "VMM.NS",
+      "prev_close": 103.43
     },
     {
       "symbol": "VOLTAS",
       "name": "Voltas Ltd.",
       "sector": "Consumer Durables",
-      "yahoo_symbol": "VOLTAS.NS"
+      "yahoo_symbol": "VOLTAS.NS",
+      "prev_close": 1235
     },
     {
       "symbol": "WAAREEENER",
       "name": "Waaree Energies Ltd.",
       "sector": "Capital Goods",
-      "yahoo_symbol": "WAAREEENER.NS"
+      "yahoo_symbol": "WAAREEENER.NS",
+      "prev_close": 2678.2
     },
     {
       "symbol": "WIPRO",
       "name": "Wipro Ltd.",
       "sector": "Information Technology",
-      "yahoo_symbol": "WIPRO.NS"
+      "yahoo_symbol": "WIPRO.NS",
+      "prev_close": 180.79
     },
     {
       "symbol": "YESBANK",
       "name": "Yes Bank Ltd.",
       "sector": "Financial Services",
-      "yahoo_symbol": "YESBANK.NS"
+      "yahoo_symbol": "YESBANK.NS",
+      "prev_close": 22.8
     },
     {
       "symbol": "ZYDUSLIFE",
       "name": "Zydus Lifesciences Ltd.",
       "sector": "Healthcare",
-      "yahoo_symbol": "ZYDUSLIFE.NS"
+      "yahoo_symbol": "ZYDUSLIFE.NS",
+      "prev_close": 1120
     }
   ]
 }

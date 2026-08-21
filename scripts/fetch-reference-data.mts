@@ -20,6 +20,14 @@ import { join } from 'node:path'
 import { exit } from 'node:process'
 
 const NIFTY_200_CSV = 'https://nsearchives.nseindia.com/content/indices/ind_nifty200list.csv'
+/**
+ * The published end-of-day file, on the **archive** host — not the
+ * `www.nseindia.com/api/*` endpoints, which answer 403 behind bot protection.
+ * It carries a real close for every listed security, which is what the
+ * simulator walks from (F15).
+ */
+const BHAVCOPY = (ddmmyyyy: string) =>
+  `https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_${ddmmyyyy}.csv`
 const HOLIDAY_API = 'https://www.nseindia.com/api/holiday-master?type=trading'
 const NSE_HOME = 'https://www.nseindia.com/'
 const YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart'
@@ -58,6 +66,8 @@ type Instrument = {
   name: string
   sector: string
   yahoo_symbol: string
+  /** Last published NSE close. Null when bhavcopy has no EQ row for the symbol. */
+  prev_close: number | null
 }
 
 type Holiday = {
@@ -71,10 +81,23 @@ function fail(message: string): never {
 }
 
 async function getText(url: string, headers: Record<string, string> = {}): Promise<string> {
+  const text = await tryGetText(url, headers)
+  if (text === null) fail(`${url} did not return a usable response`)
+  return text
+}
+
+/** Returns null instead of exiting, for callers that expect a miss. */
+async function tryGetText(
+  url: string,
+  headers: Record<string, string> = {}
+): Promise<string | null> {
   const response = await fetch(url, {
     headers: { 'user-agent': BROWSER_UA, accept: '*/*', ...headers },
   })
-  if (!response.ok) fail(`${url} answered ${response.status}`)
+  if (!response.ok) {
+    console.error(`[reference] ${url} answered ${response.status}`)
+    return null
+  }
   return response.text()
 }
 
@@ -125,8 +148,47 @@ function parseCsv(text: string): Record<string, string>[] {
     )
 }
 
+/**
+ * The most recent bhavcopy, found by walking backwards a day at a time.
+ *
+ * There is no endpoint for "latest": weekends and the trading holidays F14
+ * seeded simply have no file, and a missing file answers 404. Walking back until
+ * one responds is what makes this correct on a Sunday, on Republic Day, and at
+ * 09:00 before the day's file exists.
+ */
+async function fetchPrevCloses(): Promise<Map<string, number>> {
+  for (let daysBack = 0; daysBack <= 10; daysBack += 1) {
+    const day = new Date()
+    day.setUTCDate(day.getUTCDate() - daysBack)
+    const stamp =
+      String(day.getUTCDate()).padStart(2, '0') +
+      String(day.getUTCMonth() + 1).padStart(2, '0') +
+      day.getUTCFullYear()
+
+    const csv = await tryGetText(BHAVCOPY(stamp), { accept: 'text/csv,*/*' })
+    if (csv === null) continue
+
+    const closes = new Map<string, number>()
+    for (const row of parseCsv(csv)) {
+      // Every header and value in this file carries leading spaces, so each is
+      // trimmed on read. parseCsv trims the headers; the values are trimmed here.
+      if ((row['SERIES'] ?? '').trim() !== 'EQ') continue
+      const symbol = (row['SYMBOL'] ?? '').trim()
+      const close = Number((row['CLOSE_PRICE'] ?? '').trim())
+      if (symbol && Number.isFinite(close) && close > 0) closes.set(symbol, close)
+    }
+
+    if (closes.size > 0) {
+      console.log(`[reference] bhavcopy ${stamp}: ${closes.size} EQ closes`)
+      return closes
+    }
+  }
+  fail('no bhavcopy found in the last 10 days')
+}
+
 async function fetchInstruments(): Promise<Instrument[]> {
   const rows = parseCsv(await getText(NIFTY_200_CSV, { accept: 'text/csv,*/*' }))
+  const closes = await fetchPrevCloses()
 
   const instruments = rows.map((row) => {
     const symbol = row['Symbol'] ?? ''
@@ -135,7 +197,15 @@ async function fetchInstruments(): Promise<Instrument[]> {
     if (!symbol || !name || !sector) {
       fail(`a constituent row is missing a field: ${JSON.stringify(row)}`)
     }
-    return { symbol, name, sector, yahoo_symbol: `${symbol}.NS` }
+    return {
+      symbol,
+      name,
+      sector,
+      yahoo_symbol: `${symbol}.NS`,
+      // Null rather than a guess: a symbol with no EQ row in the latest
+      // bhavcopy has no close, and the simulator refuses to invent one.
+      prev_close: closes.get(symbol) ?? null,
+    }
   })
 
   if (instruments.length < 190 || instruments.length > 210) {
@@ -305,7 +375,8 @@ async function main(): Promise<void> {
   // letting a later reader assume it was checked.
   const probe = process.argv.includes('--probe')
   const instruments = await fetchInstruments()
-  console.log(`[reference] ${instruments.length} constituents`)
+  const priced = instruments.filter((i) => i.prev_close !== null).length
+  console.log(`[reference] ${instruments.length} constituents, ${priced} with a close`)
 
   const broken = probe ? await probeYahoo(instruments) : []
   if (!probe) {

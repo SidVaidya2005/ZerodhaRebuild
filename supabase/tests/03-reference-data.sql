@@ -6,7 +6,7 @@
 -- assertions are deliberately shaped as bounds and spot facts, not as an exact
 -- copy of the file, which would only restate the seed to itself.
 begin;
-select plan(14);
+select plan(18);
 
 -- ── The universe ────────────────────────────────────────────────────────────
 
@@ -102,6 +102,37 @@ select is(
     where trading_date < '2026-01-01' or trading_date > '2026-12-31'),
   0,
   'every seeded closure falls inside the calendar year that was fetched'
+);
+
+-- ── The simulator's anchor (F15) ────────────────────────────────────────────
+-- `prev_close` is seeded from NSE's published bhavcopy and is what stops the
+-- simulator inventing prices. It is a seed and never a quote: nothing writes it
+-- into `quotes`, and no surface renders it as a price.
+
+select is(
+  (select count(*)::int from public.instruments where prev_close is null),
+  0,
+  'every instrument carries a previous close for the simulator to walk from'
+);
+
+select is(
+  (select count(*)::int from public.instruments where prev_close <= 0),
+  0,
+  'and none of them is zero or negative — a price that is not a price'
+);
+
+-- The spread is the point. A fixed starting constant would price MRF and
+-- YESBANK identically and make Phase 5's portfolio arithmetic meaningless.
+select cmp_ok(
+  (select max(prev_close) / min(prev_close) from public.instruments), '>', 100::numeric,
+  'the closes span orders of magnitude, so they are real rather than a constant'
+);
+
+-- A band wide enough to survive ordinary market moves, narrow enough to catch a
+-- column read from the wrong position in the bhavcopy CSV.
+select ok(
+  (select prev_close between 200 and 5000 from public.instruments where symbol = 'RELIANCE'),
+  'RELIANCE''s close is in a plausible band, so the CSV column mapping is right'
 );
 
 select * from finish();
