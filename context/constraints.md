@@ -29,6 +29,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Build plan sequencing
 
+- **`isTradingSession()` coverage moves from F14 to F15**, which is where the function and its unit tests already live. F14 proves the seeded data instead: the published dates are present, correctly dated in `Asia/Kolkata`, and described. Same precedent F13 set when its watchlist check moved here. (F14)
+
 - **F10 creates only the two enums its own tables reference** — `quote_provider` and `candle_interval`. The five that only F11's tables use are created there. Each migration then reviews against the tables it creates, and nobody reading the schema in between finds five types with no referents. (F10)
 
 - **F07 moves behind F09.** Its verify is a tier-2 pgTAP check and `support_messages` accepts anonymous writes, so it should not ship behind a one-off manual check. Phase 1 closes as 01–06 plus 08; F07 is built once the harness exists. (F08)
@@ -60,6 +62,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Auth
 
+- **No backfill: the orphan account is deleted and re-created.** `auth.users` held one row with no profile, created while verifying F12, and a trigger on `auth.users` fires only on insert. Deleting it keeps signup as the only path that ever creates an account — worth more than sparing the test account. (F13)
+
 - **Sign-in is initiated server-side, not from a browser client.** A `<form>` posts to a Server Action that calls `signInWithOAuth` and `redirect()`s to Google, so sign-in works with JavaScript disabled — the standard F07B set for the support form — and `/auth/login` stays a Server Component. The PKCE verifier is written by the same client that reads it back in the callback. `library-docs.md`'s client-side snippet is corrected in the same change. (F12)
 
 - **The signed-in identity and sign-out control live on the `/dashboard` stub, not the public header.** F12's UI bullet said "in the header", but the only header that exists is the marketing one, and reading a session there would force dynamic rendering on every public page and break `architecture.md`'s session-free `(marketing)` boundary. F17 owns the terminal avatar menu. (F12)
@@ -69,6 +73,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **All four Supabase clients ship in F12**, `admin.ts` included, even though nothing in this feature calls it. Its `import 'server-only'` guard is therefore observed failing a build rather than assumed — an unused module holding the RLS-bypassing key is exactly the thing that must not be trusted on sight. (F12)
 
 ## Security and RLS
+
+- **The default watchlist seeds by `INSERT…SELECT` against `instruments`.** F14 populates that table and runs *after* F13, so a plain insert would violate `watchlist_items`' foreign key today. Intersecting a fixed symbol list against whatever is seeded is FK-safe by construction, idempotent, and needs no change when F14 lands. The "populated watchlist" half of F13's original verify moves to F14, which is where it becomes checkable. (F13)
+
+- **`OPENING_BALANCE` is a literal in SQL, pinned from both sides.** The trigger cannot import `src/lib/constants.ts`, so the migration writes `100000.00` citing `trading-contract.md` §11, pgTAP asserts a bootstrapped account holds exactly that, and a tier-1 test pins the TypeScript constant. Both anchor to the contract rather than to each other, so drift fails a test instead of going unnoticed. (F13)
 
 - **Client-ID generation is its own function so exhaustion is testable.** `generate_client_id()` is separate from `handle_new_user()` because the only way to prove the 10-attempt bound is to stub it, and a pgTAP transaction can `create or replace` it and roll back. Exhaustion fails the signup loudly: a user admitted without a `funds` row would break every money function that follows. (F13)
 

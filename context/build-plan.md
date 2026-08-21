@@ -674,49 +674,82 @@ says so.
 
 ### 15 Quote provider chain
 
-
-
-The reliability core, built and tested before anything renders a price.
+The market library everything in Phase 3 reads: NSE session logic, price provenance, a simulator that
+walks from a real market close, and the thin provider seam they plug into. Nothing here renders UI or
+writes to the database — F16's tick is the first caller.
 
 **Yahoo is deferred to the end of the project (decided 2026-08-21), so this chain ships
 simulator-backed.** Twelve Data's free plan carries no NSE symbols at all (verified against the live
 API — `library-docs.md` → Quote providers), and NSE's own `quote-equity` endpoint answers 403 from
-here, so the simulator is the only provider that can actually serve a price until Yahoo returns. The
-`QuoteProvider` interface, circuit breaker, limiter and provenance helpers are all built now — the
-chain has to be right before a Yahoo provider is dropped into it — but the running system quotes
-`SIMULATOR`, and every price on screen badges `SIMULATED`. That is honest by construction; what it
-must not do is coexist with copy promising real prices, so **`/` and `/about` must be reconciled
-before F39 deploys** if Yahoo has not landed by then.
+here, so the simulator is the only provider that can serve a price until Yahoo returns. The interface,
+circuit breaker and provenance helpers are all built now — a real provider drops into a finished
+chain, not the reverse — but the running system quotes `SIMULATOR`, and every price on screen badges
+`SIMULATED`. That is honest by construction; what it must not do is coexist with copy promising real
+prices, so **`/` and `/about` must be reconciled before F39 deploys** if Yahoo has not landed by then.
 
 **Logic:**
 
-- `QuoteProvider` interface: `name`, `isAvailable()`, `fetchQuotes(symbols)`, circuit-breaker state.
-- `YahooProvider` — **deferred**. Its slot in the chain and its circuit-breaker behaviour are designed
-  and unit-tested against a fake provider; the real implementation lands at the end of the project.
-  A 429 must trip its circuit for 5 minutes, which is the lesson F14 paid for: Yahoo's IP block
-  outlasted 40 minutes of polling.
-- `TwelveDataProvider` — **not built.** Its free plan returns 404 for every NSE symbol ("available
-  starting with the Grow or Venture plan"), verified against the live API with a real key, so the
-  provider could never do anything but report unavailable. It is dropped rather than shipped as a
-  permanently-false branch.
-- `SimulatorProvider` — bounded random walk seeded from the last known quote; always succeeds.
-- `QuoteService` walking the chain and a token-bucket limiter capping symbols per tick.
-- `CandleProvider` chain over the same limiter and circuit breaker, plus `deriveSource()` and the provenance helpers in `src/lib/market/provenance.ts`.
-- `market-hours.ts` exposing `isTradingSession(clock)`, computing NSE session state in `Asia/Kolkata` against a `market_holidays` table — not against the cron window.
+- **`instruments.prev_close`, seeded from NSE's bhavcopy.** `library-docs.md` said the simulator seeds
+  "from `instruments` reference data", but that table carries no price, so a cold start had nothing to
+  walk from. Bhavcopy (`nsearchives.nseindia.com/products/content/sec_bhavdata_full_*.csv`) is on the
+  same host as the constituent list and is reachable — it is the archive, not the blocked API. The
+  F14 fetch script gains a pass that walks back day by day until a file returns 200, filters to
+  `SERIES = EQ`, and trims every field (the CSV carries leading spaces in its values).
+- **The real close is a seed, never a quote.** No `NSE_BHAVCOPY` enum value and no provenance rewrite:
+  `quotes.provider` stays `SIMULATOR` with a null `provider_ts`, so every price badges `SIMULATED`.
+  What changes is that the figures are plausible instead of ₹1,000 for both MRF and YESBANK.
+- `market-hours.ts` exposes **two shapes over one clock**: a pure `marketStatusAt(date, holidays)`
+  that tier 1 can falsify, and the async `isTradingSession(supabase, date)` that `code-standards.md`
+  already shows callers using. The holiday set is injected into the pure core, never fetched inside
+  it. `getMarketStatus()` returns PRE-OPEN / OPEN / CLOSED **and the next transition**, so F20's pill
+  renders a value rather than re-deriving the trickiest arithmetic in the module.
+- `provenance.ts` — `deriveSource()` and the `Provenance` type from `architecture.md` → Quote
+  Provenance, unchanged. `LIVE` remains structurally unreachable: no provider declares itself
+  realtime.
+- `QuoteProvider` interface (`name`, `isAvailable()`, `fetchQuotes(symbols)`), an ordered chain, and a
+  **per-provider circuit breaker** — all exercised against a deliberately failing fake. F14 is why the
+  breaker is the piece worth having: Yahoo's IP block outlasted 40 minutes of polling.
+- **The token-bucket limiter is deferred** until something actually makes outbound requests. A rate
+  limiter in front of a local simulator caps nothing.
+- `SimulatorProvider` — a bounded geometric random walk clamped to ±5% of `prev_close` per session,
+  seeded from the last `quotes` row and falling back to `prev_close`. Injected clock and RNG, so it is
+  deterministic under test. With neither available it reports **unavailable** rather than inventing a
+  base price.
+- **The quote windows are set by assumption and labelled as such.** `architecture.md` carries a
+  standing TODO to measure Yahoo's real `regularMarketTime` lag; that cannot be done while Yahoo is
+  deferred, so `QUOTE_STALE_AFTER_MS` (5 min, the §5 fill gate), `QUOTE_DELAYED_WINDOW_MS` (15 min)
+  and `QUOTE_LIVE_WINDOW_MS` (5 s, inert) each carry a comment saying they are unmeasured and what
+  would change them.
+- **Candles are out of this feature.** No source covers the 1D and 1W intraday ranges — bhavcopy gives
+  one daily bar and Yahoo's chart endpoint is deferred — and F33 is the first feature that draws a
+  chart. Deciding a chart pipeline four features before anything renders one is the thing being
+  avoided. `CandleProvider`, `candle_sync` and the TTLs move to F33.
 
 **Verify:**
 
-- Unit tests: a 429 from a provider trips its circuit and the next call falls through to the
-  simulator. Exercised against a fake provider, since Yahoo is deferred.
-- Unit test: a malformed payload fails its Zod parse and falls through rather than throwing.
-- Unit test: the chain falls through to the simulator when every upstream is unavailable, and the
-  quote it returns carries `provider = 'SIMULATOR'` so the badge reads `SIMULATED`.
-- Unit tests for `deriveSource`: `SIMULATOR` → `SIMULATED`; a polled provider within the live window → `DELAYED`, never `LIVE`; beyond the delayed window → `STALE`; null `provider_ts` → `STALE`.
-- Unit test: a candle response with null entries drops those indices rather than forward-filling.
-- Unit tests for `market-hours` cover pre-open, open, post-close, weekend, a listed trading holiday, and the 15:20 square-off boundary, with an injected clock.
-- Test: 09:14:59 and 15:30:01 IST both report closed; 09:15:00 reports open.
-- **Deferred with Yahoo:** an integration run against the live Yahoo endpoint returning a plausible
-  price for `RELIANCE`. Nothing in this feature contacts a live upstream.
+- **Session boundaries are exact** — `pnpm test`: 09:14:59 closed, 09:15:00 open, 15:29:59 open,
+  15:30:00 closed, all evaluated in IST.
+- **The timezone is real, not the server's** — the same instants assert identically under `TZ=UTC` and
+  `TZ=America/New_York`. A test that only passes in one zone proves nothing about a server in Oregon.
+- Holidays close the market — `2026-01-26` reports closed at 11:00 IST despite being a Monday, read
+  from the calendar F14 seeded; the Sunday entry in that calendar changes nothing.
+- Status carries three states and a next transition — 09:05 → `PRE-OPEN` with next transition 09:15;
+  16:00 on a Friday → `CLOSED` with next transition Monday 09:00, skipping the weekend.
+- **`LIVE` is structurally unreachable** — no provider and no age produces it. `SIMULATOR` →
+  `SIMULATED`; a null `provider_ts` → `STALE`; beyond the delayed window → `STALE`.
+- **The breaker actually opens** — a fake provider failing twice trips its circuit, the chain falls
+  through to the simulator, and the failed provider is not called again until the window elapses on
+  the injected clock.
+- The simulator is bounded and deterministic — the same seed and clock produce the same series; ten
+  thousand steps never leave ±5% of `prev_close`; every quote it returns carries
+  `provider: 'SIMULATOR'` and a null `provider_ts`.
+- **It walks from a real close rather than a constant** — `pnpm test:db`: every instrument has a
+  non-null `prev_close` greater than zero, and RELIANCE's falls in a plausible band. `pnpm test`: with
+  no last quote and no `prev_close`, the simulator reports unavailable instead of inventing a base.
+- **Nothing here touches the network or the database** — `grep` finds no `fetch(` and no Supabase
+  import under `src/lib/market/providers/`, and the pure core of `market-hours.ts` takes its holidays
+  as an argument.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db` and `pnpm build` all exit zero.
 
 ### 16 Market tick Edge Function and schedule
 
