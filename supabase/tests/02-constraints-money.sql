@@ -11,7 +11,7 @@
 -- Runs as the connecting role throughout. RLS denial is 01-rls-money.sql's job;
 -- this file is about what cannot be stored even by something allowed to write.
 begin;
-select plan(27);
+select plan(29);
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -155,6 +155,28 @@ select throws_ok(
         "stamp_duty":2.10,"dp_charge":0,"gst":1.99}'::jsonb)$$,
   '23514', null,
   'a breakdown one paisa off its total is refused — §12.6');
+
+select throws_ok(
+  $$insert into public.trades (user_id, order_id, symbol, side, product,
+      quantity, price, charges, charge_breakdown)
+    values ('11111111-1111-1111-1111-111111111111',
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'RELIANCE', 'BUY', 'CNC',
+      10, 1400.00, 999.99, '{"brokerage":0}'::jsonb)$$,
+  '23514', null,
+  'a breakdown missing components cannot be stored — absent keys are 0, not omitted');
+
+-- A key present but JSON null is the same hole through a different door, which
+-- is why the shape check tests the type rather than mere containment.
+select throws_ok(
+  $$insert into public.trades (user_id, order_id, symbol, side, product,
+      quantity, price, charges, charge_breakdown)
+    values ('11111111-1111-1111-1111-111111111111',
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'RELIANCE', 'BUY', 'CNC',
+      10, 1400.00, 0,
+      '{"brokerage":0,"stt":null,"exchange_txn":0,"sebi_turnover":0,
+        "stamp_duty":0,"dp_charge":0,"gst":0}'::jsonb)$$,
+  '23514', null,
+  'a component set to JSON null is refused — a CHECK passes on NULL, so this must not reach it');
 
 select throws_ok(
   $$insert into public.trades (user_id, order_id, symbol, side, product,
