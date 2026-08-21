@@ -17,8 +17,8 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 1 — Foundation & Public Site
-**Last completed:** 07 Slice A — Support help content: four category cards, 17 native-`<details>` FAQ entries, no JavaScript. All five public routes now score Lighthouse 100 with no failures
-**Next:** 09 Test harness — start with the pgTAP spike in its Verify block, since a working database connection now exists to answer the Docker question. Then 07 Slice B (contact form), then the Phase 1 checkpoint
+**Last completed:** 09 Test harness — all three tiers live. Tier 2 runs through an in-repo pgTAP runner (the CLI needs Docker); tier 3 proven to open two distinct backends and to clean up after a mid-test failure
+**Next:** 07 Slice B — the contact form. Its tier-2 RLS check is now runnable; it still needs the Supabase client layer and generated types, which it may legitimately land itself. Then the Phase 1 checkpoint
 
 ---
 
@@ -38,7 +38,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ### Phase 2 — Data Foundation & Auth
 
-- [ ] 09 Test harness
+- [x] 09 Test harness
 - [ ] 10 Database schema: identity and market data
 - [ ] 11 Database schema: funds, orders, and portfolio
 - [ ] 12 Google sign-in and route protection
@@ -92,6 +92,11 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
+- **`supabase test db --db-url` requires Docker even against a remote database** — it connects first, then dies with `LegacyDockerRunError`. Proven by running the spike F09 called for. Tier 2 therefore runs through our own `scripts/run-pgtap.ts` using `pg`: the text rows pgTAP's functions return *are* the TAP stream, so nothing extra needs installing. pgTAP itself (1.3.3) installed fine on the hosted database — only the runner was ever the problem. (F09)
+- **pgTAP is enabled by a tracked migration, not created ad hoc by the runner.** With one project that means installing it into production, which is acceptable: it adds functions in a schema nothing else uses and no tables. An untracked extension the tests silently depend on is worse — a fresh database looks fine until the suite runs, and migration history stops describing the database. (F09)
+- **The tier-2 runner is a standalone TypeScript script with no new runner dependency.** Node 26 strips types natively, so `node scripts/run-pgtap.ts` runs directly; `tsx` would be a dependency for one file. Keeping it out of Vitest also means nothing about tier 2 can be picked up by `pnpm test`. (F09)
+- **`pnpm db:push:test` is dropped.** One database means one push command, and a second script reaching the same place by a different mechanism — named for a test project that no longer exists — is a trap. (F09)
+
 - **F07 is split into two slices rather than renumbered.** It was placed in Phase 1 before anyone noticed the contact form needs `@supabase/ssr`, `lib/supabase/server.ts` (F12's), `src/types/database.ts` (F10's), `react-hook-form` and F09's harness. Slice A (help content) has none of those dependencies and ships now; Slice B (form, migration, RLS) waits for F09. Inserting a new feature number would have renumbered 08–40 and invalidated every journal and commit reference already written, so the `07` checkbox simply stays unticked until both slices land. (F07)
 - **FAQ disclosure is native `<details>`/`<summary>`.** Zero JavaScript, works before hydration and with JS off, and keyboard operation, focus handling and screen-reader semantics come from the browser instead of being hand-written and then audited at F38. (F07)
 - **Slice A ships no contact form at all**, pointing unanswered questions at the repository's issue tracker. A dead "coming soon" form is worse than none, and this way Slice B adds the form rather than replacing a placeholder. (F07)
@@ -100,11 +105,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 - **Tier 3 therefore commits into the production database, and is gated behind `ALLOW_RACE_TESTS`.** It cannot roll back — proving two connections cannot both fill an order requires the first to commit. Recognisable seed prefix and failure-safe `afterEach` cleanup are the other two mandatory guards. (1.00.03)
 
 - **The 404 carries full public chrome; the error boundary carries none.** A mistyped URL is ordinary navigation and wants the nav, so `PublicShell` was extracted and shared — an unmatched URL never enters the `(marketing)` group, so the route-group layout cannot supply it. An error means this subtree already failed, so the fallback depends on as little as possible and stays a small client bundle. (F08)
-- **A Server Component throw renders nothing server-side; the boundary appears on hydration.** `curl` shows an empty body and a 500, which looks like the white screen the criterion forbids — the check only means something in a browser. Proven with a temporary throwing route, then deleted. (F08)
 
 
-- **The About page's stack table renders from a typed `src/lib/stack.ts` guarded by a bidirectional drift test.** Every `installed` row's version must equal `package.json`'s, and every `planned` row's package must be absent from it — so upgrading a dependency without touching the page fails the suite, and so does installing a planned package without flipping its row. (F05)
-- **Packages `architecture.md` commits to but later phases install render as "planned"**, neither omitted nor given an invented version. A third of the stack lands in Phases 2–5, and faking those versions would be the same overclaim the provenance badge exists to prevent. (F05)
-- **The three honesty sections divide by purpose, not by subject.** Home carries price provenance only; About carries the Real / Simulated inventory; `/legal` carries the consequences and the divergences from a real broker, because a notice has to stand alone. About links to Legal rather than restating it. (F05)
 
 

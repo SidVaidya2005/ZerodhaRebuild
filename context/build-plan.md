@@ -327,29 +327,41 @@ Public site complete and deployable. Run lint, typecheck and tests; walk every p
 
 ### 09 Test harness
 
-Stand up all three test tiers before the schema they will police exists, so no later feature can be written without a way to prove it. Tiers and rules are defined in `code-standards.md` → Testing.
+Stand up all three test tiers before the schema they will police exists, so no later feature can be
+written without a way to prove it. Tiers and rules are defined in `code-standards.md` → Testing.
+
+**The spike in this feature's original Verify block has been run, and it failed.**
+`supabase test db --db-url` connects to the remote database and *then* dies with
+`LegacyDockerRunError` — the CLI shells out to `pg_prove` in a container regardless of where the
+database lives. The fallback that block pre-authorised is therefore mandatory, not optional. pgTAP
+itself installed cleanly on the hosted database (1.3.3), so only the *runner* was ever the problem.
 
 **Logic:**
 
-- **Provisioning is already done** (2026-08-21): one project, `zerodha-rebuild-dev` / `kefggygenlprjzhiocai` / ap-south-1, linked, with `.env.local` and `.env.test.local` written and both verified connecting. There is deliberately **no second project** — a throwaway test target was created and then deleted, because one project is simpler to operate and cannot silently pause while the other stays warm.
-- **`TEST_DATABASE_URL` therefore points at the real database, and tier 3 commits into it.** Three guards, all mandatory: `pnpm test:race` exits unless `ALLOW_RACE_TESTS` is set, every seeded row carries a recognisable prefix, and `afterEach` cleanup runs on failure as well as success. `code-standards.md` → Testing is authoritative.
-- The connection string must use the **session-mode** pooler (port 5432). Tier 3 holds a transaction open across statements on two connections, which transaction-mode pooling (6543) structurally cannot express — the port is load-bearing, not incidental.
-- `pnpm db:push:test` applying the full migration history with `supabase db push --db-url "$TEST_DATABASE_URL" --include-all`.
-- Scripts: `pnpm test` (tier 1, Vitest), `pnpm test:db` (tier 2, `supabase test db --db-url`), `pnpm test:race` (tier 3, Vitest driving `pg`), and `pnpm test:all` chaining all three.
-- `supabase/tests/00-helpers.sql` enabling the pgTAP extension and holding shared fixtures.
-- `tests/concurrency/helpers.ts` with two-client setup, a seeded-user factory using a recognisable prefix, and `afterEach` cleanup that runs on failure too.
-- `pg` and `@types/pg` added to the approved dependency list.
+- **Provisioning is already done** (2026-08-21): one project, `zerodha-rebuild-dev` / `kefggygenlprjzhiocai` / ap-south-1, linked, `.env.local` and `.env.test.local` written and both verified connecting. There is deliberately **no second project**.
+- **First migration of the project:** `enable_pgtap` creating the extension in the `extensions` schema. Tracked rather than created ad hoc by the runner — an untracked extension the tests silently depend on is worse than a tracked one, because a fresh database looks fine until the suite runs and the migration history stops describing the database. pgTAP adds functions in a schema nothing else uses and no tables, so the cost to the single production project is close to zero.
+- **`scripts/run-pgtap.ts` replaces `supabase test db`.** It reads `.env.test.local`, executes each `supabase/tests/*.sql` through `pg`, and collects the text rows the pgTAP functions return — `plan()` yields `1..n`, `ok()` yields `ok N - desc` or `not ok N - desc`, so those rows **are** the TAP stream and no reporter needs installing. It parses them, names the file and assertion on failure, and exits non-zero.
+- **Written in TypeScript with no new runner dependency.** Node 26 strips types natively (verified), so `node scripts/run-pgtap.ts` runs directly; adding `tsx` for one script would be a dependency the stack does not need.
+- **The runner must catch a plan mismatch, not only `not ok`.** A file declaring `plan(2)` that runs one assertion has to fail — that is the failure mode a naive grep misses.
+- `tests/concurrency/helpers.ts`: client-pair factory, seeded fixtures under the `zr-race-` prefix, and `afterEach` cleanup that runs on failure as well as success.
+- **Tier 3 is gated behind `ALLOW_RACE_TESTS` and must exit before opening a connection** when it is unset. It commits into the single production database; that guard is the thing standing between a routine `pnpm test:all` and real rows.
+- `vitest.config.race.mts` scoped to `tests/concurrency/**`, because tier 1's config includes only `src/**/*.test.ts`. Scripts: `test:db`, `test:race`, `test:all`.
+- **`pnpm db:push:test` is dropped.** One database means one push command, and `pnpm supabase db push` already is it. A second script reaching the same place by a different mechanism, named for a test project that no longer exists, is a trap. Removed from `CLAUDE.md` too.
+- **Tier 2 ships a smoke test only.** No schema exists yet, so `01-rls.sql` and friends would assert nothing; they land with F10/F11, which create the tables they police. What this feature must prove is that the runner works — including that it fails correctly.
+- `pg` and `@types/pg` added to the approved dependency list, dev-only and never imported by application code.
 
 **Verify:**
 
-- **Run this first, as a spike.** `pnpm test:db` executes a trivial `select plan(1); select ok(true); select * from finish();` against the project and reports TAP success. A probe here showed `supabase test db --db-url` connects to the database before anything else and fails on connection, with no Docker error — but whether `pg_prove` itself needs a container after a *successful* connect is unproven, and this machine has no Docker.
-- If that spike fails on a container requirement, fall back without redesigning anything: the tier 2 files are plain SQL with pgTAP assertions, so run them through the same `pg` client tier 3 already uses and read the TAP output from the result set. Record which path was taken in the build journal.
-- `pnpm test:race` opens two connections and proves they are distinct backends — `select pg_backend_pid()` returns different values — then closes both.
-- `pnpm db:push:test` applies cleanly to the (currently empty) project, and re-running it is a no-op.
-- `TEST_DATABASE_URL` pointed at a paused or wrong project fails with a clear connection error, never a silent skip or an empty pass.
-- **`pnpm test:race` with `ALLOW_RACE_TESTS` unset exits without opening a connection** — proven by running it and confirming no rows appear. A guard that has never been observed refusing is not a guard.
-- A race test that throws mid-run still leaves the database clean: kill one deliberately and confirm `afterEach` removed its seeded rows.
-- `.env.test.local` is gitignored: creating it leaves `git status` clean.
+- **The runner is observed failing before it is trusted.** Add a deliberate `select ok(false, …)`, run `pnpm test:db`, confirm it exits **non-zero** and names the file and the failing assertion; revert and confirm green. A harness that has only ever passed proves nothing.
+- **A plan mismatch fails too**: declare `plan(2)` with one assertion and confirm the runner reports it rather than silently passing.
+- Tier 2 genuinely reaches the database: `00-smoke.sql` asserts `has_extension('pgtap')`, which cannot pass without a real connection.
+- Tier 2 leaves nothing behind: run `pnpm test:db` twice, confirm identical output and no new rows — the `begin/rollback` wrapper doing its job.
+- **The tier-3 guard is observed refusing.** With `ALLOW_RACE_TESTS` unset, `pnpm test:race` exits **without opening a connection**, confirmed by its absence from `pg_stat_activity` rather than by it printing a skip message.
+- Tier 3 opens two real backends: `pg_backend_pid()` returns two different values, and both connections close.
+- Cleanup survives failure: make a race test throw mid-run and confirm `afterEach` still removed its `zr-race-` rows.
+- `pnpm test` does not pick up tiers 2 or 3 — the tier-1 count is unchanged.
+- `pnpm supabase db push` applies the migration cleanly and re-running is a no-op; migration history lists exactly one entry.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` all exit zero, and `grep -rn "from 'pg'" src/` returns nothing.
 
 ### 10 Database schema: identity and market data
 
