@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "audit:a11y": "CHROME_PATH=\"${CHROME_PATH:-/Applications/Brave Browser.app/Contents/MacOS/Brave Browser}\" lighthouse http://localhost:3000 --only-categories=accessibility --chrome-flags=--headless=new --quiet --output=json --output-path=stdout",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -36,6 +37,7 @@
     "@types/react-dom": "19.2.4",
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.1",
+    "lighthouse": "13.4.1",
     "postcss": "8.5.26",
     "prettier": "3.9.6",
     "prettier-plugin-tailwindcss": "0.8.1",

@@ -479,6 +479,7 @@ Approved dependencies for this project:
 - `sonner` — toasts
 - `server-only` — build-time guard on server modules
 - `vitest` — tier 1 and tier 3 test runner
+- `lighthouse` — accessibility auditing via `pnpm audit:a11y`; F04's verify commits to a score above 90 and F38's accessibility pass needs the same tooling, so it lands in Phase 1 and every public page is audited as it ships (F04)
 - `pg`, `@types/pg` — direct Postgres connections for tier 3 concurrency tests; never imported by application code
 - `eslint`, `eslint-config-next`, `prettier`, `prettier-plugin-tailwindcss` — linting and formatting
 - `supabase` (CLI, dev dependency) — migrations, type generation, function deploys

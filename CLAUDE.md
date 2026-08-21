@@ -54,6 +54,7 @@ The `context/` folder is the source of truth for this project. **Read it before 
 - `pnpm start` — serve the production build (Render's start command)
 - `pnpm lint` — ESLint
 - `pnpm typecheck` — `tsc --noEmit`
+- `pnpm audit:a11y` — Lighthouse accessibility score against a **running** server (`pnpm start` first)
 - `pnpm test` — tier 1: Vitest logic tests, no database
 - `pnpm test:db` — tier 2: pgTAP against the test project
 - `pnpm test:race` — tier 3: two-connection concurrency tests
@@ -65,6 +66,7 @@ The `context/` folder is the source of truth for this project. **Read it before 
 
 ## Environment notes
 
+- **This machine has Brave, not Google Chrome.** `chrome-launcher` finds no install, so `pnpm audit:a11y` points `CHROME_PATH` at Brave's binary with a `${CHROME_PATH:-…}` override. Brave is Chromium, so Lighthouse drives it unchanged.
 - **No Docker on this machine** — `supabase start` and `supabase test db --local` will not run. Develop against the hosted Supabase project, and run pgTAP against a **second** hosted project via `--db-url`. The free plan allows exactly two active projects, and they pause after a week idle.
 - **Render free tier has no cron jobs and no background workers**, and spins down after 15 minutes idle. All scheduled work lives in Supabase `pg_cron` (1-minute minimum) calling the `market-tick` Edge Function.
 - **Next.js 16 renamed `middleware.ts` to `proxy.ts`** with a named `proxy` export, running on the Node.js runtime only.
