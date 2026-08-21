@@ -241,22 +241,58 @@ corrected three things `trading-contract.md` §3 had wrong; see Logic below.
 
 
 
+**Split into two slices.** This feature was placed in Phase 1 before anyone noticed the contact form
+needs a database layer: `@supabase/ssr`, `src/lib/supabase/server.ts` (F12 owns it),
+`src/types/database.ts` (F10 generates it), `react-hook-form`, and F09's harness for its RLS check.
+The help content needs none of that, so it ships first. The checkbox in `progress-tracker.md` is
+ticked only when **both** slices are done.
+
+---
+
+#### Slice A — help content *(Phase 1, no dependencies)*
+
 **UI:**
 
-- Category cards (Account, Orders, Funds, Technical) with expandable FAQ entries.
-- Contact form: name, email, category, message.
-- Success and error states, with the form disabled while submitting.
-
-**Logic:**
-
-- `support_messages` table with a migration allowing anonymous `INSERT` and no `SELECT`.
-- `submitSupportMessage` Server Action with Zod validation.
+- Four category cards — Account, Orders, Funds, Technical — each holding expandable FAQ entries.
+- **Disclosure is native `<details>` / `<summary>`.** Zero JavaScript, works before hydration and with JS disabled, and keyboard operation, focus handling and screen-reader semantics come from the browser rather than being hand-written. `/support` stays static like every other public page, and F38 has nothing to audit here. Styling the marker is the only cost. `<summary>` gets an explicit `focus-visible` ring, since browser defaults vary.
+- **No contact form in this slice.** Anything the FAQ does not answer routes to the repository's issue tracker through `ExternalLink`. A dead "coming soon" form is a worse experience than no form, and this way Slice B *adds* the form rather than replacing a placeholder.
+- Answers are **grounded in the context docs, not invented** — order behaviour from `trading-contract.md`, price provenance from `architecture.md`, the free-hosting sleep from `CLAUDE.md`. Anything already stated on `/pricing` or `/legal` is **linked, not restated**, the same rule that keeps Home, About and Legal from duplicating one another.
 
 **Verify:**
 
-- A valid submission inserts one row; the UI shows the success state.
-- An invalid email shows a field error and inserts nothing.
-- Signed out, a `select` against `support_messages` returns zero rows — insert-only RLS confirmed.
+- The page is static and ships no JavaScript for the FAQ: `pnpm build` marks `/support` `○ (Static)`; grepping the Support components for `use client`, `useState` and `useEffect` returns nothing; and every FAQ answer appears in the `curl`-fetched HTML, proving the content exists without hydration.
+- **Disclosure works with JavaScript disabled** — click a `<summary>` in a JS-disabled browser and the answer still expands.
+- Every `<summary>` is keyboard reachable: Tab to one, confirm `document.activeElement` is the `summary`, Enter toggles `open`, and a visible focus ring is painted.
+- `pnpm audit:a11y /support` scores **100** with zero contrast nodes — the bar is 100, not 90, since 1.00.01. Then **load the light theme for real** (never by toggling the class from script) and confirm no text element falls below AA.
+- No answer contradicts its source: read side by side against `trading-contract.md` §3/§8/§10 and `architecture.md` → Quote Provenance. No charge rate is quoted anywhere (that is `/pricing`'s job), nothing claims prices are live, and CNC shorting is stated as impossible.
+- `grep -rn 'target="_blank"' src --include='*.tsx'` still hits only `ExternalLink.tsx`, and every `http` anchor in the served `/support` carries `rel="noreferrer"`.
+- At 375px `document.documentElement.scrollWidth === 375`; the `dark:`, bridge-name, hex-in-`className` and trading-colour guards all return zero.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm format:check` all exit zero.
+
+---
+
+#### Slice B — contact form *(Phase 2, after F09)*
+
+**Blocked on, and must not be started before:** F09 (tier-2 harness, for the RLS check), plus the
+Supabase client layer and generated types. Slice B legitimately lands `src/lib/supabase/server.ts`
+and `src/types/database.ts` if F10/F12 have not already — those are not throwaway, F12 extends them.
+
+**UI:**
+
+- Contact form: name, email, category, message. Success and error states, form disabled while submitting.
+
+**Logic:**
+
+- `support_messages` migration per `architecture.md` → `support_messages`: `id`, `name`, `email`, `category`, `message`, `created_at`. RLS enabled with **anonymous `INSERT` permitted and no `SELECT` policy at all** — the table is write-only from the public web.
+- `submitSupportMessage` Server Action, Zod-validated, returning the standard `ActionResult` shape. The action reads no session: an unauthenticated request runs as `anon`, which is exactly the role RLS must gate.
+- `react-hook-form` + `@hookform/resolvers` added to the approved dependency list when installed.
+
+**Verify:**
+
+- A valid submission inserts exactly one row; the UI shows the success state.
+- An invalid email shows a field error and inserts nothing — asserted by row count before and after.
+- **Signed out, a `select` against `support_messages` returns zero rows**, as a tier-2 pgTAP case using `is_empty()` for the policy filter and `throws_ok(..., '42501', ...)` if the grant stops it first — `code-standards.md` requires both failure modes be distinguished.
+- The RLS policy is observed **failing** before being trusted: drop it, watch the test go red, restore it.
 
 ### 08 Legal, error, and not-found pages
 
