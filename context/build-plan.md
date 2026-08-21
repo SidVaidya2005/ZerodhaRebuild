@@ -266,13 +266,19 @@ corrected three things `trading-contract.md` §3 had wrong; see Logic below.
 
 - `/legal` with the full disclaimer: unaffiliated, no real trading, no financial advice, data provenance.
 - A "simulation simplifications" section naming the places this diverges from a real broker: intraday short losses are capped at collateral rather than triggering a margin call, prices are delayed rather than real-time, there is no counterparty order book, fills are all-or-nothing because there is nobody on the other side, and **the DP charge is applied once per sell order where a real broker charges once per scrip per day** (F06, `trading-contract.md` §3).
-- Branded `not-found.tsx`.
-- Root `error.tsx` with a retry action.
+- **Branded `not-found.tsx`, carrying the full public chrome.** A mistyped URL is an ordinary navigation outcome and the useful thing to offer is the nav. It cannot inherit that chrome from the `(marketing)` layout — an unmatched URL never enters the route group — so the shell is extracted to `components/marketing/PublicShell.tsx` and shared by both.
+- **Root `error.tsx` with a retry action, and deliberately no chrome.** An error means something in this subtree already failed, so the less machinery the fallback depends on, the better its odds of rendering; it also keeps the client bundle small rather than dragging the header across the boundary. It renders `error.digest`, never `error.message` — `code-standards.md` forbids raw errors in UI strings, and in production Next.js replaces the message with the digest anyway.
+- `global-error.tsx` is **not** added: errors thrown by the root layout itself go uncaught. That is beyond what this feature specifies, and it would mean duplicating the fonts and theme provider.
 
 **Verify:**
 
-- A nonexistent path renders the branded 404, not the Next.js default.
-- Throwing inside a page renders the error boundary rather than a white screen.
+- A nonexistent path returns HTTP **404** and renders the branded page: the served HTML contains "This page does not exist" and **not** Next's "This page could not be found", with header, footer and nav links present.
+- **Throwing inside a page renders the error boundary rather than a white screen** — proven with a temporary `force-dynamic` page that throws, then deleted. Note the SSR HTML is empty for a Server Component throw; the boundary renders on hydration, so this must be checked in a browser, not with `curl`.
+- The boundary leaks nothing: the rendered DOM contains no error message, no stack frame and no filesystem path, and the `error.digest` shown matches the digest in the server log.
+- **The 404 cannot be Lighthouse-audited** — Lighthouse returns `ERRORED_DOCUMENT_REQUEST` for any non-200 document and computes no score. Verify it structurally instead: one `h1`, header/main/footer landmarks, every `nav` labelled, and measured contrast in both themes.
+- `pnpm audit:a11y /legal` scores above 90 — record the number — with no failure beyond the known muted-token gap.
+- At 375px both `/legal` and the 404 report `scrollWidth === 375`, and both themes flip every surface.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### Phase checkpoint
 
@@ -948,6 +954,7 @@ Every page in `project-overview.md` exists and is wired to real data. Walk the f
 - Contrast checked in both themes — including P&L red and green against both backgrounds.
 - **Known failure to resolve here, found in F06: `text-brand` can never pass AA on the light canvas, by construction.** Brand yellow measures 11–13.5:1 as text on the dark surfaces and **1.37–1.43:1 on light** — below even the 3:1 large-text floor. This is not a mistake to correct locally: F02's machine-checked invariant forbids `.light` from redefining `--color-brand`, so the same yellow necessarily sits on a white canvas in light mode. Currently affects the header and footer wordmarks and the decorative list bullets on Home, About and Pricing. Resolving it means choosing between a light-mode-only text variant of the brand token, restricting `text-brand` to dark-background contexts, or accepting the wordmark as a brand mark exempt from text rules — a design decision, not a cleanup.
 - **The accessibility audits have only ever run in the dark theme.** `pnpm audit:a11y` loads the page with its default theme, so nothing in features 04 to 06 was audited in light mode, and the failure above is invisible to that command. This pass must check both themes — the practical method is measuring computed contrast per element with the theme class toggled, which is how the ratios above were obtained.
+- **Known failure to resolve here, measured across F04–F08: neither muted token has a `.light` override, and in light mode the hierarchy is inverted.** `--color-muted-strong` (#929aa5) measures 5.56–6.81:1 in dark but **2.72–2.84:1 in light** — under even the 3:1 large-text floor — on 27 elements of `/legal` alone, and it is used for every section lede and column label across the public site. Because it is *lighter* than `--color-muted`, in light mode `muted-strong` is **less** prominent than `muted`: the opposite of what its name promises. Fixing this means giving both tokens `.light` values that are darker than their dark-theme ones, with `muted-strong` the darker of the two, then re-auditing. Original F04 note follows.
 - **Known failure to resolve here, found in F04:** `--color-muted` (#707a8a) fails WCAG AA for normal text in **both** themes, and for opposite reasons — 3.64:1 on the dark `--color-surface`, 4.34:1 on light `#ffffff`. `--color-muted-strong` is not the fix: being lighter, it helps on dark (5.56:1) and makes light **worse** (2.84:1). The muted tokens have no `.light` override, so resolving this means giving them one — a darker muted in light, a lighter one in dark — and re-running `pnpm audit:a11y` on every public route. F04 retoned running copy to `--color-body`, which is what DESIGN.md prescribes anyway; what remains failing is `muted` in its **sanctioned** uses (footer links, captions, column headers), which is a genuine gap in the extracted system rather than a misuse.
 
 **Verify:**

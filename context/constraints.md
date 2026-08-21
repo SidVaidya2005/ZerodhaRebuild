@@ -33,7 +33,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 - **Supabase provisioning is deferred out of F01 to Phase 2.** The free plan caps active projects at two per org and both slots already hold unrelated projects (`NextBnb` active, `SpotifyAgain` paused). F10 already calls for creating and linking the project, so F01 and F10 were duplicating the step. (F01)
 
-- **F07 (Support form) conflicts with that deferral and is unresolved.** It sits in Phase 1 and needs a `support_messages` migration, so Phase 1 cannot complete without a Supabase project existing. Decide this when F07 is architected — do not discover it mid-build. (F01)
+- **F07 (Support form) is deferred to Phase 2, after F09.** It needs a `support_messages` migration, and its verify ("signed out, a select returns zero rows") is a tier-2 pgTAP check that F09's harness makes runnable. `support_messages` accepts anonymous writes, so it is the last table that should ship behind a one-off manual check. (F01, resolved F08)
+- **The two-active-project limit is no longer the blocker it was at F01.** That constraint assumed both free slots in `SidVaidya2005's Org` were taken by `NextBnb` and `SpotifyAgain`; provisioning now happens in a **separate Supabase account with an empty org**, which the MCP in this workspace cannot see — the CLI must be authenticated with a personal access token instead. (F08)
 
 ## Environment and secrets
 
@@ -53,6 +54,7 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Theming and design tokens
 
+- **Neither muted token is safe in both themes, and in light they are inverted.** `--color-muted` fails AA everywhere (3.65:1 dark, 4.16:1 light). `--color-muted-strong` passes in dark (5.56–6.81:1) and fails badly in light (2.72–2.84:1) — and being the *lighter* of the two, it reads as **less** prominent than `muted` in light mode. Until F38 gives them `.light` overrides, prefer `text-body` for anything that must be readable, and treat a muted token as decorative de-emphasis only. (F06, measured F08)
 - **`text-brand` is only legible on dark surfaces.** Brand yellow is 11–13.5:1 as text on the dark canvas and 1.37–1.43:1 on light, because F02's invariant deliberately keeps `--color-brand` byte-identical across themes. Use `text-ink` for figures and headings; reserve brand for CTA *backgrounds* (`bg-brand text-on-brand`), which pass in both. Filed against F38. (F06)
 - **`pnpm audit:a11y` only ever sees the dark theme.** A clean Lighthouse score is not evidence the light theme is accessible — check it by measuring computed contrast with the theme class toggled. (F06)
 - **The marketing footer is `bg-surface`, not DESIGN.md's always-light `#fafafa`.** `--color-surface` already *is* `#fafafa` in the light theme, so the source system's value is reached through the token rather than hardcoded, and in dark it reads as the elevation step the flat-colour-block philosophy calls for. An always-light token pair would exist only to break the theme contract. (F03)
@@ -78,3 +80,13 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **The hero is typographic — no mock terminal UI.** It is what the build plan specifies, and F40 can screenshot the finished terminal, which beats a hand-built fake and avoids maintaining a second UI until the real one exists. (F04)
 
 - **The simulator disclaimer is dismissible and remembered, with no flash.** A blocking inline script in the root layout reads `localStorage` and stamps `data-disclaimer="dismissed"` on `<html>` before first paint; CSS hides the strip off that attribute. The same technique `next-themes` already runs here, and it keeps the `(marketing)` layout a Server Component — only the close button is a client island. (F03)
+
+## Charges and the trading contract
+
+- **`trading-contract.md` §3 had three things wrong, all corrected against Zerodha's published charge list on 2026-08-21.** NSE exchange transaction charge was stale at 0.00297% and is 0.00307%; the DP charge is ₹15.34 **inclusive** of GST, not "₹15.34 + 18% GST", which would have double-charged GST on every CNC sell; and DP is charged once per **scrip per day** in reality. This unblocks F06 and F22. (F06)
+
+- **DP is charged once per sell order in this simulator — a deliberate divergence, documented in F08's simplifications.** Per-scrip-per-day would make `execute_order` query the user's same-day trades inside the locked transaction and give account reset another case to handle. (F06)
+
+- **`charge_breakdown` splits DP into `dp_charge` ₹13.00 with its ₹2.34 GST rolled into `gst`**, so every rupee of GST sits in one key and `gst` never changes meaning depending on whether a DP charge was involved. The pricing page still shows ₹15.34, footnoted, because that is the number on a real contract note. (F06)
+
+- **GST is computed on unrounded sub-components and rounded once**, resolving an ambiguity §2 left open. §13's sweep grep is also extended to charge terms — it matched only margin and P&L identifiers, so it could not detect drift caused by a §3 rate edit. (F06)

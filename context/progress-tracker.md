@@ -17,8 +17,8 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 1 — Foundation & Public Site
-**Last completed:** 06 Pricing page — rates corrected against the published list and dated, charges.ts estimator with 81 assertions, worked round trip computed at ₹126.60; Lighthouse 96
-**Next:** 07 Support page and contact form — blocked: it needs a `support_messages` migration but Supabase provisioning was deferred to Phase 2 (see constraints.md → Build plan sequencing)
+**Last completed:** 08 Legal, error, and not-found pages — disclaimer plus six named simulation divergences, branded 404 with full chrome, root error boundary proven to catch a real throw; Lighthouse /legal 96
+**Next:** 09 Test harness, once the Supabase CLI is authenticated and the dev + test projects exist. F07 (Support) then follows F09 rather than preceding it — its RLS check is tier 2
 
 ---
 
@@ -33,7 +33,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 - [x] 05 About page
 - [x] 06 Pricing page
 - [ ] 07 Support page and contact form
-- [ ] 08 Legal, error, and not-found pages
+- [x] 08 Legal, error, and not-found pages
 - [ ] Phase checkpoint — verify Phase 1 — Foundation & Public Site is stable before starting the next phase
 
 ### Phase 2 — Data Foundation & Auth
@@ -92,10 +92,11 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
-- **`trading-contract.md` §3 had three things wrong, all corrected against Zerodha's published charge list on 2026-08-21.** NSE exchange transaction charge was stale at 0.00297% and is 0.00307%; the DP charge is ₹15.34 **inclusive** of GST, not "₹15.34 + 18% GST", which would have double-charged GST on every CNC sell; and DP is charged once per **scrip per day** in reality. This unblocks F06 and F22. (F06)
-- **DP is charged once per sell order in this simulator — a deliberate divergence, documented in F08's simplifications.** Per-scrip-per-day would make `execute_order` query the user's same-day trades inside the locked transaction and give account reset another case to handle. (F06)
-- **`charge_breakdown` splits DP into `dp_charge` ₹13.00 with its ₹2.34 GST rolled into `gst`**, so every rupee of GST sits in one key and `gst` never changes meaning depending on whether a DP charge was involved. The pricing page still shows ₹15.34, footnoted, because that is the number on a real contract note. (F06)
-- **GST is computed on unrounded sub-components and rounded once**, resolving an ambiguity §2 left open. §13's sweep grep is also extended to charge terms — it matched only margin and P&L identifiers, so it could not detect drift caused by a §3 rate edit. (F06)
+- **F07 moves behind F09.** Its verify is a tier-2 pgTAP check and `support_messages` accepts anonymous writes, so it should not ship behind a one-off manual check. Phase 1 closes as 01–06 plus 08; F07 is built once the harness exists. (F08)
+- **The 404 carries full public chrome; the error boundary carries none.** A mistyped URL is ordinary navigation and wants the nav, so `PublicShell` was extracted and shared — an unmatched URL never enters the `(marketing)` group, so the route-group layout cannot supply it. An error means this subtree already failed, so the fallback depends on as little as possible and stays a small client bundle. (F08)
+- **A Server Component throw renders nothing server-side; the boundary appears on hydration.** `curl` shows an empty body and a 500, which looks like the white screen the criterion forbids — the check only means something in a browser. Proven with a temporary throwing route, then deleted. (F08)
+- **Lighthouse cannot audit the 404**: it returns `ERRORED_DOCUMENT_REQUEST` for any non-200 document. That page is verified structurally and by measured contrast instead. (F08)
+
 
 - **The About page's stack table renders from a typed `src/lib/stack.ts` guarded by a bidirectional drift test.** Every `installed` row's version must equal `package.json`'s, and every `planned` row's package must be absent from it — so upgrading a dependency without touching the page fails the suite, and so does installing a planned package without flipping its row. (F05)
 - **Packages `architecture.md` commits to but later phases install render as "planned"**, neither omitted nor given an invented version. A third of the stack lands in Phases 2–5, and faking those versions would be the same overclaim the provenance badge exists to prevent. (F05)
