@@ -203,23 +203,39 @@ Why the project exists, how it was built, and an honest inventory of what is rea
 
 
 
-The charge structure the order engine will actually apply — written before the engine so the engine matches the page.
+The charge structure the order engine will actually apply — written before the engine so the engine
+matches the page. **Rates confirmed against Zerodha's published charge list on 2026-08-21**, which
+corrected three things `trading-contract.md` §3 had wrong; see Logic below.
 
 **UI:**
 
-- Plan card: ₹0 account opening, ₹0 delivery brokerage, ₹20 or 0.03% intraday.
-- Full charges table: brokerage, STT, exchange transaction charges, GST, SEBI turnover fee, stamp duty, DP charges.
-- A worked example: a ₹50,000 delivery buy and its exact total cost.
+- Plan card: ₹0 account opening, ₹0 delivery brokerage, ₹20 or 0.03% intraday (whichever is lower).
+- Full charges table for CNC and MIS: brokerage, STT, exchange transaction, SEBI turnover fee, stamp duty, GST, DP charge.
+- **The table shows the DP charge as ₹15.34 per scrip**, with a footnote that it is ₹13.00 plus ₹2.34 GST. The page speaks the number a user recognises from a contract note; `charge_breakdown` keeps GST consolidated. The footnote states the relationship, so neither representation misleads.
+- **Worked example as a round trip** — a ₹50,000 CNC buy and a matching ₹50,000 CNC sell, so the figures isolate charges rather than mixing in a price move. A buy alone would leave DP charges and sell-side STT with no worked figure anywhere, and those are the rows people most often get wrong.
+- The page labels its figures an **estimate**: `trading-contract.md` §1 permits a clearly-labelled TypeScript estimate and forbids only TypeScript producing a stored value.
 
 **Logic:**
 
-- Charge rates defined once in `src/lib/constants.ts` and imported by this page, so the page and the engine can never disagree.
+- **Three corrections to `trading-contract.md` §3**, all from the published list: NSE exchange transaction charge **0.00297% → 0.00307%** (stale); the DP charge is **₹15.34 inclusive of GST**, not "₹15.34 + 18% GST", which would have double-charged GST on every CNC sell; and DP is charged **once per sell order** here where Zerodha charges once per scrip per day.
+- **The DP frequency divergence is deliberate and documented.** Per-scrip-per-day would make `execute_order` query the user's same-day trades for that symbol inside the locked transaction, and give account reset another thing to reason about. It is named in F08's "simulation simplifications" list rather than hidden.
+- **`charge_breakdown` splits DP into `dp_charge` ₹13.00 with its ₹2.34 rolled into `gst`**, so every rupee of GST lives in one key. §3's GST rule becomes `gst = 18% × (brokerage + exchange + SEBI + dp_base)`.
+- **GST is computed on unrounded sub-components and rounded once**, resolving an ambiguity §2 left open. Rounding once where the figure becomes money loses the least and keeps §2's "computed at full precision, then rounded" literally true for GST as for every other component. §2 gains a sentence saying so.
+- Rates live in `src/lib/constants.ts` as decimal rates per `code-standards.md` (`0.0003`, not `0.03`), each carrying a source URL and the date confirmed.
+- **`src/lib/trading/charges.ts` is built here**, not inlined on the page. `architecture.md` already reserves it for pure charge functions; building it now means the page renders from the real estimator, and F22 adds the Postgres equivalent plus the property test proving the two agree.
+- **§13's sweep is extended to cover charge terms.** Its grep matches margin and P&L identifiers only, so it structurally cannot detect the drift a §3 *rate* edit causes — the exact kind of edit this feature makes.
 
 **Verify:**
 
-- The worked example on the page is computed from `constants.ts`, not typed in — changing a rate changes the page.
-- Every rate on the page carries a source comment in `constants.ts`.
-- TODO: confirm current rates against Zerodha's published charge list before this page goes live.
+- **The example is computed, not typed:** `pnpm test` asserts buy ₹59.38, sell ₹67.22 and round trip **₹126.60** on ₹1,00,000 of turnover; then changing `EXCHANGE_TXN_RATE` in `constants.ts` and rebuilding moves the rendered total off ₹126.60. Revert.
+- **The breakdown always reconciles:** a test asserts the rounded components sum exactly to the total across a sweep of quantities and prices — the property §2 exists to guarantee.
+- **The ₹20 intraday cap is exercised at its boundary:** tests at turnover just below, at, and just above ₹66,666.67 confirm brokerage switches from 0.03% to a flat ₹20.
+- Every rate carries a dated source in `constants.ts`, and `grep -n "TODO" context/trading-contract.md` no longer returns the rate TODO.
+- **The §13 sweep is clean:** both greps run, every hit either agrees with the corrected §3 or was fixed — there is no third category.
+- No rate is hardcoded in the page: grepping the marketing components and pages for `0.00307`, `15.34`, `0.0001` and `13.00` returns nothing outside a footnote string.
+- `pnpm build` marks `/pricing` `○ (Static)`; `pnpm audit:a11y /pricing` scores above 90 — record the number — with no failure beyond the known `--color-muted` gap already filed against F38.
+- At 375px `document.documentElement.scrollWidth === 375`, the charges table scrolls inside its own focusable `role="region"`, and both themes flip every band.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### 07 Support page and contact form
 
@@ -249,7 +265,7 @@ The charge structure the order engine will actually apply — written before the
 **UI:**
 
 - `/legal` with the full disclaimer: unaffiliated, no real trading, no financial advice, data provenance.
-- A "simulation simplifications" section naming the places this diverges from a real broker: intraday short losses are capped at collateral rather than triggering a margin call, prices are delayed rather than real-time, and there is no counterparty order book.
+- A "simulation simplifications" section naming the places this diverges from a real broker: intraday short losses are capped at collateral rather than triggering a margin call, prices are delayed rather than real-time, there is no counterparty order book, fills are all-or-nothing because there is nobody on the other side, and **the DP charge is applied once per sell order where a real broker charges once per scrip per day** (F06, `trading-contract.md` §3).
 - Branded `not-found.tsx`.
 - Root `error.tsx` with a retry action.
 
@@ -580,14 +596,14 @@ The terminal looks and feels like a real trading front end with live prices. Con
 
 **Logic:**
 
-- `calculate_charges(side, product, quantity, price)` in Postgres returning the total.
-- A matching `src/lib/trading/charges.ts` for **display estimates only**, plus a `charge_breakdown` shape shared by both.
-- Every rate sourced from `constants.ts` with a comment citing where it came from.
+- `calculate_charges(side, product, quantity, price)` in Postgres returning the total and the breakdown.
+- **`src/lib/trading/charges.ts` already exists — feature 06 built it** so the pricing page could compute its worked example from real code rather than typed-in totals. This feature adds the Postgres side and makes the two provably equal; it does not create the estimator. The TypeScript one stays **display-only**, per `trading-contract.md` §1.
+- Every rate is read from `constants.ts`, whose Postgres equivalent must carry the same figures and the same dated source (`trading-contract.md` §3).
 
 **Verify:**
 
 - Unit tests reproduce a published Zerodha brokerage-calculator example for a delivery buy, a delivery sell, an intraday buy, and an intraday sell, each within one paisa.
-- A test asserts the TypeScript estimate and the Postgres result agree for 100 random inputs.
+- A test asserts the TypeScript estimate and the Postgres result agree for 100 random inputs — including the two rules that are easy to get different on each side: GST is computed on **unrounded** sub-components and rounded once (§2), and `dp_base` is ₹13.00 with its GST inside the single `gst` key (§3).
 - Delivery brokerage is exactly zero; intraday brokerage is capped at ₹20.
 
 ### 23 Margin reservation and release
@@ -930,6 +946,8 @@ Every page in `project-overview.md` exists and is wired to real data. Walk the f
 - Keyboard navigation throughout; visible focus rings; a search shortcut.
 - Labels on every input, `aria-live` on the market status and toasts.
 - Contrast checked in both themes — including P&L red and green against both backgrounds.
+- **Known failure to resolve here, found in F06: `text-brand` can never pass AA on the light canvas, by construction.** Brand yellow measures 11–13.5:1 as text on the dark surfaces and **1.37–1.43:1 on light** — below even the 3:1 large-text floor. This is not a mistake to correct locally: F02's machine-checked invariant forbids `.light` from redefining `--color-brand`, so the same yellow necessarily sits on a white canvas in light mode. Currently affects the header and footer wordmarks and the decorative list bullets on Home, About and Pricing. Resolving it means choosing between a light-mode-only text variant of the brand token, restricting `text-brand` to dark-background contexts, or accepting the wordmark as a brand mark exempt from text rules — a design decision, not a cleanup.
+- **The accessibility audits have only ever run in the dark theme.** `pnpm audit:a11y` loads the page with its default theme, so nothing in features 04 to 06 was audited in light mode, and the failure above is invisible to that command. This pass must check both themes — the practical method is measuring computed contrast per element with the theme class toggled, which is how the ratios above were obtained.
 - **Known failure to resolve here, found in F04:** `--color-muted` (#707a8a) fails WCAG AA for normal text in **both** themes, and for opposite reasons — 3.64:1 on the dark `--color-surface`, 4.34:1 on light `#ffffff`. `--color-muted-strong` is not the fix: being lighter, it helps on dark (5.56:1) and makes light **worse** (2.84:1). The muted tokens have no `.light` override, so resolving this means giving them one — a darker muted in light, a lighter one in dark — and re-running `pnpm audit:a11y` on every public route. F04 retoned running copy to `--color-body`, which is what DESIGN.md prescribes anyway; what remains failing is `muted` in its **sanctioned** uses (footer links, captions, column headers), which is a genuine gap in the extracted system rather than a misuse.
 
 **Verify:**
