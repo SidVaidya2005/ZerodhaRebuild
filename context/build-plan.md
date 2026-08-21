@@ -273,26 +273,33 @@ ticked only when **both** slices are done.
 
 #### Slice B — contact form *(Phase 2, after F09)*
 
-**Blocked on, and must not be started before:** F09 (tier-2 harness, for the RLS check), plus the
-Supabase client layer and generated types. Slice B legitimately lands `src/lib/supabase/server.ts`
-and `src/types/database.ts` if F10/F12 have not already — those are not throwaway, F12 extends them.
+**Unblocked:** F09 landed the tier-2 harness. This slice also lands
+`src/lib/supabase/server.ts` and `src/types/database.ts` — not throwaway, F12 extends them.
 
 **UI:**
 
-- Contact form: name, email, category, message. Success and error states, form disabled while submitting.
+- Contact form: name, email, category, message. Success and error states, disabled while submitting.
+- **React 19 form action + `useActionState`, not react-hook-form.** The form submits and validates without JavaScript, matching the page it sits on where Slice A ships zero JS, and `useActionState` supplies the pending state the spec asks for with no new dependency. `code-standards.md` is corrected in the same change, since it names react-hook-form for this form; F25's order ticket is where react-hook-form actually earns its place — a dialog with live margin calculation.
+- A **honeypot** field, hidden from sight and from assistive technology, which the action rejects when filled.
 
 **Logic:**
 
-- `support_messages` migration per `architecture.md` → `support_messages`: `id`, `name`, `email`, `category`, `message`, `created_at`. RLS enabled with **anonymous `INSERT` permitted and no `SELECT` policy at all** — the table is write-only from the public web.
-- `submitSupportMessage` Server Action, Zod-validated, returning the standard `ActionResult` shape. The action reads no session: an unauthenticated request runs as `anon`, which is exactly the role RLS must gate.
-- `react-hook-form` + `@hookform/resolvers` added to the approved dependency list when installed.
+- `support_messages` migration per `architecture.md`: `id`, `name`, `email`, `category`, `message`, `created_at`. RLS enabled with **anonymous `INSERT` permitted and no `SELECT` policy at all** — write-only from the public web.
+- **`CHECK` constraints bounding every text column.** The publishable key ships in the browser bundle, so anyone can write to this table; length bounds mean a single request cannot store megabytes. Enforced in the database rather than only in Zod, because the database is the boundary that cannot be bypassed.
+- **Volume abuse is deliberately unmitigated.** Real rate limiting needs another table, another policy and a cleanup job — unspecified scope for a portfolio project's contact form. Recorded here rather than left implicit.
+- `submitSupportMessage` Server Action, Zod-validated, returning the standard `ActionResult`. It reads no session: an unauthenticated request runs as `anon`, which is exactly the role RLS must gate.
+- `@supabase/ssr` and `@supabase/supabase-js` installed and their `stack.ts` rows flipped from `planned`.
 
 **Verify:**
 
-- A valid submission inserts exactly one row; the UI shows the success state.
-- An invalid email shows a field error and inserts nothing — asserted by row count before and after.
-- **Signed out, a `select` against `support_messages` returns zero rows**, as a tier-2 pgTAP case using `is_empty()` for the policy filter and `throws_ok(..., '42501', ...)` if the grant stops it first — `code-standards.md` requires both failure modes be distinguished.
-- The RLS policy is observed **failing** before being trusted: drop it, watch the test go red, restore it.
+- A valid submission inserts exactly one row and the UI shows the success state.
+- An invalid email shows a field error and inserts nothing — asserted by row count before and after, not by reading the screen.
+- **The form works with JavaScript disabled**: submit it in a JS-disabled browser and confirm the row lands and the success state renders.
+- A submission with the honeypot filled is rejected and inserts nothing.
+- A message longer than the column bound is refused **by the database**, proven by inserting past the limit directly rather than through the form.
+- **Signed out, a `select` against `support_messages` returns zero rows** — a tier-2 pgTAP case using `is_empty()` for the policy filter and `throws_ok(..., '42501', ...)` if the grant stops it first; `code-standards.md` requires both failure modes be distinguished.
+- **The RLS policy is observed failing before it is trusted**: drop it, watch the test go red, restore it.
+- `pnpm test:db` passes; `/support` still builds and the page's static half is unaffected by the form's client island.
 
 ### 08 Legal, error, and not-found pages
 

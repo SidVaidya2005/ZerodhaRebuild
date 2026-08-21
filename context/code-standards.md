@@ -488,7 +488,7 @@ Approved dependencies for this project:
 - `@supabase/supabase-js`, `@supabase/ssr` — database, auth, realtime
 - `zod` — validation
 - `zustand` — client-side live quote store
-- `react-hook-form`, `@hookform/resolvers` — order ticket and support form
+- `react-hook-form`, `@hookform/resolvers` — the order ticket (F25). **Not the support form**: that uses React 19's form action and `useActionState`, so it submits and validates without JavaScript, which react-hook-form cannot do (F07B)
 - `recharts` — holdings donut and P&L charts
 - `lightweight-charts` — candlestick price chart
 - `next-themes` — light/dark theme persistence
