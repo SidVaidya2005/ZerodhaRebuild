@@ -717,7 +717,7 @@ export class QuoteService {
 
 ## Invariants
 
-- Every table containing a `user_id` has RLS enabled with policies restricting all commands to `auth.uid() = user_id`.
+- Every table containing a `user_id` has RLS enabled, scoped to `auth.uid() = user_id`. On `profiles` and `watchlist_items` that means owner-scoped policies for the commands the app actually issues; on the six money tables it means **`select` is the only grant any client role holds**, with no write policy for any command — every write there arrives through a `security definer` function (F11).
 - No money value is ever computed in TypeScript; every balance, average price, charge total and realised P&L is calculated in Postgres `numeric` arithmetic and read back.
 - Order fills happen only inside the `execute_order` Postgres function — never in a Server Action, route handler, Edge Function, or client component.
 - `execute_order` takes `SELECT ... FOR UPDATE` on the user's `funds` row before reading `available_cash`, so concurrent orders cannot both pass the margin check.

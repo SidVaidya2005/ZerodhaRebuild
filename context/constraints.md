@@ -58,7 +58,14 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Security and RLS
 
+- **A CHECK constraint passes when its expression evaluates to NULL, not only when it is true.** Any operand that can be NULL turns the constraint into a suggestion. Proven on `trades`: a missing `charge_breakdown` key made the identity-6 sum NULL and a trade with `charges = 999.99` against a one-key breakdown was accepted. Wrap anything nullable — `coalesce(jsonb_typeof(...), '')` — and evaluate the expression in a plain `SELECT` against malformed input before trusting it. (F11)
+
+- **The money tables grant `select` and nothing else**, with no write policy for any command. `funds`, `fund_ledger`, `orders`, `trades`, `holdings` and `positions` are written only by `security definer` functions. (F11)
+
+- **Retire an order's margin before its status leaves `OPEN`.** `orders_no_margin_unless_open` enforces §12.8 as a non-deferrable CHECK, so a statement that moves an order out of `OPEN` while `blocked_margin` is non-zero fails with 23514. Release first, or write both columns in one `UPDATE`. (F11)
+
 - **Supabase grants `anon` and `authenticated` ALL privileges on new public tables by default** — verified on `support_messages`: SELECT, UPDATE, DELETE and TRUNCATE were all present, leaving RLS as the single layer. Revoke and grant back only what a role needs. It is defence in depth, and it turns a silent "affects zero rows" into a hard `42501` that a test can actually assert. (F07B)
+- **`support_messages` carries CHECK length bounds and a honeypot, and volume abuse is deliberately unmitigated.** The publishable key ships in the browser bundle, so anyone can write to that table: bounds cap the damage per request, the honeypot stops drive-by bots, and real rate limiting is out of scope for a portfolio contact form. (F07B)
 - **On a public-write table, prefer a missing grant to a filtering policy.** If a permissive policy is ever added by mistake, the absent grant still refuses. (F07B)
 
 ## Verification routine
@@ -80,6 +87,7 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 ## Testing
 
 - **`supabase test db` requires Docker even with `--db-url`.** It connects to the remote database, *then* shells out to `pg_prove` in a container and dies with `LegacyDockerRunError`. Tier 2 runs through `scripts/run-pgtap.mts` instead: pgTAP's functions return their TAP output as text rows, so executing a suite through `pg` and reading the rows *is* the TAP stream. (F09)
+- **pgTAP is enabled by a tracked migration, never created ad hoc by the runner.** With one project that installs a test-only extension into production, which is the lesser problem: an untracked extension the tests silently depend on means a fresh database looks healthy right up until the suite runs, and the migration history stops describing the database. (F09)
 - **The tier-2 runner must fail on a plan mismatch, not only on `not ok`.** A suite declaring `plan(2)` that runs one assertion has a bug, and grepping only for `not ok` calls that a pass. All three failure modes — failed assertion, plan mismatch, SQL error — were observed failing before the runner was trusted. (F09)
 - **The tier-2 runner is a standalone TypeScript script with no new runner dependency.** Node 26 strips types natively, so `node scripts/run-pgtap.mts` runs directly; `tsx` would be a dependency for one file. Keeping it out of Vitest also means nothing about tier 2 can be picked up by `pnpm test`. (F09)
 - **Tier 3 is gated by `scripts/run-race.mts`, which decides before Vitest starts**, so an un-permitted run never imports `pg` at all. Proven with both controls: guard off, the module never loads; guard on, it does. (F09)
@@ -129,6 +137,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **`components/ui/table.tsx` is a Client Component.** Importing it puts a hydrated client boundary on the page, which a static marketing page must not have. Marketing tables use a plain semantic `<table>`; the terminal is where the primitive earns its cost. (F05)
 
 ## Marketing site
+
+- **The support form uses React 19's form action and `useActionState`, not react-hook-form.** It submits and validates without JavaScript, matching the page it sits on, and needs no new dependency. `code-standards.md` carries the exception to its own Server Action shape rule; F25's order ticket is where react-hook-form earns its place. (F07B)
 
 - **FAQ disclosure is native `<details>`/`<summary>`.** Zero JavaScript, works before hydration and with JS off, and keyboard operation, focus handling and screen-reader semantics come from the browser instead of being hand-written and then audited at F38. (F07)
 

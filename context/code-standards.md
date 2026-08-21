@@ -188,10 +188,17 @@ begin
   -- reservation has to come out of available_cash.
   if v_order.side = 'BUY'
      and (v_funds.available_cash + v_order.blocked_margin) < v_cost then
+    -- Release BEFORE the status changes, not after.
+    --
+    -- `orders_no_margin_unless_open` encodes trading-contract.md §12.8, and a
+    -- CHECK is not deferrable — it fires per statement, not at commit. Setting
+    -- the status first leaves the row momentarily REJECTED while still holding
+    -- margin, and that UPDATE is refused with 23514. Releasing first is always
+    -- legal, because an OPEN order may hold margin or hold none.
+    perform public.release_margin(p_order_id);
     update public.orders
        set status = 'REJECTED', rejection_reason = 'INSUFFICIENT_FUNDS'
      where id = p_order_id;
-    perform public.release_margin(p_order_id);
     return;
   end if;
 
@@ -203,6 +210,7 @@ $$;
 
 - Every money-moving function is `security definer` with `set search_path = ''` and fully schema-qualified object names, and locks the `funds` row with `for update` before reading a balance.
 - Business rejections update the order to `REJECTED` with a `rejection_reason` and return normally; only genuine faults `raise exception`.
+- **Retire the margin before the status leaves `OPEN`.** `orders_no_margin_unless_open` enforces §12.8 as a non-deferrable CHECK, so any statement that moves an order out of `OPEN` while `blocked_margin` is still non-zero fails with 23514. Either call `release_margin` / `transfer_margin_to_position` first, or write both columns in a single `UPDATE`. (F11)
 - Rejection reasons are stable uppercase codes the UI maps to copy: `INSUFFICIENT_FUNDS`, `NO_HOLDING`, `MARKET_CLOSED`, `NO_QUOTE`, `INVALID_QUANTITY`.
 - **Every function that acts on an order re-checks `status = 'OPEN'` immediately after taking the row lock**, and returns without writing if it is not. This is what makes `execute_order` safe under concurrent matcher runs and closes the cancel-while-filling race; the row lock alone does not.
 - Functions are idempotent where the scheduler may retry them: `match_open_orders` and `square_off_mis` must be safe to run twice in the same minute, and safe to run **simultaneously** in two sessions.

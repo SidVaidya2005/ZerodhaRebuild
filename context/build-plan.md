@@ -411,26 +411,50 @@ prove the policies hold. No seed data (F14), no bootstrap trigger (F13), and no 
 
 ### 11 Database schema: funds, orders, and portfolio
 
-
+The money schema. `trading-contract.md` is authoritative for every column, constraint and default
+here. Three of its §12 reconciliation identities are row-level and become **CHECK constraints**
+rather than test assertions, so a violating row cannot be stored at all. No functions (F22–F24),
+no bootstrap (F13), no seed.
 
 **Logic:**
 
-- Migration creating `funds`, `fund_ledger`, `orders`, `trades`, `holdings`, `positions` exactly as `trading-contract.md` specifies.
-- `orders.blocked_margin` and `positions.blocked_margin`, both `numeric(14,2) not null default 0`, plus `positions.entry_reference_price numeric(14,2)` — the gross collateral basis, null for longs.
-- `trades.is_auto_squareoff boolean not null default false` and `trades.charge_breakdown jsonb not null`.
-- `ledger_type` enum with all eight values from the contract, including `SIMULATION_ADJUSTMENT`; no `RESET` value.
-- `CHECK (available_cash >= 0)`, `CHECK (orders.quantity > 0)`, `CHECK (holdings.quantity > 0)` — holdings rows are deleted at zero, never retained.
-- RLS on every one of them: all commands restricted to `auth.uid() = user_id`.
-- Indexes on `(user_id, placed_at desc)` for orders, `(user_id, created_at desc)` for the ledger, and `status` where `OPEN` for the matcher.
+- Migration creating the five remaining enums — `order_side`, `order_type`, `product_type`, `order_status`, and `ledger_type` with all eight values including `SIMULATION_ADJUSTMENT` and **no `RESET`** (`trading-contract.md` §11) — then `funds`, `fund_ledger`, `orders`, `trades`, `holdings`, `positions` in dependency order.
+- `orders.blocked_margin` and `positions.blocked_margin`, both `numeric(14,2) not null default 0`, plus `positions.entry_reference_price numeric(14,2)` — the gross collateral basis, null for longs and non-null for shorts.
+- `trades.is_auto_squareoff boolean not null default false`, `trades.charge_breakdown jsonb not null`, and `trades.realised_pnl numeric(14,2) not null default 0` — `0.00` on every opening leg, never null (§9).
+- **`charge_breakdown`'s keys are snake_case**: `brokerage`, `stt`, `exchange_txn`, `sebi_turnover`, `stamp_duty`, `dp_charge`, `gst`. Postgres is snake_case and TypeScript is camelCase (`code-standards.md`), so `charges.ts` keeps its own casing and F22's equality test converts at the boundary.
+- **Three §12 identities encoded as CHECK constraints**, each commented with the clause it enforces:
+  - Identity 8 — `check (status = 'OPEN' or blocked_margin = 0)`. Every order not `OPEN` holds no margin.
+  - Identity 12 — `check (net_quantity < 0 or blocked_margin = 0)` and `check ((net_quantity < 0) = (entry_reference_price is not null))`. Longs hold no collateral and carry no reference price; shorts carry both.
+  - Identity 6 — the seven `charge_breakdown` components sum exactly to `charges`. §2 makes `charges` the sum of already-rounded components, so the equality is exact and reconciliation cannot fail by a paisa.
+- **A CHECK is not deferrable, and that constrains F23/F24.** Identity 8 fires per statement, so a function that sets `status = 'REJECTED'` and *then* calls `release_margin` fails on the first statement. `code-standards.md`'s `execute_order` example does exactly that and **is corrected in this feature's commit** — release the margin first, or write both columns in one statement.
+- The contract's other row-level rules, likewise as CHECKs: `available_cash >= 0` (§12.4), `orders.quantity > 0`, `holdings.quantity > 0` and `positions.net_quantity <> 0` (a row at zero is deleted, never retained, §8), all-or-nothing fills `check (filled_quantity = 0 or filled_quantity = quantity)` (§1), `check ((order_type = 'LIMIT') = (limit_price is not null))`, `check ((status = 'COMPLETE') = (average_price is not null))`, and `fund_ledger.balance_after >= 0`.
+- `positions.product` is CHECK-constrained to `MIS`. CNC settles into `holdings`, so a CNC position is a bug rather than a state; the constraint is dropped if that ever changes.
+- **`select` is the only grant, and only to the owner.** No client role gets insert, update or delete on any of the six, and no write policy exists. `code-standards.md` already forbids a Server Action writing these tables directly — every write arrives through a `security definer` function in F22–F24. `architecture.md`'s "policies restricting all commands" is reworded in the same commit to describe what is actually built.
+- Foreign keys **cascade**: `trades.order_id` and `fund_ledger.order_id` from `orders`, and every `user_id` from `profiles`. `reset_account` still deletes each table explicitly per §11; the cascade is a backstop against a future path that forgets one, not the mechanism.
+- Indexes: `orders (user_id, placed_at desc)`, `fund_ledger (user_id, created_at desc)`, a partial `orders (symbol) where status = 'OPEN'` for the matcher's join against `quotes`, `trades (user_id, traded_at desc)` for Reports, and the foreign-key columns no primary key already covers.
+- `touch_updated_at()` from F10 is reused on `funds`, `holdings` and `positions`. `orders` tracks `placed_at`/`executed_at` instead and needs no `updated_at`; `trades` are immutable once written.
 - `orders` added to the `supabase_realtime` publication.
 - Types regenerated.
+- Two pgTAP suites: `01-rls-money.sql` (the denial matrix) and `02-constraints-money.sql` (every CHECK and foreign key driven to failure on purpose).
 
 **Verify:**
 
-- Signed in as user A, selecting user B's rows returns zero across all six tables.
-- Attempting `update funds set available_cash = 999999` from the client is refused.
-- A direct `insert` into `holdings` from the client is refused.
-- `explain` on the open-order query uses the index rather than a sequential scan.
+- `pnpm supabase db push` applies cleanly, a second push reports up to date, and `migration list` shows exactly four entries.
+- Types regenerate and compile: `pnpm typecheck` exits 0, fifteen tables and seven enums are present, and `grep -n ': any'` returns nothing.
+- Signed in as user A, `is_empty()` on all six tables targeting user B's ids.
+- **No client role can write any of the six**: `throws_ok(…, '42501')` for insert, update and delete on each — eighteen assertions, including that `update funds set available_cash = 999999` and a direct `insert into holdings` are both refused.
+- `has_table_privilege('anon', …, 'select')` is false for all six.
+- Cash cannot go negative: `throws_ok(update funds set available_cash = -1, '23514')`.
+- **Identity 8**: inserting an order with `status = 'COMPLETE'` and `blocked_margin = 100` raises `23514`.
+- **Identity 12**: a long with `blocked_margin > 0` raises `23514`; so does a long carrying `entry_reference_price`, and a short without one.
+- **Identity 6**: a `charge_breakdown` one paisa off its `charges` total raises `23514`.
+- All-or-nothing: `quantity = 10, filled_quantity = 4` raises `23514`. A zero-quantity holding and a zero-net-quantity position both raise `23514`.
+- A `LIMIT` order without a `limit_price`, and a `MARKET` order carrying one, both raise `23514`.
+- Deleting an order removes its trades and its ledger rows — insert both, delete the order, assert `is_empty` on each.
+- `explain` on the matcher's open-order-by-symbol query at volume shows an Index Scan on the partial index, not a Seq Scan.
+- `pg_publication_tables` has one row for `pubname = 'supabase_realtime'` and `tablename = 'orders'`.
+- **The suites are observed failing**: drop one CHECK and one policy, confirm the named assertions redden, restore, confirm green — each break inside a transaction that rolls back, so the production schema is never left modified.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm build` and `pnpm format:check` all exit 0.
 
 ### 12 Google sign-in and route protection
 
