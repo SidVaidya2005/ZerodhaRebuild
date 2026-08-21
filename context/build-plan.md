@@ -165,16 +165,39 @@ The public landing page. Every band is a static Server Component inside the F03 
 
 
 
+Why the project exists, how it was built, and an honest inventory of what is real and what is faked.
+
 **UI:**
 
-- What the project is and why it exists.
-- How it was built: architecture summary, stack table, links to the repository.
-- An honest "what is simulated and what is real" section.
+- What the project is and why it exists, drawn from `project-overview.md` → The Problem It Solves.
+- **Architecture summary in prose plus an ordered walk of the two paths that matter** — how a quote reaches the screen, and what happens when an order is placed — calling out the invariants worth seeing: money math in Postgres, fills only inside `execute_order`, RLS as the security boundary. No diagram: prose is responsive and accessible for free, it is the part a technical reader actually reads, and a drawn diagram can wait for F40 when the architecture has stopped moving.
+- **Stack table** rendered from `src/lib/stack.ts` as a plain semantic `<table>`, **not** the `components/ui/table.tsx` primitive: that primitive is a Client Component, and importing it would put a hydrated client boundary on a static marketing page for row-hover states this table does not want. It sits in an `overflow-x-auto` container carrying `role="region"`, an `aria-label` and `tabIndex={0}` — a scrollable region that keyboard users cannot reach is unusable at 375px, where the table is 672px inside a 341px box. Lighthouse does not audit that; axe does.
+- **Rows for packages not yet installed render as "planned"**, neither omitted nor given an invented version. A third of `architecture.md`'s stack lands in Phases 2–5; showing fake versions would be the same overclaim this project keeps refusing, and hiding the rows would misrepresent the design.
+- Links to the repository, through a shared `ExternalLink`.
+- **Real / Simulated inventory** — real: NSE prices, charge formulas, order mechanics, market hours; simulated: the money, the fills, the counterparty, settlement. This page carries the *inventory*; `/legal` carries the *consequences*, and About links to it. F08 needs to stand alone as a notice, and Home stays scoped to price provenance only, so none of the three duplicates another.
+
+**Logic:**
+
+- `src/lib/stack.ts` — typed entries mirroring `architecture.md` → Stack: layer, package, version, purpose, and an `installed` / `planned` marker. Non-package layers (hosted Postgres, `pg_cron`, Yahoo, Render, pgTAP) carry no version.
+- `src/lib/stack.test.ts` — a **bidirectional** drift test against `package.json`: every `installed` row's version must equal the manifest's, and every `planned` row's package must be genuinely absent from it. Upgrading a dependency without touching the page fails the suite; so does installing a planned package without flipping its row. Same pattern as F04's `OPENING_BALANCE` and what F06 requires of `constants.ts`.
+- `src/components/marketing/ExternalLink.tsx` — `target="_blank" rel="noreferrer"` plus an icon and an sr-only "opens in a new tab". `SiteFooter`'s two external links are refactored onto it, which reduces this feature's link criterion to a grep for raw `target="_blank"` outside that one file.
+- Repository and author URLs come from `nav-links.ts`, which already holds `REPOSITORY_URL`. No second copy.
+- Page-level `metadata`, following F04.
+- `audit:a11y` takes a path argument so `/about` can be audited without editing the script.
+- Content obeys the F04 constraints: running copy uses `text-body`, `--color-muted` only for captions and labels, inline prose links carry a persistent underline.
+- No `loading.tsx` and no `error.tsx` — the page fetches nothing and is not a terminal segment.
 
 **Verify:**
 
-- Stack table content matches `architecture.md`; no stale version numbers.
-- All external links open and are marked `rel="noreferrer"`.
+- **The stack table cannot go stale, proven by falsification.** `pnpm test` passes; bumping one `installed` row's version in `stack.ts` makes the test fail naming that package; flipping a `planned` row to `installed` fails it too. Revert both — a guard never observed failing is not a guard.
+- Stack table content matches `architecture.md`, read side by side: every row in its Stack table appears with the same layer name and the same purpose in substance, and no row on the page is absent from the doc.
+- Every external link is safe and announced: `grep -rn 'target="_blank"' src --include='*.tsx'` hits only `ExternalLink.tsx`, and in the served HTML for `/about` every `<a>` with an `http` href carries `rel="noreferrer"`.
+- The page is static: `pnpm build` marks `/about` as `○ (Static)`, and grepping the new components for `use client`, `fetch(`, `useEffect` and `useState` returns nothing.
+- `pnpm audit:a11y /about` scores above 90 — record the number — with no `link-in-text-block` failure and no contrast failure beyond the known `--color-muted` gap already filed against F38.
+- The table scrolls rather than overflowing: at 375px `document.documentElement.scrollWidth === 375` while the table's own container reports `scrollWidth > clientWidth`.
+- Both themes flip on `/about` with no band left behind.
+- The F02–F04 guards stay green: `dark:` in `.tsx`, bridge names outside `ui/`, hex in `className`, and `--color-up` / `--color-down` in marketing all return zero hits.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### 06 Pricing page
 

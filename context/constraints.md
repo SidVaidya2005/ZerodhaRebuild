@@ -49,6 +49,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Theming and design tokens
 
+- **The marketing footer is `bg-surface`, not DESIGN.md's always-light `#fafafa`.** `--color-surface` already *is* `#fafafa` in the light theme, so the source system's value is reached through the token rather than hardcoded, and in dark it reads as the elevation step the flat-colour-block philosophy calls for. An always-light token pair would exist only to break the theme contract. (F03)
+
+- **Mobile nav is the shadcn `sheet` primitive, and the theme toggle moves into the public header.** Sheet is Radix Dialog — already installed, no new dependency — and brings focus trap, Escape handling and scroll lock rather than leaving all three to F38. `ThemeToggle` is promoted from `app/dev/styleguide/` to `src/components/ThemeToggle.tsx` as app-level chrome; DESIGN.md's `top-nav-dark` lists it in the right-side cluster. (F03)
+
 - **`--color-muted` is for links, captions and column headers — never for running paragraph copy**, which uses `--color-body`. DESIGN.md scopes it that way, and the misuse also fails WCAG AA: muted is 3.64:1 on the dark surface and 4.34:1 on white. `--color-muted-strong` does not fix it (lighter, so it helps dark and hurts light at 2.84:1); a real fix needs `.light` overrides for both muted tokens and belongs to F38. (F04)
 - **Inline links inside a text block carry a persistent underline**, deviating from DESIGN.md's `text-link` ("no underline by default"). WCAG 1.4.1 forbids identifying a link by colour alone, and Lighthouse's `link-in-text-block` catches it. Nav and footer-column links are not in a text block and keep the hover-only underline. (F04)
 - **Every `dark:` utility is stripped from added components.** Tailwind v4's built-in `dark:` variant is bound to `prefers-color-scheme`, so a leftover `dark:` class responds to the visitor's OS rather than this project's theme class — a live bug, not inert code. A grep guard enforces it. (F02)
@@ -56,3 +60,9 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 ## Formatting and display
 
 - **Two money formatters, not one with flags.** `formatCurrency` always renders ₹ and 2dp; `formatSignedCurrency` renders an explicit +/− where the sign carries meaning. `Intl.NumberFormat('en-IN')` produces Indian digit grouping natively, so nothing is hand-rolled. (F02)
+
+## shadcn/ui
+
+- **The shadcn CLI changed shape: `init -b radix -t next -p nova --css-variables -y`.** It now picks between Base UI, Radix and React Aria, and prompts for a style preset that `-y` does not skip. `shadcn` is also a *runtime* dependency shipping `shadcn/tailwind.css`. Resolves the standing TODO in `library-docs.md` → shadcn/ui. (F02)
+
+- **shadcn's token vocabulary is bridged onto this project's, never merged.** A `@theme inline` block maps shadcn's names onto our palette so `shadcn add` keeps working, while project code keeps using `bg-canvas` / `text-muted` / `border-hairline`. `--color-muted` is the one real collision — shadcn means a *surface* by it, this project means the *text* grey — and it is resolved in this project's favour, with `--color-muted-foreground` defined to the same value and `bg-muted` hand-fixed on add. (F02)
