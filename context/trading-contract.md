@@ -21,6 +21,7 @@ If this document and any other context file disagree, **this document wins** for
 ## 2. Rounding
 
 - Each charge component is computed at full `numeric` precision, then **rounded half-up to 2 decimal places**.
+- **GST is computed on the *unrounded* sub-components and rounded once**, like every other component — `round(0.18 × (brokerage + exchange + SEBI + dp_base))`, not `0.18 ×` the already-rounded parts. Rounding once where the figure becomes money loses the least, and it keeps the rule above literally true for GST as for everything else (F06).
 - `trades.charges` is the **sum of the already-rounded components**, never a rounding of the unrounded sum. This guarantees `charge_breakdown` always adds up to `charges` exactly, so reconciliation never fails by a paisa.
 - Trade value is `quantity * price`, exact — both operands are exact in `numeric`, so no rounding is applied.
 - Percentages are expressed as decimal rates in `constants.ts` (`0.0003`, not `0.03`).
@@ -35,19 +36,26 @@ Charges are computed per executed order, on turnover = `quantity * price`.
 | --------- | ------- | -------- | ------- | -------- |
 | Brokerage | ₹0 | ₹0 | `min(0.03% × turnover, ₹20)` | `min(0.03% × turnover, ₹20)` |
 | STT | 0.1% | 0.1% | — | 0.025% |
-| Exchange transaction (NSE) | 0.00297% | 0.00297% | 0.00297% | 0.00297% |
+| Exchange transaction (NSE) | 0.00307% | 0.00307% | 0.00307% | 0.00307% |
 | SEBI turnover fee | 0.0001% | 0.0001% | 0.0001% | 0.0001% |
 | Stamp duty | 0.015% | — | 0.003% | — |
-| GST | 18% of (brokerage + exchange + SEBI) | same | same | same |
-| DP charge | — | ₹15.34 + 18% GST, flat per scrip | — | — |
+| GST | 18% of (brokerage + exchange + SEBI + `dp_base`) | same | same | same |
+| DP charge (`dp_base`) | — | ₹13.00 flat per scrip | — | — |
+
+**Source: <https://zerodha.com/charges/>, confirmed 2026-08-21.** Statutory components (STT, stamp
+duty, the SEBI fee, exchange transaction charges, GST) are set by regulators and the exchange, not by
+a broker, and change by circular — **re-check this table at the start of each phase that touches
+money, and on any Union Budget**. The exchange transaction rate has already moved once (0.00297% →
+0.00307%) during this project.
 
 Rules:
 
-- **Stamp duty is buy-side only.** **STT on MIS is sell-side only.** **DP charge applies only to a CNC sell**, is flat regardless of quantity, and is charged once per sell order.
-- GST applies to brokerage, exchange transaction charges and the SEBI fee — never to STT, stamp duty, or the DP charge's own GST.
+- **Stamp duty is buy-side only.** **STT on MIS is sell-side only.** **DP charge applies only to a CNC sell** and is flat regardless of quantity.
+- **`dp_base` is ₹13.00, not ₹15.34.** The familiar ₹15.34 is `dp_base` plus its own ₹2.34 of GST (₹3.50 CDSL + ₹9.50 broker = ₹13.00, ×1.18 = ₹15.34). Treating ₹15.34 as the base and adding GST again over-charges every CNC sell by ₹2.34 — an earlier draft of this table did exactly that. The pricing page displays ₹15.34 because that is the figure on a real contract note, footnoted with the split.
+- **GST covers `dp_base` too, and all of it lands in the single `gst` key.** There is no separate `dp_gst` key: `gst` means *all* GST on the trade, so its meaning never depends on whether a DP charge was involved. GST still never applies to STT or stamp duty.
+- **DP is charged once per sell *order*. Zerodha charges once per scrip per *day*.** This is a deliberate simplification, not an oversight: matching reality would make `execute_order` query the user's same-day trades for that symbol inside the locked transaction, and give `reset_account` another case to reason about. It is disclosed in the simulation-simplifications list on `/legal` (build-plan feature 08).
 - `trades.charge_breakdown` is a `jsonb` object with one key per component above, each a 2dp number. Absent components are `0`, not missing keys.
 - Rates live in `src/lib/constants.ts` and in a Postgres equivalent; the TypeScript estimator and the SQL calculator are proven equal by a property test over random inputs (build-plan feature 22).
-- **TODO: every rate in this table needs a dated source from Zerodha's published charge list before feature 06 (Pricing) and feature 22 (calculator) are implemented, plus a note on when to re-check.** The figures above are the working assumption, not a verified quotation.
 
 ---
 
@@ -309,8 +317,17 @@ review rounds have found rules in other files still describing a model this one 
 finished:
 
 ```bash
+# Margin, cash and P&L rules.
 grep -rn "release_margin\|transfer_margin_to_position\|blocked_margin\|available_cash\|used_margin\|MARGIN_\|average_price\|realised_pnl" \
   context/architecture.md context/code-standards.md context/build-plan.md CLAUDE.md
+
+# Charge rules and rates. The grep above matches margin and P&L identifiers only, so it
+# structurally cannot detect drift caused by editing a *rate* in §3 — which is exactly the
+# edit feature 06 made. Sources are restated in code, so this one sweeps src/ as well.
+# `stamp duty` not `stamp` — the latter matches every `timestamptz` in the schema.
+grep -rn "charge_breakdown\|dp_charge\|dp_base\|STT\|stamp duty\|stamp_duty\|SEBI\|GST\|brokerage\|charges\.ts\|0\.00307\|15\.34" \
+  context/architecture.md context/code-standards.md context/build-plan.md context/project-overview.md \
+  CLAUDE.md src/lib/constants.ts src/lib/trading src/components/marketing
 ```
 
 Every hit either agrees with this document or is wrong. There is no third category. The files that

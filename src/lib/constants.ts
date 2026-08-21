@@ -3,8 +3,8 @@
  * requires every such value to live here rather than being inlined at a call
  * site, so a rate or a key can only change in one place.
  *
- * The remaining trading constants — SQUARE_OFF_TIME_IST, SHORT_MARGIN_BUFFER,
- * the charge rates — land here alongside the features that introduce them.
+ * The remaining trading constants — SQUARE_OFF_TIME_IST, SHORT_MARGIN_BUFFER —
+ * land here alongside the features that introduce them.
  */
 
 /**
@@ -27,3 +27,59 @@ export const DISCLAIMER_STORAGE_KEY = 'zr-disclaimer'
  */
 export const DISCLAIMER_ATTRIBUTE = 'data-disclaimer'
 export const DISCLAIMER_DISMISSED = 'dismissed'
+
+/* ───────────────────────────────────────────────────────────────────────────
+   CHARGE RATES
+
+   Authoritative table: `context/trading-contract.md` §3. These are the figures
+   the order engine applies, and feature 22 must give its Postgres calculator
+   the identical set.
+
+   Source: https://zerodha.com/charges/ — every rate below confirmed 2026-08-21.
+
+   Most of these are statutory: STT, stamp duty, the SEBI fee, exchange
+   transaction charges and GST are set by regulators and the exchange, not by a
+   broker, and they change by circular. Re-check at the start of any phase that
+   touches money, and after a Union Budget. The exchange transaction rate has
+   already moved once during this project (0.00297% → 0.00307%).
+
+   Rates are decimal fractions, never percentages — `code-standards.md` and
+   `trading-contract.md` §2 both require it. 0.0003 is 0.03%.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/** Delivery is free. */
+export const BROKERAGE_CNC_RATE = 0
+
+/** Intraday: 0.03% of turnover, capped — whichever is lower. */
+export const BROKERAGE_MIS_RATE = 0.0003
+export const BROKERAGE_MIS_CAP = 20
+
+/** Securities Transaction Tax. Delivery charges both sides; intraday sells only. */
+export const STT_CNC_RATE = 0.001
+export const STT_MIS_SELL_RATE = 0.00025
+
+/** NSE exchange transaction charge, 0.00307%. Same on both products and sides. */
+export const EXCHANGE_TXN_RATE = 0.0000307
+
+/** SEBI turnover fee, published as ₹10 per crore. */
+export const SEBI_TURNOVER_RATE = 0.000001
+
+/** Stamp duty is buy-side only. Published as ₹1500/crore and ₹300/crore. */
+export const STAMP_DUTY_CNC_BUY_RATE = 0.00015
+export const STAMP_DUTY_MIS_BUY_RATE = 0.00003
+
+/** GST on brokerage + exchange transaction + SEBI fee + DP base. Never on STT or stamp duty. */
+export const GST_RATE = 0.18
+
+/**
+ * DP charge before GST, flat per scrip on a delivery sell.
+ *
+ * ₹13.00, NOT the ₹15.34 people recognise: that figure is this base plus its own
+ * ₹2.34 of GST (₹3.50 CDSL + ₹9.50 broker = ₹13.00, × 1.18 = ₹15.34). Treating
+ * ₹15.34 as the base and applying GST again over-charges every delivery sell —
+ * which is exactly what an earlier draft of the contract did.
+ */
+export const DP_CHARGE_BASE = 13.0
+
+/** What the pricing page displays, because it is the figure on a real contract note. */
+export const DP_CHARGE_INCLUSIVE = 15.34
