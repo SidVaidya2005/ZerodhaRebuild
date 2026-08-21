@@ -831,10 +831,11 @@ into a pipeline that has already been exercised rather than into an untested one
 
 The complete schema exists, the three test tiers run green, auth works end to end, and prices land in the database on a schedule. Confirm a fresh account bootstraps correctly, tier 2 proves RLS blocks cross-user reads on every table, tier 3 proves the lock guards hold, and the cron job has run unattended for at least an hour.
 
-**Carried over from the Phase 1 checkpoint** — harness hygiene found by reviewing F09's code, none of it blocking:
-
-- `tests/concurrency/connections.race.test.ts` — the `cleanup removed everything` case asserts `countScratchRows()` is null, which is equally true when the scratch table was never created. Run alone with `-t 'cleanup removed'` it passes vacuously. Since tier 3's whole justification is that it writes to the production database, that assertion has to be cleanup-specific: create the table and a prefixed row, then verify the drop.
-- `scripts/run-pgtap.mts` — the `TEST_DATABASE_URL` capture excludes `\n` but not `\r`, so a CRLF `.env.test.local` yields a URL ending in `\r` and every suite dies inside `connect()` with an opaque error instead of the named diagnostics that file exists to give. Trim the capture, as `run-race.mts` now does.
+**Carried over from the Phase 1 checkpoint — both closed in `2.00.01`:** the tier-3 cleanup
+assertion is no longer vacuous (it commits a prefixed row and asserts it is really there before
+dropping, falsified by removing the `drop table`), and both test runners now share one
+`.env.test.local` parser in `scripts/env-file.mts`, so the CRLF bug cannot be fixed in one runner
+and left in the other. Verified by running tiers 2 and 3 green against a CRLF copy of the real file.
 
 ---
 
