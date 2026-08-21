@@ -25,32 +25,60 @@ function readEnvFile(): Record<string, string> {
     exit(1)
   }
   const values: Record<string, string> = {}
-  for (const line of raw.split('\n')) {
-    const match = line.match(/^\s*([A-Z_]+)\s*=\s*"?([^"\n]*)"?\s*$/)
-    if (match?.[1]) values[match[1]] = match[2] ?? ''
+  // Keys may contain digits (a pooler port ends up in one), and an unquoted
+  // value may carry a trailing `# comment` — .env.example encourages annotating
+  // the connection string. A greedy match would fold the comment into the URL
+  // and fail inside connect() with an opaque parse error instead of a named one.
+  for (const line of raw.split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/)
+    const key = match?.[1]
+    if (!key) continue
+    let value = (match[2] ?? '').trim()
+    const quoted = value.match(/^"([^"]*)"/) ?? value.match(/^'([^']*)'/)
+    value = quoted ? (quoted[1] ?? '') : (value.split(/\s+#/)[0] ?? '').trim()
+    values[key] = value
   }
   return values
 }
 
-const env = readEnvFile()
+// A real environment variable wins over the file. `ALLOW_RACE_TESTS=1 pnpm
+// test:race` is the form CLAUDE.md documents and the only one available in CI;
+// reading the file alone made that command print SKIPPED and exit 0, which is
+// precisely the "a skip is never mistaken for a pass" failure this file exists
+// to prevent.
+const fileEnv = readEnvFile()
+const env: Record<string, string | undefined> = { ...fileEnv, ...process.env }
 
-if (!env.ALLOW_RACE_TESTS) {
+// An explicit allowlist, never truthiness. `ALLOW_RACE_TESTS=0` is the natural
+// way to write "off", and as a raw string it is truthy — which opened the gate
+// and committed rows into the one production project. Anything not listed here
+// means no.
+const PERMITTED = new Set(['1', 'true', 'yes', 'on'])
+const permission = (env.ALLOW_RACE_TESTS ?? '').trim().toLowerCase()
+
+if (!PERMITTED.has(permission)) {
+  const because =
+    permission === ''
+      ? 'ALLOW_RACE_TESTS is not set.'
+      : `ALLOW_RACE_TESTS is "${permission}", which is not one of ${[...PERMITTED].join(', ')}.`
   console.log(
     '\n[race] SKIPPED — tier 3 commits to the real database, so it is opt-in.\n' +
-      '       Set ALLOW_RACE_TESTS=1 in .env.test.local to run it.\n' +
+      `       ${because}\n` +
+      '       Set ALLOW_RACE_TESTS=1 in .env.test.local, or pass it on the command line.\n' +
       '       No connection was opened.\n'
   )
   exit(0)
 }
 
-if (!env.TEST_DATABASE_URL) {
+const url = env.TEST_DATABASE_URL
+if (!url) {
   console.error('[race] TEST_DATABASE_URL is not set in .env.test.local.')
   exit(1)
 }
 
 const vitest = spawn('vitest', ['run', '--config', 'vitest.config.race.mts'], {
   stdio: 'inherit',
-  env: { ...process.env, TEST_DATABASE_URL: env.TEST_DATABASE_URL },
+  env: { ...process.env, TEST_DATABASE_URL: url },
 })
 
 vitest.on('exit', (code) => exit(code ?? 1))
