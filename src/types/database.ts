@@ -84,6 +84,125 @@ export type Database = {
           },
         ]
       }
+      fund_ledger: {
+        Row: {
+          amount: number
+          balance_after: number
+          created_at: string
+          id: string
+          note: string | null
+          order_id: string | null
+          type: Database["public"]["Enums"]["ledger_type"]
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          order_id?: string | null
+          type: Database["public"]["Enums"]["ledger_type"]
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          order_id?: string | null
+          type?: Database["public"]["Enums"]["ledger_type"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_ledger_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fund_ledger_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funds: {
+        Row: {
+          available_cash: number
+          opening_balance: number
+          updated_at: string
+          used_margin: number
+          user_id: string
+        }
+        Insert: {
+          available_cash: number
+          opening_balance: number
+          updated_at?: string
+          used_margin?: number
+          user_id: string
+        }
+        Update: {
+          available_cash?: number
+          opening_balance?: number
+          updated_at?: string
+          used_margin?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funds_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      holdings: {
+        Row: {
+          average_price: number
+          quantity: number
+          symbol: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          average_price: number
+          quantity: number
+          symbol: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          average_price?: number
+          quantity?: number
+          symbol?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "holdings_symbol_fkey"
+            columns: ["symbol"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["symbol"]
+          },
+          {
+            foreignKeyName: "holdings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instruments: {
         Row: {
           exchange: string
@@ -128,6 +247,129 @@ export type Database = {
           trading_date?: string
         }
         Relationships: []
+      }
+      orders: {
+        Row: {
+          average_price: number | null
+          blocked_margin: number
+          executed_at: string | null
+          filled_quantity: number
+          id: string
+          limit_price: number | null
+          order_type: Database["public"]["Enums"]["order_type"]
+          placed_at: string
+          product: Database["public"]["Enums"]["product_type"]
+          quantity: number
+          rejection_reason: string | null
+          side: Database["public"]["Enums"]["order_side"]
+          status: Database["public"]["Enums"]["order_status"]
+          symbol: string
+          user_id: string
+        }
+        Insert: {
+          average_price?: number | null
+          blocked_margin?: number
+          executed_at?: string | null
+          filled_quantity?: number
+          id?: string
+          limit_price?: number | null
+          order_type: Database["public"]["Enums"]["order_type"]
+          placed_at?: string
+          product: Database["public"]["Enums"]["product_type"]
+          quantity: number
+          rejection_reason?: string | null
+          side: Database["public"]["Enums"]["order_side"]
+          status?: Database["public"]["Enums"]["order_status"]
+          symbol: string
+          user_id: string
+        }
+        Update: {
+          average_price?: number | null
+          blocked_margin?: number
+          executed_at?: string | null
+          filled_quantity?: number
+          id?: string
+          limit_price?: number | null
+          order_type?: Database["public"]["Enums"]["order_type"]
+          placed_at?: string
+          product?: Database["public"]["Enums"]["product_type"]
+          quantity?: number
+          rejection_reason?: string | null
+          side?: Database["public"]["Enums"]["order_side"]
+          status?: Database["public"]["Enums"]["order_status"]
+          symbol?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_symbol_fkey"
+            columns: ["symbol"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["symbol"]
+          },
+          {
+            foreignKeyName: "orders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      positions: {
+        Row: {
+          average_price: number
+          blocked_margin: number
+          entry_reference_price: number | null
+          net_quantity: number
+          opened_at: string
+          product: Database["public"]["Enums"]["product_type"]
+          realised_pnl: number
+          symbol: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          average_price: number
+          blocked_margin?: number
+          entry_reference_price?: number | null
+          net_quantity: number
+          opened_at?: string
+          product: Database["public"]["Enums"]["product_type"]
+          realised_pnl?: number
+          symbol: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          average_price?: number
+          blocked_margin?: number
+          entry_reference_price?: number | null
+          net_quantity?: number
+          opened_at?: string
+          product?: Database["public"]["Enums"]["product_type"]
+          realised_pnl?: number
+          symbol?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "positions_symbol_fkey"
+            columns: ["symbol"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["symbol"]
+          },
+          {
+            foreignKeyName: "positions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -259,6 +501,76 @@ export type Database = {
           },
         ]
       }
+      trades: {
+        Row: {
+          charge_breakdown: Json
+          charges: number
+          id: string
+          is_auto_squareoff: boolean
+          order_id: string
+          price: number
+          product: Database["public"]["Enums"]["product_type"]
+          quantity: number
+          realised_pnl: number
+          side: Database["public"]["Enums"]["order_side"]
+          symbol: string
+          traded_at: string
+          user_id: string
+        }
+        Insert: {
+          charge_breakdown: Json
+          charges: number
+          id?: string
+          is_auto_squareoff?: boolean
+          order_id: string
+          price: number
+          product: Database["public"]["Enums"]["product_type"]
+          quantity: number
+          realised_pnl?: number
+          side: Database["public"]["Enums"]["order_side"]
+          symbol: string
+          traded_at?: string
+          user_id: string
+        }
+        Update: {
+          charge_breakdown?: Json
+          charges?: number
+          id?: string
+          is_auto_squareoff?: boolean
+          order_id?: string
+          price?: number
+          product?: Database["public"]["Enums"]["product_type"]
+          quantity?: number
+          realised_pnl?: number
+          side?: Database["public"]["Enums"]["order_side"]
+          symbol?: string
+          traded_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trades_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trades_symbol_fkey"
+            columns: ["symbol"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["symbol"]
+          },
+          {
+            foreignKeyName: "trades_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       watchlist_items: {
         Row: {
           sort_order: number
@@ -301,6 +613,19 @@ export type Database = {
     }
     Enums: {
       candle_interval: "FIVE_MIN" | "THIRTY_MIN" | "ONE_DAY"
+      ledger_type:
+        | "SIGNUP_CREDIT"
+        | "MARGIN_BLOCK"
+        | "MARGIN_RELEASE"
+        | "BUY_DEBIT"
+        | "SELL_CREDIT"
+        | "CHARGES"
+        | "REALISED_PNL"
+        | "SIMULATION_ADJUSTMENT"
+      order_side: "BUY" | "SELL"
+      order_status: "OPEN" | "COMPLETE" | "CANCELLED" | "REJECTED"
+      order_type: "MARKET" | "LIMIT"
+      product_type: "CNC" | "MIS"
       quote_provider: "YAHOO" | "TWELVE_DATA" | "SIMULATOR"
     }
     CompositeTypes: {
@@ -430,6 +755,20 @@ export const Constants = {
   public: {
     Enums: {
       candle_interval: ["FIVE_MIN", "THIRTY_MIN", "ONE_DAY"],
+      ledger_type: [
+        "SIGNUP_CREDIT",
+        "MARGIN_BLOCK",
+        "MARGIN_RELEASE",
+        "BUY_DEBIT",
+        "SELL_CREDIT",
+        "CHARGES",
+        "REALISED_PNL",
+        "SIMULATION_ADJUSTMENT",
+      ],
+      order_side: ["BUY", "SELL"],
+      order_status: ["OPEN", "COMPLETE", "CANCELLED", "REJECTED"],
+      order_type: ["MARKET", "LIMIT"],
+      product_type: ["CNC", "MIS"],
       quote_provider: ["YAHOO", "TWELVE_DATA", "SIMULATOR"],
     },
   },
