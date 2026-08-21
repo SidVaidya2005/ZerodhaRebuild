@@ -629,8 +629,24 @@ issuing two requests for overlapping data.
 
 ### Twelve Data — optional secondary
 
-- TODO: verify Twelve Data's `/quote` endpoint URL, batching limits, NSE symbol format, and free-tier rate limits against https://twelvedata.com/docs before implementing `src/lib/market/providers/twelve-data.ts`. Nothing about this provider has been confirmed yet.
-- The provider must report `isAvailable() === false` when `TWELVE_DATA_API_KEY` is unset, so the chain skips it silently.
+**Verified against the live API on 2026-08-21 with a real free-tier key, and the result is disqualifying: the free plan does not carry NSE symbols at all.**
+
+```
+GET https://api.twelvedata.com/quote?symbol=AAPL&apikey=…
+  → 200  {"symbol":"AAPL","exchange":"NASDAQ","currency":"USD","close":"308.205", …}
+
+GET https://api.twelvedata.com/quote?symbol=RELIANCE&exchange=NSE&apikey=…
+  → 404  {"code":404,"message":"This symbol is available starting with the Grow or Venture plan…"}
+
+GET https://api.twelvedata.com/quote?symbol=RELIANCE&apikey=…      → same 404
+GET https://api.twelvedata.com/quote?symbol=RELIANCE.NS&apikey=…   → 404, invalid symbol format
+```
+
+The US control proves the key and the endpoint shape are fine, so this is a **plan entitlement**, not a symbol-format problem. Every instrument this project trades is on NSE, so a free-tier Twelve Data provider can serve **none** of them.
+
+- **Rate limits, confirmed from the account and from response headers**: 8 requests per minute, 800 API credits per day. `/quote` costs 1 credit per symbol; responses carry `api-credits-used`, `api-credits-left` and `api-credits-request`. Even with NSE access, 800/day cannot sustain a one-minute tick across a ~375-minute session — that is ~2 requests per minute sustained, for ~200 symbols.
+- **Consequence for the provider chain (open, decide in F15):** as things stand the chain is Yahoo → simulator, with the middle tier unavailable. `architecture.md`'s stack table still describes Twelve Data as a working fallback and needs reconciling once that call is made.
+- The provider must report `isAvailable() === false` when `TWELVE_DATA_API_KEY` is unset, so the chain skips it silently. On the free plan it would also have to report false **with** a key set, since the key entitles nothing this project can use.
 
 ### Simulator — final fallback, always available
 

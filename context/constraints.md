@@ -58,7 +58,23 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 - **Dependencies are pinned exactly, with no caret ranges.** Every version in `architecture.md` was verified to equal the current registry `latest`, so the table, the lockfile and `package.json` all agree and can only diverge by a deliberate edit. (F01)
 
+## Auth
+
+- **Sign-in is initiated server-side, not from a browser client.** A `<form>` posts to a Server Action that calls `signInWithOAuth` and `redirect()`s to Google, so sign-in works with JavaScript disabled — the standard F07B set for the support form — and `/auth/login` stays a Server Component. The PKCE verifier is written by the same client that reads it back in the callback. `library-docs.md`'s client-side snippet is corrected in the same change. (F12)
+
+- **The signed-in identity and sign-out control live on the `/dashboard` stub, not the public header.** F12's UI bullet said "in the header", but the only header that exists is the marketing one, and reading a session there would force dynamic rendering on every public page and break `architecture.md`'s session-free `(marketing)` boundary. F17 owns the terminal avatar menu. (F12)
+
+- **The intended destination survives sign-in, guarded by a pure `safeNext()`.** The proxy redirects to `/auth/login?next=<path>`; the callback honours `next` only when it starts with a single `/`, else `/dashboard`. `src/proxy.ts` is unreachable from tier 1, so path matching and next-validation move into `src/lib/auth/routes.ts` where an open redirect and an unguarded route are both testable. (F12)
+
+- **All four Supabase clients ship in F12**, `admin.ts` included, even though nothing in this feature calls it. Its `import 'server-only'` guard is therefore observed failing a build rather than assumed — an unused module holding the RLS-bypassing key is exactly the thing that must not be trusted on sight. (F12)
+
 ## Security and RLS
+
+- **Client-ID generation is its own function so exhaustion is testable.** `generate_client_id()` is separate from `handle_new_user()` because the only way to prove the 10-attempt bound is to stub it, and a pgTAP transaction can `create or replace` it and roll back. Exhaustion fails the signup loudly: a user admitted without a `funds` row would break every money function that follows. (F13)
+
+- **The money tables grant `select` and nothing else.** No client role gets insert, update or delete on `funds`, `fund_ledger`, `orders`, `trades`, `holdings` or `positions`, and no write policy exists — every write arrives through a `security definer` function. `code-standards.md` already forbade a Server Action writing them directly, so a write grant would have existed only to be unused, and F10 established that an unused grant is a hole waiting for a mistaken policy. `architecture.md`'s "policies restricting all commands" is reworded to describe what is built. (F11)
+
+- **Three of `trading-contract.md` §12's identities become CHECK constraints, not test assertions.** Identity 8 (a non-`OPEN` order holds no margin), identity 12 (longs hold no collateral and no reference price, shorts carry both) and identity 6 (`charge_breakdown` sums exactly to `charges`) are all row-level, so a violating row becomes unstorable rather than merely detectable later. The same treatment covers all-or-nothing fills, `limit_price` presence, and the zero-quantity rules. (F11)
 
 - **`revoke execute … from public` does not revoke a function from `anon` or `authenticated`.** Postgres grants EXECUTE to PUBLIC, but Supabase *additionally* sets default privileges granting it directly to `anon`, `authenticated` and `service_role`, and a revoke from PUBLIC leaves those untouched — `handle_new_user`, a `security definer` function, stayed callable by any signed-in user. Name all three roles in the revoke, and assert `has_function_privilege(...)` is false rather than assuming. Same shape as F07B's table-grant finding. (F13)
 
@@ -181,6 +197,14 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **The hero is typographic — no mock terminal UI.** It is what the build plan specifies, and F40 can screenshot the finished terminal, which beats a hand-built fake and avoids maintaining a second UI until the real one exists. (F04)
 
 - **The simulator disclaimer is dismissible and remembered, with no flash.** A blocking inline script in the root layout reads `localStorage` and stamps `data-disclaimer="dismissed"` on `<html>` before first paint; CSS hides the strip off that attribute. The same technique `next-themes` already runs here, and it keeps the `(marketing)` layout a Server Component — only the close button is a client island. (F03)
+
+## Quote providers
+
+- **Yahoo is deferred to the end of the project (decided 2026-08-21), so Phase 3 ships simulator-backed.** With Twelve Data ruled out and NSE's `quote-equity` answering 403, the simulator is the only provider that can serve a price until Yahoo returns. The chain, circuit breaker, limiter and provenance helpers are still built in F15 — a provider is dropped into a finished chain, not the other way round — and every price badges `SIMULATED`, which is honest by construction. **The thing that must not ship is that state alongside copy promising real prices:** `/` and `/about` claim "real NSE prices, honestly delayed", and either Yahoo lands or that copy is reconciled before F39 deploys. (F14)
+
+- **Twelve Data's free plan does not include NSE symbols**, so it cannot serve as the secondary quote provider for this project. Verified 2026-08-21 against the live API with a real key: `AAPL` returns a quote, `RELIANCE` with or without `exchange=NSE` returns 404 "available starting with the Grow or Venture plan". A plan entitlement, not a symbol-format issue. Its limits are 8 requests/minute and 800 credits/day, which could not sustain a one-minute tick over a ~375-minute session even with access. The chain is therefore Yahoo → simulator until F15 decides otherwise, and `architecture.md`'s stack table still needs reconciling to whatever that decision is. (F14)
+
+- **Yahoo throttles bursts at the IP level and the block outlasts any in-process backoff.** ~16 requests/second across 200 symbols got every one back as 429 — and the first version of the probe reported that as "200 symbols do not resolve", condemning a good universe. Never treat 429 as a verdict on a symbol: only 404 means the symbol is unknown. `curl` succeeding while `node fetch` gets 429 is a recovery-window artefact, not a client difference — both are blocked together once tripped. Probe sequentially (~1.5s apart) and cache results so a throttled run resumes instead of restarting. (F14)
 
 ## Charges and the trading contract
 

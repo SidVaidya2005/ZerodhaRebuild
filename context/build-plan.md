@@ -610,20 +610,67 @@ who gets in without a `funds` row would break every money function that follows.
 
 ### 14 Instrument and holiday calendar seed
 
-
+Two committed JSON files and two scripts, separating **refresh** (hit NSE and Yahoo, rewrite the
+files — done in January or on a rebalance) from **seed** (read the files, upsert into Postgres —
+deterministic, offline, idempotent). Both NSE endpoints are undocumented and one of them already
+403s on its warm-up URL from this machine, so a seed that depended on them live would break
+unpredictably and would change ~200 rows with no diff to review first.
 
 **Logic:**
 
-- `supabase/seed/nifty200.json` with symbol, name, sector, and `yahoo_symbol` for each constituent.
-- An idempotent seed script upserting into `instruments`.
-- The current NSE trading-holiday calendar seeded into `market_holidays`, with a note recording that it must be re-seeded each January.
+- `scripts/fetch-reference-data.mts` — the Nifty 200 constituents from NSE's published CSV
+  (`ind_nifty200list.csv`, which carries Company Name, Industry, Symbol and ISIN) and the trading
+  calendar from NSE's holiday-master API (`CM` segment). `sector` comes from the `Industry` column
+  rather than being invented, so every value is attributable to the source.
+- **Every `yahoo_symbol` is probed, not sampled.** The symbol is derived as `${symbol}.NS`, and that
+  rule is wrong for a handful of names every year. Yahoo answers 200 for a real symbol and 404 for a
+  fake one, so the script probes all ~200 with throttling and **refuses to write the JSON** if any
+  fail, naming them. A five-symbol spot check samples 2.5% of the universe and the failure it misses
+  stays invisible until someone opens that stock's page in Phase 5.
+- `scripts/seed-reference.mts` — upserts both files through the **service-role client**.
+  `instruments` and `market_holidays` grant `select` only, and seeding reference data is precisely
+  the administrative act that key exists for. It reads `.env.local` and needs no connection string.
+- Upsert by primary key — `symbol`, `trading_date`. Existing rows update, **none are deleted**: a
+  symbol dropped from the index keeps its row, because holdings and trades reference it.
+- **Holidays are stored exactly as NSE publishes them, weekend entries included.** The published list
+  contains dates such as Sunday 15-Feb-2026; dropping them would be an editorial judgement about a
+  published calendar, and `isTradingSession()` decides weekends independently, so it changes no
+  behaviour. The JSON carries a note recording that it needs re-fetching each January.
+- Both scripts are tooling, not application code: `scripts/`, run by `node`, never imported by
+  `src/` — the same standing as `run-pgtap.mts`. `pnpm seed` is added to `package.json` and to
+  `CLAUDE.md`'s command list.
 
 **Verify:**
 
-- The seed run twice leaves roughly 200 rows, not 400.
-- Every row has a non-empty `yahoo_symbol`.
-- `market_holidays` contains this year's published NSE closures, and `isTradingSession()` reports closed on each of them.
-- A spot check of 5 random `yahoo_symbol` values returns HTTP 200 from the Yahoo chart endpoint.
+- **Seeding twice leaves one universe, not two**: run `pnpm seed` twice and confirm
+  `select count(*) from instruments` is identical across both runs and lands near 200.
+- **The Yahoo probe is deferred with Yahoo itself** (see below). `--probe` runs it and refuses to
+  write on any 404; without the flag the JSON records `yahoo_validated: false`, so nobody downstream
+  mistakes "seeded" for "verified". pgTAP still asserts the shape: no row has an empty
+  `yahoo_symbol`, every one ends in `.NS`, and every one is derived from its own symbol rather than
+  copied from a neighbour.
+- The universe is real rather than a placeholder — pgTAP: between 190 and 210 rows, every row has a
+  non-empty `name`, and `RELIANCE`, `TCS` and `INFY` are present with the expected `yahoo_symbol`.
+- Sectors came from the source — pgTAP: fewer than 30 distinct non-null sectors and no empty string.
+  A column misalignment in the CSV parse is what this catches.
+- The calendar matches what NSE published — pgTAP: `Republic Day` on `2026-01-26`, `Holi` on
+  `2026-03-03`, every `description` non-empty, and every row inside 2026.
+- **Dates survive the timezone round trip** — pgTAP: `2026-01-26` is stored as exactly that date. A
+  UTC-parsed `26-Jan-2026` landing on the 25th is the bug this exists to catch.
+- A refresh is reviewable rather than silent: re-running the fetch with the upstream unchanged
+  produces **no git diff**, which requires stable ordering and formatting in both files.
+- The seed needs no test credentials: `grep` confirms neither script reads `TEST_DATABASE_URL`, and
+  seeding succeeds with only `.env.local` present.
+- **The default watchlist is finally non-empty** — carried over from F13, whose bootstrap seeds by
+  `INSERT…SELECT` against `instruments`: a new signup after this feature lands holds ten watchlist
+  rows in the declared order.
+
+**Deferred out of this feature (2026-08-21):** Yahoo blocked this machine's IP for over 40 minutes
+after a 200-symbol probe, and **Yahoo is deferred to the end of the project** by decision. The probe
+code ships behind `--probe` rather than being deleted, because it is exactly what must run when Yahoo
+returns. Until then the universe is seeded but unvalidated, and `yahoo_validated: false` in the JSON
+says so.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db` and `pnpm build` all exit zero.
 
 ### 15 Quote provider chain
 
@@ -631,11 +678,27 @@ who gets in without a `funds` row would break every money function that follows.
 
 The reliability core, built and tested before anything renders a price.
 
+**Yahoo is deferred to the end of the project (decided 2026-08-21), so this chain ships
+simulator-backed.** Twelve Data's free plan carries no NSE symbols at all (verified against the live
+API — `library-docs.md` → Quote providers), and NSE's own `quote-equity` endpoint answers 403 from
+here, so the simulator is the only provider that can actually serve a price until Yahoo returns. The
+`QuoteProvider` interface, circuit breaker, limiter and provenance helpers are all built now — the
+chain has to be right before a Yahoo provider is dropped into it — but the running system quotes
+`SIMULATOR`, and every price on screen badges `SIMULATED`. That is honest by construction; what it
+must not do is coexist with copy promising real prices, so **`/` and `/about` must be reconciled
+before F39 deploys** if Yahoo has not landed by then.
+
 **Logic:**
 
 - `QuoteProvider` interface: `name`, `isAvailable()`, `fetchQuotes(symbols)`, circuit-breaker state.
-- `YahooProvider` — one request per symbol, staggered, browser `User-Agent`, Zod-parsed, trips its circuit for 5 minutes on a 429.
-- `TwelveDataProvider` — reports unavailable when the key is unset.
+- `YahooProvider` — **deferred**. Its slot in the chain and its circuit-breaker behaviour are designed
+  and unit-tested against a fake provider; the real implementation lands at the end of the project.
+  A 429 must trip its circuit for 5 minutes, which is the lesson F14 paid for: Yahoo's IP block
+  outlasted 40 minutes of polling.
+- `TwelveDataProvider` — **not built.** Its free plan returns 404 for every NSE symbol ("available
+  starting with the Grow or Venture plan"), verified against the live API with a real key, so the
+  provider could never do anything but report unavailable. It is dropped rather than shipped as a
+  permanently-false branch.
 - `SimulatorProvider` — bounded random walk seeded from the last known quote; always succeeds.
 - `QuoteService` walking the chain and a token-bucket limiter capping symbols per tick.
 - `CandleProvider` chain over the same limiter and circuit breaker, plus `deriveSource()` and the provenance helpers in `src/lib/market/provenance.ts`.
@@ -643,14 +706,17 @@ The reliability core, built and tested before anything renders a price.
 
 **Verify:**
 
-- Unit tests: a 429 from Yahoo trips the circuit and the next call falls through to the simulator.
-- Unit test: a malformed Yahoo payload fails its Zod parse and falls through rather than throwing.
-- Unit test: with no key set, the Twelve Data provider is skipped silently.
+- Unit tests: a 429 from a provider trips its circuit and the next call falls through to the
+  simulator. Exercised against a fake provider, since Yahoo is deferred.
+- Unit test: a malformed payload fails its Zod parse and falls through rather than throwing.
+- Unit test: the chain falls through to the simulator when every upstream is unavailable, and the
+  quote it returns carries `provider = 'SIMULATOR'` so the badge reads `SIMULATED`.
 - Unit tests for `deriveSource`: `SIMULATOR` → `SIMULATED`; a polled provider within the live window → `DELAYED`, never `LIVE`; beyond the delayed window → `STALE`; null `provider_ts` → `STALE`.
 - Unit test: a candle response with null entries drops those indices rather than forward-filling.
 - Unit tests for `market-hours` cover pre-open, open, post-close, weekend, a listed trading holiday, and the 15:20 square-off boundary, with an injected clock.
 - Test: 09:14:59 and 15:30:01 IST both report closed; 09:15:00 reports open.
-- An integration run against the live Yahoo endpoint returns a plausible price for `RELIANCE`.
+- **Deferred with Yahoo:** an integration run against the live Yahoo endpoint returning a plausible
+  price for `RELIANCE`. Nothing in this feature contacts a live upstream.
 
 ### 16 Market tick Edge Function and schedule
 
