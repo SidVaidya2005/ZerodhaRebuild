@@ -50,6 +50,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Environment and secrets
 
+- **The seed authenticates as the service role, not through a test connection string.** `instruments` and `market_holidays` grant `select` only, and seeding reference data is the administrative act that key exists for — `TEST_DATABASE_URL` is named for tests and should not become load-bearing for ops. (F14)
+
 - **Environment validation is split across two modules**, deviating from `code-standards.md`'s single `env.ts`, which was updated to match. `env.ts` holds the `NEXT_PUBLIC_*` variables and is safe anywhere; `env.server.ts` carries `import 'server-only'` so a client-side import of the service-role key fails the build instead of throwing at runtime. Validation is forced at boot by `register()` in `src/instrumentation.ts`, which Next.js skips during `next build` — so `build` stays green without secrets while `dev` and `start` fail by name. (F01)
 
 ## Dependencies
@@ -73,6 +75,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **All four Supabase clients ship in F12**, `admin.ts` included, even though nothing in this feature calls it. Its `import 'server-only'` guard is therefore observed failing a build rather than assumed — an unused module holding the RLS-bypassing key is exactly the thing that must not be trusted on sight. (F12)
 
 ## Security and RLS
+
+- **Supabase's `verify_jwt` accepts any valid project key, including the publishable one that ships in the browser bundle.** Measured in F16 against the deployed `market-tick`: no `Authorization` header is rejected by the gateway with `UNAUTHORIZED_NO_AUTH_HEADER`, but both `sb_secret_…` and `sb_publishable_…` return 200. Any Edge Function that writes data therefore needs a second layer — a Vault-held secret compared in the handler, in constant time, before it touches the database — and must refuse rather than fall open when that secret is unset. This also answers the standing question about the newer non-JWT secret keys: they do satisfy the gateway. (F16)
 
 - **The default watchlist seeds by `INSERT…SELECT` against `instruments`.** F14 populates that table and runs *after* F13, so a plain insert would violate `watchlist_items`' foreign key today. Intersecting a fixed symbol list against whatever is seeded is FK-safe by construction, idempotent, and needs no change when F14 lands. The "populated watchlist" half of F13's original verify moves to F14, which is where it becomes checkable. (F13)
 
@@ -207,6 +211,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **The simulator disclaimer is dismissible and remembered, with no flash.** A blocking inline script in the root layout reads `localStorage` and stamps `data-disclaimer="dismissed"` on `<html>` before first paint; CSS hides the strip off that attribute. The same technique `next-themes` already runs here, and it keeps the `(marketing)` layout a Server Component — only the close button is a client island. (F03)
 
 ## Quote providers
+
+- **Refresh and seed are separate acts.** `fetch-reference-data.mts` hits NSE and Yahoo and rewrites committed JSON; `seed-reference.mts` reads that JSON and upserts. NSE's endpoints are undocumented — its warm-up URL already 403s from this machine while the API call succeeds — so a seed depending on them live breaks unpredictably and offers no diff to review before ~200 rows change. (F14)
+
+- **Every `yahoo_symbol` is probed at refresh time, not sampled.** `${symbol}.NS` is wrong for a few names every year, and Yahoo's clean 200/404 makes full validation cheap; the fetch refuses to write on any failure. The build plan's five-symbol spot check would sample 2.5% of the universe and miss a symbol that never quotes until Phase 5. (F14)
 
 - **Yahoo is deferred to the end of the project (decided 2026-08-21), so Phase 3 ships simulator-backed.** With Twelve Data ruled out and NSE's `quote-equity` answering 403, the simulator is the only provider that can serve a price until Yahoo returns. The chain, circuit breaker, limiter and provenance helpers are still built in F15 — a provider is dropped into a finished chain, not the other way round — and every price badges `SIMULATED`, which is honest by construction. **The thing that must not ship is that state alongside copy promising real prices:** `/` and `/about` claim "real NSE prices, honestly delayed", and either Yahoo lands or that copy is reconciled before F39 deploys. (F14)
 

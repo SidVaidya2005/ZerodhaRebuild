@@ -52,7 +52,7 @@ ZerodhaRebuild/
 │   ├── migrations/                 → timestamped SQL migrations, applied in order
 │   ├── functions/
 │   │   ├── market-tick/index.ts    → the single scheduled job: refresh, match, square off
-│   │   └── _shared/                → dependency-free types and parsers shared with the app
+│   │   └── _shared/                → the one copy of logic both runtimes need; app reads it via `@shared/*`
 │   ├── tests/                      → tier 2, pgTAP; one numbered file per concern
 │   │   ├── 00-smoke.sql            → pgtap reachable; proves the runner hits a real database
 │   │   ├── 01-rls-*.sql            → per-table read/write denial, and grant denial

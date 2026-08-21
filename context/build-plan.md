@@ -753,27 +753,79 @@ prices, so **`/` and `/about` must be reconciled before F39 deploys** if Yahoo h
 
 ### 16 Market tick Edge Function and schedule
 
-
+The scheduled job that puts prices in the database. Built now, with the simulator as its only
+provider, precisely so the risky parts — the schedule, the Vault credential, the gateway's
+authentication, and the session gate — are all proven before a real provider exists. Yahoo later drops
+into a pipeline that has already been exercised rather than into an untested one.
 
 **Logic:**
 
-- `supabase/functions/market-tick/` implementing gate → select-demanded-symbols → fetch → upsert `quotes`.
-- `isTradingSession()` checked first; when closed the function writes nothing and returns `{ ok: true, skipped: 'MARKET_CLOSED' }`.
-- Symbol selection: recent `symbol_demand` entries, union everything referenced by a holding, position, or open order.
-- `pg_cron` job posting to the function every minute over the coarse UTC window `* 3-10 * * 1-5` (≈08:30–16:29 IST), credentials read from Vault. The window is a cost bound only — `isTradingSession()` is the business-time authority.
-- `touch_symbol_demand` function the client calls when subscribing.
-- A once-daily prune inside the same run: `FIVE_MIN` candles older than the current trading day, `THIRTY_MIN` beyond five trading days, `ONE_DAY` beyond 400 days.
+- `supabase/functions/_shared/market-hours.ts` — the pure core of the session logic, **moved there
+  rather than copied**. An Edge Function runs on Deno and cannot import from `src/`
+  (`code-standards.md` → Import Conventions), but the dependency runs perfectly well the other way:
+  `_shared/` holds the single implementation, Deno reaches it on a relative path and the app reaches
+  it through a new `@shared/*` alias. `src/lib/market/market-hours.ts` keeps only the
+  database-backed wrappers, because the two runtimes build their Supabase clients differently.
+  **This replaces the planned duplicate-plus-drift-test.** A drift test is the right answer when
+  duplication is forced — the F05 stack table — and the wrong answer when it is not: the failure it
+  guards against, the tick trading on a day the app calls closed, is made unreachable by there
+  being one copy, and the existing tier-1 suite already runs that copy.
+- `supabase/functions/market-tick/index.ts` implementing **gate → select demanded symbols → fetch →
+  upsert `quotes`**. The gate comes first and nothing writes before it returns true.
+- **The demand union includes `watchlist_items`.** `symbol_demand` has no write path until F18 and
+  nobody holds anything yet, so the union as originally specified would select zero symbols and the
+  write path would ship untested. A symbol someone is watching is genuinely demanded, F13 seeds ten
+  per account, and this stays correct after F18 narrows refreshes to what is actually on screen.
+- `select_demanded_symbols(p_limit)` as a **SQL function rather than a query in TypeScript**, so
+  pgTAP can test the union and its ordering directly. Ordered by `priority desc,
+  last_requested_at desc` and capped by `MAX_SYMBOLS_PER_TICK`, so batch size is bounded by the
+  limiter and never by the size of the universe.
+- **`match_open_orders` and `square_off_mis` are not called yet** — they are built in F28 and F29,
+  which wire them in. `code-standards.md`'s Edge Function example shows both, so it gains a note
+  rather than being left to mislead.
+- **The candle prune moves to F33.** Candles left F15, so retention logic here would run against a
+  table nothing populates: the assertion would read "deleted zero rows from an empty table" and pass
+  whether or not the rules were right. F33 builds the candle pipeline and its retention together.
+- `touch_symbol_demand` remains F18's, with its own grant and test.
+- **JWT verification stays enabled *and* the handler checks a shared secret.** Not a fallback —
+  both, always. The plan treated the `X-Scheduler-Secret` layer as contingency for a gateway that
+  accepted no available credential; measurement found the opposite problem. `verify_jwt` rejects a
+  caller with no `Authorization` header, but it accepts **any** valid project key, including the
+  publishable one that ships in the browser bundle. So the handler compares an `x-scheduler-secret`
+  header against a Vault-held value, in constant time, before reading or writing anything, and
+  **refuses rather than falls open** when that secret is unset. `pg_cron` sends both headers, and
+  neither literal appears in a migration. See `constraints.md` → Security and RLS.
+- `pg_cron` job on `* 3-10 * * 1-5` — every minute of UTC hours 03–10 inclusive, ≈08:30–16:29 IST,
+  deliberately wider than the session because no cron expression can encode NSE's trading holidays.
+  The window is a cost bound; `isTradingSession()` is the business-time authority.
 
 **Verify:**
 
-- Manually invoking the function updates `quotes.fetched_at` for the demanded symbols.
-- `cron.job_run_details` shows successful runs one minute apart, with no 401s — proving the Vault-held scheduler credential satisfies the gateway.
-- **Record which credential worked**, resolving the TODO in `library-docs.md` → Supabase Cron.
-- Invoking the function URL with no `Authorization` header is rejected by the gateway before any handler code runs.
-- Every written row has a non-null `provider` and `fetched_at`, and a non-null `provider_ts` unless the provider is `SIMULATOR`; forcing all providers to fail still writes simulator rows rather than none.
-- A run with 200 demanded symbols still finishes inside 10 seconds because the limiter caps the batch.
-- Invoked at 08:45 IST (inside the cron window, outside the session) the function writes no rows and reports `MARKET_CLOSED`.
-- Invoked on a seeded trading holiday it writes no rows, proving the gate does not rely on the cron schedule.
+- **The gate outranks the schedule** — invoked at 08:45 IST, inside the cron window but outside the
+  session, the function writes zero rows and returns `{ ok: true, skipped: 'MARKET_CLOSED' }`.
+- Invoked on a seeded 2026 trading holiday it writes nothing, proving the gate does not rely on the
+  cron schedule.
+- **The session logic the tick gates on is the logic tier 1 covers** — `pnpm test` exercises
+  `_shared/market-hours.ts` itself, through the app's re-export, across open, closed, pre-open,
+  weekend, a listed holiday and the next transition. There is no second copy to compare it against.
+- Demand is real, capped and correctly ordered — pgTAP: a seeded watchlist yields those symbols; a
+  symbol in a holding outranks a watchlist-only one; the result never exceeds the cap.
+- **The tick actually writes** — invoked during a session, `quotes.fetched_at` advances for the
+  demanded symbols, every row carries a non-null `provider` and `fetched_at`, and a null
+  `provider_ts` **only** when the provider is `SIMULATOR`.
+- Forcing every upstream provider to fail still writes simulator rows rather than none.
+- **It is not a public endpoint** — invoking the URL with no `Authorization` header is rejected by
+  the platform gateway before any handler code runs, confirmed by the absence of a log line rather
+  than by the status code alone.
+- `cron.job_run_details` shows successful runs one minute apart with no 401s, and **which credential
+  actually satisfied the gateway is recorded** in `library-docs.md`, closing the TODO there. A 401
+  means the credential is wrong, not that the function is broken.
+- A run with 200 demanded symbols finishes inside 10 seconds, because the cap bounds the batch.
+- **An unavailable calendar stops the tick rather than opening the market** — `loadHolidays` throws
+  on a read error, and the handler returns `{ ok: false }` having written nothing. An empty holiday
+  set is indistinguishable from a year with no holidays, which is why it must not be silently
+  tolerated.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db` and `pnpm build` all exit zero.
 
 ### Phase checkpoint
 

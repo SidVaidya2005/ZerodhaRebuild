@@ -235,8 +235,18 @@ positions. It must not be callable by anyone who merely knows the URL.
 
 - **JWT verification stays enabled** for this function. Do not add `verify_jwt = false` to `config.toml` for it. "Only cron calls it" is not an access control — the URL is guessable and the function is unauthenticated the moment verification is off.
 - `pg_cron` sends `Authorization: Bearer <credential>` read from Vault, so the platform gateway rejects unauthenticated callers before any of our code runs.
-- **TODO: verify which credential actually satisfies `verify_jwt` on this project.** The legacy `service_role` key is itself a JWT and passes; the newer `sb_secret_…` secret keys are **not** JWTs, and whether the gateway accepts one has not been tested here. Confirm against a real invocation during feature 16 and record the answer, because the two key systems behave differently and guessing produced a broken example once already.
-- If it turns out no available credential satisfies the gateway, the fallback is explicit rather than implicit: set `verify_jwt = false` **and** have the handler compare a `X-Scheduler-Secret` header against a Vault-held value, rejecting with 401 before touching the database. Never take the first half of that fallback without the second.
+- **Answered by measurement in F16, and the answer is worse than expected.** Invoking the deployed function four ways on this project:
+
+  | Request | Result |
+  | ------- | ------ |
+  | No `Authorization` header | `401 UNAUTHORIZED_NO_AUTH_HEADER` — the platform's error shape, so it never reached our code |
+  | `Bearer sb_secret_…` (service role) | **200** |
+  | `Bearer sb_publishable_…` | **200** |
+
+  So the newer non-JWT `sb_secret_…` keys **do** satisfy the gateway — but so does the **publishable key, which ships in the browser bundle**. `verify_jwt` proves only that the caller knows *some* project key. It is not, on its own, access control for a function that writes quotes, fills orders and squares off positions.
+
+- **Therefore both layers are mandatory, and the shared secret is the real one.** JWT verification stays enabled — it is what rejects a caller with no header at all — *and* the handler compares an `x-scheduler-secret` header against a Vault-held value before touching the database, with a constant-time comparison. A missing secret makes the function refuse rather than fall open; otherwise a misconfiguration silently downgrades it to "whoever reads the JavaScript may run the tick".
+- `pg_cron` sends both: `Authorization: Bearer` from a Vault secret named `service_role_key`, and `x-scheduler-secret` from one named `scheduler_secret`. Neither literal appears in a migration, because migrations are committed.
 - A 401 in `cron.job_run_details` means the credential is wrong, not that the function is broken. Check there first.
 - `pg_cron` schedules in the database's timezone (UTC). Write the expression in UTC and put the IST equivalent in a comment beside it, as above — and **check the arithmetic**: an hours field like `3-10` covers every minute of hours 3 through 10 inclusive (03:00–10:59 UTC), not 03:00–10:00.
 - **The cron window is never the market-hours check.** It exists to stop the job burning quota overnight. Whether the market is actually open is decided by `isTradingSession()` inside the function, against an IST clock and an NSE holiday calendar, before any quote write, limit match, or square-off. A cron expression cannot encode trading holidays, so trusting one guarantees the job trades on Republic Day.

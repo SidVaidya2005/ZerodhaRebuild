@@ -230,9 +230,15 @@ $$;
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 Deno.serve(async (req) => {
-  // Callers without a valid credential never reach this code: JWT verification stays
-  // ON for this function and pg_cron sends a Vault-held credential. See
-  // library-docs.md → Supabase Cron for the scheduler authentication contract.
+  // Two layers, and both are load-bearing. JWT verification stays ON, which rejects
+  // a caller with no Authorization header — but F16 measured what the gateway
+  // *accepts* and it is any valid project key, including the publishable one that
+  // ships in the browser bundle. The Vault-held scheduler secret compared here is
+  // what actually restricts this to the scheduler. See library-docs.md → Supabase Cron.
+  if (!secretMatches(req.headers.get('x-scheduler-secret'), Deno.env.get('SCHEDULER_SECRET')!)) {
+    return Response.json({ ok: false, error: 'UNAUTHORIZED' }, { status: 401 })
+  }
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -247,8 +253,11 @@ Deno.serve(async (req) => {
     const symbols = await selectDemandedSymbols(supabase)
     const quotes = await quoteService.fetch(symbols)
     await supabase.from('quotes').upsert(quotes, { onConflict: 'symbol' })
+    // Wired in by F28 and F29, which build them. F16 ships without these calls
+    // rather than calling functions that do not exist yet.
     await supabase.rpc('match_open_orders')
     await supabase.rpc('square_off_mis')
+    // F33's, with the candle pipeline it prunes.
     await pruneCandlesOncePerDay(supabase)
 
     return Response.json({ ok: true, refreshed: quotes.length })
@@ -264,7 +273,7 @@ Deno.serve(async (req) => {
 - **The gate comes first.** No quote write, order match, or square-off may run before `isTradingSession()` returns true. A tick that skips returns 200 with `skipped: 'MARKET_CLOSED'` and writes nothing.
 - The Edge Function returns 200 with `{ ok: false }` for handled failures and only 500 for unhandled ones, so `pg_cron` failures stand out in `cron.job_run_details`.
 - **Never put an error object or `String(error)` into a response body**, even on a function only the scheduler calls. The no-raw-error rule has no endpoint-based exemption.
-- The function is not a public endpoint. JWT verification stays enabled for it; see the scheduler authentication contract in `library-docs.md`.
+- **The function is not a public endpoint, and JWT verification alone does not make it one.** Verification stays enabled *and* the handler checks a Vault-held scheduler secret in constant time before reading or writing anything; a missing secret makes it refuse rather than fall open. F16 proved the gateway accepts the publishable key, so the second layer is not belt-and-braces — it is the belt.
 - It must complete well inside 10 seconds; batch size is bounded by the rate limiter, never by the symbol count.
 - It is the only writer of `quotes` and the only caller of `match_open_orders` and `square_off_mis`.
 
@@ -459,9 +468,10 @@ value and is committed; `.env.local` is not.
 - Import internal modules through the `@/` alias (`@/lib/trading/charges`). Relative imports are allowed only within the same folder (`./RowSkeleton`).
 - Never use `../../` — two or more levels up means the module belongs somewhere else.
 - Type-only imports use `import type`.
-- Fixed values — `OPENING_BALANCE`, `SQUARE_OFF_TIME_IST`, `MARKET_OPEN_IST`, `SHORT_MARGIN_BUFFER`, `MAX_SYMBOLS_PER_TICK`, `QUOTE_STALE_AFTER_MS`, `QUOTE_LIVE_WINDOW_MS`, `QUOTE_DELAYED_WINDOW_MS`, `CANDLE_TTL_MS`, `CANDLE_RETENTION`, and every charge rate — live in `src/lib/constants.ts` and are imported from there. Never inline a magic number for any of them.
+- Fixed values — `OPENING_BALANCE`, `SQUARE_OFF_TIME_IST`, `MARKET_OPEN_IST`, `SHORT_MARGIN_BUFFER`, `MAX_SYMBOLS_PER_TICK`, `QUOTE_STALE_AFTER_MS`, `QUOTE_LIVE_WINDOW_MS`, `QUOTE_DELAYED_WINDOW_MS`, `CANDLE_TTL_MS`, `CANDLE_RETENTION`, and every charge rate — are imported by app code from `src/lib/constants.ts`. Never inline a magic number for any of them. The market, quote and simulator values among them are *defined* in `_shared/market-constants.ts` and re-exported by `constants.ts`, because the Edge Function needs the same numbers and cannot resolve the `@/` alias; that is a change of definition site, not of the rule.
 - Two quote-age thresholds exist and are **not** interchangeable: `QUOTE_STALE_AFTER_MS` decides whether an order may fill against a quote (`trading-contract.md` §5), while `QUOTE_LIVE_WINDOW_MS` / `QUOTE_DELAYED_WINDOW_MS` decide which badge a price displays. Using one where the other belongs either rejects fillable orders or fills stale ones.
-- Edge Functions use `jsr:` / `npm:` specifiers with pinned versions and cannot import from `src/`; shared logic is duplicated deliberately into `supabase/functions/_shared/` and kept in sync by hand.
+- Edge Functions use `jsr:` / `npm:` specifiers with pinned versions and **cannot import from `src/`**. Shared logic therefore lives in `supabase/functions/_shared/` and is imported *out of there by both runtimes* — by Deno on a relative path, by the app through the `@shared/*` alias declared in `tsconfig.json` and mirrored in `vitest.config.mts`. **One copy, not two kept in step by hand**: the session logic the tick gates on is the identical module tier 1 exercises, so there is nothing to drift and no drift test to write. Specifiers into `_shared` carry an explicit `.ts` because Deno requires it; `allowImportingTsExtensions` is what lets one spelling serve both.
+- **Only the Edge Function entrypoint sits outside `tsc`.** `tsconfig.json` excludes `supabase/functions/market-tick`, which uses `jsr:` specifiers and the `Deno` global that this compiler cannot resolve; Deno typechecks it on `functions deploy`. `_shared/` stays inside the program and must typecheck under the same rules as `src/`.
 
 ---
 
