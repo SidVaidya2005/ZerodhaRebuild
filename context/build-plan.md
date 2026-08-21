@@ -546,21 +546,67 @@ form. `library-docs.md` → Google OAuth sign-in showed the client-side variant 
 
 ### 13 Account bootstrap on first sign-in
 
+Everything an account needs, created inside the signup transaction: the `profiles` row and its
+`ZR######` client ID, the `funds` row at `OPENING_BALANCE`, the single `SIGNUP_CREDIT` ledger entry
+that accounts for that cash, and a default watchlist. All four succeed or the signup fails — a user
+who gets in without a `funds` row would break every money function that follows.
 
+**UI:**
+
+- The `/dashboard` stub grows two lines: the client ID and available cash. It makes this feature's
+  headline claim visible in the product rather than only in SQL, and it is the **first read of a
+  money table through a real session** — exercising the `select`-only grant and the `auth.uid()`
+  policy F11 built, which until now only pgTAP has touched.
 
 **Logic:**
 
-- `handle_new_user` trigger on `auth.users` creating the `profiles` row, generating a `ZR######` client ID, and copying name and avatar from the Google identity.
-- Client ID generation retries up to 10 times on a unique violation and raises `CLIENT_ID_EXHAUSTED` if all 10 collide — bounded, never an infinite loop, and never a silently failed signup.
-- The same trigger inserting the `funds` row at `OPENING_BALANCE`, the `SIGNUP_CREDIT` ledger entry, and a default watchlist.
-- Trigger is idempotent — a repeat sign-in creates nothing new.
+- `public.generate_client_id()` as its own function, returning `ZR` + six digits. Separate from its
+  caller because the exhaustion path can only be tested by stubbing it, and a pgTAP transaction can
+  `create or replace` it and roll back.
+- `public.handle_new_user()` — `security definer`, `set search_path = ''`, `execute` revoked from
+  `public` — on an `after insert` trigger on `auth.users`. It retries generation up to 10 times on a
+  unique violation and then raises `CLIENT_ID_EXHAUSTED`: bounded, never an infinite loop, and never
+  a silently half-created account.
+- Name and avatar coalesce Google's two spellings each (`full_name`/`name`, `avatar_url`/`picture`)
+  and tolerate both being absent — `profiles.full_name` is nullable.
+- **`OPENING_BALANCE` is a literal `100000.00` in SQL**, cited to `trading-contract.md` §11. The
+  trigger runs in Postgres and cannot import `src/lib/constants.ts`, so both sides are pinned to the
+  contract's number by their own test rather than to each other.
+- **The default watchlist seeds by `INSERT…SELECT` against `instruments`**, intersecting a
+  ten-symbol large-cap list against whatever is seeded. F14 populates `instruments` and runs *after*
+  this feature, so a plain `INSERT` would violate the foreign key today. This is FK-safe by
+  construction, idempotent, and starts working the moment F14 lands with no change here.
+- **No backfill path.** `auth.users` currently holds one row with no profile, created while
+  verifying F12. That account is deleted and re-created by signing in again, which keeps signup as
+  the only path that ever creates an account.
 
 **Verify:**
 
-- A brand-new Google account lands on `/dashboard` with ₹1,00,000 available and a populated watchlist.
-- Signing out and back in leaves exactly one `profiles` row and one `SIGNUP_CREDIT` entry.
-- Two users signing up concurrently receive different client IDs.
-- With generation stubbed to always return the same value, signup fails with `CLIENT_ID_EXHAUSTED` after exactly 10 attempts rather than hanging or creating a broken profile.
+- pgTAP: signup creates exactly one `profiles` row, `client_id ~ '^ZR\d{6}$'`, `theme = 'dark'`.
+- pgTAP: `full_name` and `avatar_url` are copied from `raw_user_meta_data`, and a user with **no**
+  metadata still bootstraps with `full_name` null rather than failing.
+- pgTAP: `available_cash = 100000.00`, `used_margin = 0`, `opening_balance = 100000.00`; a tier-1
+  test pins `OPENING_BALANCE` to the same figure from the other side.
+- pgTAP: exactly one `fund_ledger` row — `SIGNUP_CREDIT`, `+100000.00`, `balance_after = 100000.00`,
+  `order_id` null.
+- pgTAP: **§12.1 and §12.2 hold from the first moment** — `sum(amount) = available_cash`, and the
+  newest `balance_after` equals `available_cash`.
+- pgTAP: with `instruments` empty the watchlist seed inserts **zero rows and raises nothing**; with a
+  three-symbol fixture it inserts exactly three, in list order. The "populated watchlist" half of
+  this feature's original verify moves to F14, which is what makes it checkable.
+- pgTAP: re-running the bootstrap for the same user leaves one profile and one `SIGNUP_CREDIT` —
+  every insert is `on conflict do nothing`.
+- pgTAP: **exhaustion is bounded and clean.** With generation stubbed to a constant, signup raises
+  `CLIENT_ID_EXHAUSTED` after **exactly 10** attempts, counted by a sequence the stub increments, and
+  leaves no `auth.users`, `profiles`, `funds` or `fund_ledger` row behind.
+- pgTAP: the trigger is not a client-callable write path — `has_function_privilege('authenticated',
+  'public.handle_new_user()', 'execute')` is false.
+- `pnpm test:race`: two connections signing up concurrently both succeed with **different** client
+  IDs and complete accounts. Seeded as `zr-race-*@example.com` and cleaned in `afterEach`; this is
+  the only tier that can express it, since pgTAP is one session in one transaction.
+- End to end: the orphan `auth.users` row is deleted, and signing in with Google again lands on
+  `/dashboard` showing a `ZR######` client ID and **₹1,00,000.00**.
+- `pnpm test`, `pnpm test:db`, `pnpm lint`, `pnpm typecheck` and `pnpm build` all exit zero.
 
 ### 14 Instrument and holiday calendar seed
 

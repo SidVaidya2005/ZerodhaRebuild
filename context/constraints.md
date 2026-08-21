@@ -29,6 +29,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Build plan sequencing
 
+- **F10 creates only the two enums its own tables reference** — `quote_provider` and `candle_interval`. The five that only F11's tables use are created there. Each migration then reviews against the tables it creates, and nobody reading the schema in between finds five types with no referents. (F10)
+
 - **F07 moves behind F09.** Its verify is a tier-2 pgTAP check and `support_messages` accepts anonymous writes, so it should not ship behind a one-off manual check. Phase 1 closes as 01–06 plus 08; F07 is built once the harness exists. (F08)
 
 - **Every link the public shell points at is stubbed in F03**, including `/auth/login`, so the shell's own verify can pass and F04's "every CTA routes to `/auth/login`" has a destination. Each stub is a heading plus one line of copy, replaced wholesale by F05–F08 and F12. `src/app/page.tsx` moves into `(marketing)/` in the same change — two files claiming `/` would fail the build. (F03)
@@ -57,6 +59,12 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **Dependencies are pinned exactly, with no caret ranges.** Every version in `architecture.md` was verified to equal the current registry `latest`, so the table, the lockfile and `package.json` all agree and can only diverge by a deliberate edit. (F01)
 
 ## Security and RLS
+
+- **`revoke execute … from public` does not revoke a function from `anon` or `authenticated`.** Postgres grants EXECUTE to PUBLIC, but Supabase *additionally* sets default privileges granting it directly to `anon`, `authenticated` and `service_role`, and a revoke from PUBLIC leaves those untouched — `handle_new_user`, a `security definer` function, stayed callable by any signed-in user. Name all three roles in the revoke, and assert `has_function_privilege(...)` is false rather than assuming. Same shape as F07B's table-grant finding. (F13)
+
+- **That choice constrains F23 and F24, and `code-standards.md`'s `execute_order` example is corrected for it.** A CHECK is not deferrable and fires per statement, so setting `status = 'REJECTED'` and *then* calling `release_margin` — exactly what that example does — now fails on the first statement. The margin must be released first, or both columns written together. Making the invariant structural forces the ordering the contract already implied. (F11)
+
+- **Foreign keys cascade from `orders` and from `profiles`.** A trade without its order is meaningless and a ledger row without its order is unauditable, so an orphan is never the right outcome. `reset_account` still deletes each table explicitly per §11 — the cascade is a backstop against a future path that forgets one, not the mechanism. (F11)
 
 - **No `anon` grant on any reference table.** Every surface showing an instrument or a price is under `(terminal)`, and F04 already decided the marketing site quotes no prices. The publishable key ships in the browser bundle, so granting `anon` select would publish the entire Nifty 200 universe to anyone who reads the JavaScript. (F10)
 
@@ -97,6 +105,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **There are two Supabase CLIs on this machine** — Homebrew 2.111.0 and the project's pinned 2.115.0 dev dependency — and authenticating one does not authenticate the other. The CLI also stores its token where `~/.supabase/` shows nothing, so an absent file proves nothing; `supabase projects list` failing is the only reliable check. (1.00.03)
 
 ## Testing
+
+- **A pgTAP assertion that runs as the owning role is not filtered by RLS, so an unscoped query sees every real row in the database.** `02-constraints-money`'s cascade check ran `select user_id from public.funds` with no `where` and passed only while no account had ever been created; the first live signup broke it. Scope owner-role assertions to their fixture. Assertions under `set local role authenticated` are safe, because RLS does the scoping. (F13)
 
 - **`supabase test db` requires Docker even with `--db-url`.** It connects to the remote database, *then* shells out to `pg_prove` in a container and dies with `LegacyDockerRunError`. Tier 2 runs through `scripts/run-pgtap.mts` instead: pgTAP's functions return their TAP output as text rows, so executing a suite through `pg` and reading the rows *is* the TAP stream. (F09)
 - **pgTAP is enabled by a tracked migration, never created ad hoc by the runner.** With one project that installs a test-only extension into production, which is the lesser problem: an untracked extension the tests silently depend on means a fresh database looks healthy right up until the suite runs, and the migration history stops describing the database. (F09)
