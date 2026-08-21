@@ -50,7 +50,12 @@ export function SupportForm() {
   }
 
   const fieldErrors = state?.ok === false ? (state.error.fields ?? {}) : {}
-  const formError = state?.ok === false && !state.error.fields ? state.error.message : null
+  // Keyed off the *count*, not on `fields` being present: `{}` is truthy, so a
+  // Zod issue with an empty path — a schema-level `.refine()`, an
+  // `unrecognized_keys` — would produce an error object no field renders and
+  // then suppress the banner too, leaving the form silently unexplained.
+  const formError =
+    state?.ok === false && Object.keys(fieldErrors).length === 0 ? state.error.message : null
 
   return (
     <form action={action} noValidate className="flex max-w-prose flex-col gap-4">
