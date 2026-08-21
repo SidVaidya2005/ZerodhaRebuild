@@ -105,16 +105,16 @@ export const STACK: readonly StackEntry[] = [
   {
     layer: 'Auth',
     pkg: '@supabase/ssr',
-    version: null,
-    status: 'planned',
+    version: '0.12.4',
+    status: 'installed',
     purpose:
       'Google OAuth through Supabase Auth; session cookies and route protection in proxy.ts.',
   },
   {
     layer: 'Client SDK',
     pkg: '@supabase/supabase-js',
-    version: null,
-    status: 'planned',
+    version: '2.112.3',
+    status: 'installed',
     purpose: 'Browser, server and service-role clients.',
   },
   {
