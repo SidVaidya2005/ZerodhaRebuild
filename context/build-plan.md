@@ -129,19 +129,37 @@ is stubbed here so nothing 404s, and each stub is replaced wholesale by the feat
 
 
 
+The public landing page. Every band is a static Server Component inside the F03 shell.
+
 **UI:**
 
-- Hero with headline, subheadline, and primary sign-in CTA.
-- "What you can do" feature grid: live NSE prices, real order types, simulated funds, portfolio analytics.
-- A section explaining the CNC/MIS distinction in plain language.
-- Explicit data-honesty section describing the LIVE / DELAYED / SIMULATED badge.
+- Hero: headline, subheadline, primary sign-in CTA. **Typographic — no mock terminal UI.** The build plan specifies type and a CTA, and F40 can drop in a screenshot of the finished terminal, which beats a hand-built fake and costs less total work than building one now and replacing it.
+- `Section` band wrapper enforcing DESIGN.md's uniform `--spacing-section` (80px) rhythm and the centred 1280px cap. F05–F08 reuse it.
+- "What you can do" feature grid, four tiles: **real NSE prices, honestly delayed**; real order types; simulated funds; portfolio analytics.
+- CNC vs MIS in plain language: settlement versus same-day square-off at 15:20 IST, shorting allowed in MIS and never in CNC, and `trading-contract.md` §1's point that **neither product offers leverage** — the distinction is settlement, not margin multiples. **No charge rate is quoted here**; §3 still carries a TODO that every rate needs a dated source before F06, and a second copy on this page would be a second thing to keep in sync. Charges belong to `/pricing`.
+- Data-honesty section documenting all four provenance states — `LIVE`, `DELAYED`, `SIMULATED`, `STALE` — and stating plainly that **this build never shows `LIVE`**, because none of the three providers streams ticks. Chips are presentational and marketing-only: the real badge is F20's, and `Provenance` / `deriveSource()` do not exist yet. Toned with brand / info / muted, **never** `--color-up` or `--color-down` — DESIGN.md forbids repurposing the trading colours for any non-price meaning, and a provenance state is not a price direction.
 - Closing CTA.
+
+**Logic:**
+
+- Both CTAs reuse `SIGN_IN_HREF` from `components/marketing/nav-links.ts` rather than repeating the literal path.
+- `OPENING_BALANCE` moves into `src/lib/constants.ts` and the page renders it through `formatCurrency`. `code-standards.md` names that constant and forbids inlining it, so the copy cannot carry the figure literally even though the engine that consumes it is four phases away.
+- Page-level `metadata` export — the first in Phase 1.
+- `lighthouse` added as an exactly-pinned dev dependency with a `pnpm audit:a11y` script, recorded in `code-standards.md` → Dependencies and `CLAUDE.md` → Commands in the same commit. F38 needs the tooling regardless; landing it here means every Phase 1 page is audited as it ships.
+- No `loading.tsx` and no `error.tsx`: `code-standards.md` requires the first only for segments that fetch data and the second only for terminal segments. F08 owns the error boundary.
+- **This feature corrects this section's own earlier wording.** It previously said "live NSE prices", which `architecture.md`'s invariant makes unreachable — `PROVIDER_IS_REALTIME` is `false` for all three providers, so a quote can only badge `DELAYED`, `SIMULATED` or `STALE`. Architecture invariants outrank a build-plan feature, and `project-overview.md`'s success criteria already require the badge not to overclaim.
 
 **Verify:**
 
-- Page renders with static content and no client-side data fetching.
-- Every CTA routes to `/auth/login`.
-- Lighthouse accessibility score above 90 on the rendered page.
+- Every CTA routes to `/auth/login`: in the served HTML for `/`, every `<a>` whose text contains "Sign in" has `href="/auth/login"`, and grepping the marketing components and pages shows the literal path only in `nav-links.ts`.
+- The page is static with no client-side data fetching: `pnpm build` marks `/` as `○ (Static)`; grepping the new components for `use client`, `fetch(`, `useEffect` and `useState` returns nothing; and loading `/` records no XHR or fetch entry in `performance.getEntriesByType('resource')` beyond fonts, CSS and JS chunks.
+- `pnpm audit:a11y` against the served production build scores **above 90** on accessibility, read out of the JSON — record the actual number in the journal, not "it passed".
+- The page never claims prices are live: `grep -rin "live" src/components/marketing "src/app/(marketing)"` returns only the honesty section's explanation that `LIVE` is a state this build never enters.
+- The opening balance is not hardcoded: change `OPENING_BALANCE` in `constants.ts`, confirm the figure rendered on `/` changes with it, revert.
+- The CNC/MIS copy matches `trading-contract.md` read side by side — no leverage claim, CNC shorting stated as impossible, square-off stated as 15:20 IST, and no charge rate anywhere on the page.
+- Both themes and 375px hold: toggling flips every band with none left behind, and `document.documentElement.scrollWidth === 375` at that width.
+- The F02/F03 guards stay green: `dark:` in `.tsx`, bridge token names outside `ui/`, and hex literals inside `className` all return zero hits; `--color-up` and `--color-down` appear nowhere in the new components.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### 05 About page
 
@@ -889,6 +907,7 @@ Every page in `project-overview.md` exists and is wired to real data. Walk the f
 - Keyboard navigation throughout; visible focus rings; a search shortcut.
 - Labels on every input, `aria-live` on the market status and toasts.
 - Contrast checked in both themes — including P&L red and green against both backgrounds.
+- **Known failure to resolve here, found in F04:** `--color-muted` (#707a8a) fails WCAG AA for normal text in **both** themes, and for opposite reasons — 3.64:1 on the dark `--color-surface`, 4.34:1 on light `#ffffff`. `--color-muted-strong` is not the fix: being lighter, it helps on dark (5.56:1) and makes light **worse** (2.84:1). The muted tokens have no `.light` override, so resolving this means giving them one — a darker muted in light, a lighter one in dark — and re-running `pnpm audit:a11y` on every public route. F04 retoned running copy to `--color-body`, which is what DESIGN.md prescribes anyway; what remains failing is `muted` in its **sanctioned** uses (footer links, captions, column headers), which is a genuine gap in the extracted system rather than a misuse.
 
 **Verify:**
 
