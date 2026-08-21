@@ -87,3 +87,39 @@ export async function countScratchRows(): Promise<number | null> {
     await client.end().catch(() => undefined)
   }
 }
+
+/**
+ * Removes every account tier 3 created, identified by the `zr-race-` email
+ * prefix. Deleting the `auth.users` row cascades to profiles, funds, the ledger
+ * and the watchlist, so this one statement is the whole cleanup.
+ *
+ * Runs in `afterEach` including after a failure — a signup test that throws
+ * halfway is exactly the case that would otherwise leave real accounts behind.
+ */
+export async function cleanupRaceAccounts(): Promise<number> {
+  const client = new Client({ connectionString: connectionString() })
+  try {
+    await client.connect()
+    const { rowCount } = await client.query(`delete from auth.users where email like $1`, [
+      `${RACE_PREFIX}%`,
+    ])
+    return rowCount ?? 0
+  } finally {
+    await client.end().catch(() => undefined)
+  }
+}
+
+/** How many tier-3 accounts are currently in the database. */
+export async function countRaceAccounts(): Promise<number> {
+  const client = new Client({ connectionString: connectionString() })
+  try {
+    await client.connect()
+    const { rows } = await client.query(
+      `select count(*)::int as n from auth.users where email like $1`,
+      [`${RACE_PREFIX}%`]
+    )
+    return rows[0]?.n ?? 0
+  } finally {
+    await client.end().catch(() => undefined)
+  }
+}
