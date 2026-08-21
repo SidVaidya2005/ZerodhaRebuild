@@ -780,6 +780,12 @@ into a pipeline that has already been exercised rather than into an untested one
   pgTAP can test the union and its ordering directly. Ordered by `priority desc,
   last_requested_at desc` and capped by `MAX_SYMBOLS_PER_TICK`, so batch size is bounded by the
   limiter and never by the size of the universe.
+- `roll_previous_close()` runs first inside the gate, before any price is read. `quotes.prev_close`
+  is what a day change divides by and what the simulator's band is measured from; seeded from
+  bhavcopy and never advanced, it pinned both to the day the universe was seeded. The roll is
+  derived from each row's `fetched_at` rather than fired by a scheduled event, so a missed tick
+  repairs itself and it cannot double-apply within a session. Added at the Phase 2 checkpoint to
+  unblock F18.
 - **`match_open_orders` and `square_off_mis` are not called yet** — they are built in F28 and F29,
   which wire them in. `code-standards.md`'s Edge Function example shows both, so it gains a note
   rather than being left to mislead.
@@ -872,13 +878,11 @@ and left in the other. Verified by running tiers 2 and 3 green against a CRLF co
 
 - Search input opening a `Command` palette over the instrument universe.
 - Rows: symbol, exchange tag, LTP, absolute and percentage change, coloured by direction.
-  - **Blocked until `quotes.prev_close` rolls.** This is the first surface to render a day change,
-    and the column it would divide by is a static bhavcopy seed that nothing advances at a session
-    boundary — so the figure would be measured against a frozen close, and the simulator's ±5% band
-    is anchored to that same frozen value. Either this feature adds the session roll (at each open,
-    yesterday's closing `ltp` becomes the new `prev_close`) or the change column waits for the
-    feature that does. Found by the Phase 2 review; `constraints.md` → Quote providers has the
-    detail. F30's holdings day change and F33's header carry the same dependency.
+  - The change is computed against `quotes.prev_close`, which **rolls at the first tick of each
+    session** — `roll_previous_close()`, added at the Phase 2 checkpoint. Before that it was the
+    frozen bhavcopy seed, so this column would have divided by the day the universe was seeded and
+    the simulator's ±5% band was pinned to the same value. Nothing further is needed here; F30's
+    holdings day change and F33's header read the same rolled column.
 - Hover reveals B / S / chart / remove actions.
 - Drag to reorder; empty state when the watchlist is cleared.
 

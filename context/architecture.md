@@ -162,6 +162,11 @@ pg_cron ('* 3-10 * * 1-5' — UTC, ≈ 08:30–16:29 IST; a coarse cost window, 
   └─> net.http_post → Edge Function `market-tick`
         ├─ isTradingSession() — IST clock + NSE holiday calendar
         │    └─ closed? return { ok: true, skipped: 'MARKET_CLOSED' } and write nothing
+        ├─ roll_previous_close()  — first tick of a session carries each stale
+        │    quote's ltp into its prev_close, so the day change and the
+        │    simulator's ±5% band measure from the previous session, not from
+        │    the bhavcopy seed. Derived from fetched_at, so a missed tick repairs
+        │    itself and it cannot double-apply (F16).
         ├─ select_demanded_symbols(MAX_SYMBOLS_PER_TICK)  — a SQL function, so pgTAP
         │    can test the union directly. OPEN orders ∪ holdings ∪ positions ∪
         │    symbol_demand ∪ watchlists, deduplicated, ranked, capped. Watchlists

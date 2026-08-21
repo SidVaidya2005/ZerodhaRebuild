@@ -660,8 +660,9 @@ The US control proves the key and the endpoint shape are fine, so this is a **pl
 
 ### Simulator — final fallback, always available
 
-- Seeds from the last known `quotes` row for the symbol; if none exists, from `instruments` reference data.
-- Produces a bounded random walk (geometric, clamped to ±5% of previous close per session) so figures stay plausible.
+- **The walk's starting point and the band's anchor are two different things**, and conflating them removes the band. It *starts* from the last known `quotes.ltp`, falling back to `instruments.prev_close`; it is *clamped* to ±5% of `quotes.prev_close`, falling back to that same seed only on a cold start.
+- "Per session" is load-bearing. `quotes.prev_close` is rolled at the first in-session tick by `roll_previous_close()`, so each session's band is measured from the previous session's close. Anchoring on `instruments.prev_close` instead — which never moves — pins every price within 5% of the day the universe was seeded, forever; anchoring on the *last price* removes the bound altogether, because the band then re-centres on the walk every tick.
+- A symbol with no previous close at all is **declined**, not walked unbounded. `isAvailable` reports false for it.
 - Always writes `provider = 'SIMULATOR'` and a null `provider_ts`, which `deriveSource()` renders as `SIMULATED`. Never label simulated data as anything else — the badge is the project's honesty guarantee.
 
 ---

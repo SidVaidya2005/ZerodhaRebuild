@@ -32,8 +32,14 @@ type TickResult =
   | { ok: false; error: string }
 
 /**
- * The anchors the simulator walks from: the last observed price, falling back to
- * the published NSE close seeded into `instruments.prev_close` (F15).
+ * The anchors the simulator walks from: the last observed price, and the close
+ * its ±5% band is measured against.
+ *
+ * **`quotes.prev_close` wins over `instruments.prev_close`.** The former is
+ * rolled at each session open by `roll_previous_close`; the latter is the
+ * bhavcopy seed and never moves. Reading the seed here is what trapped every
+ * simulated price within 5% of the day the universe was seeded. The seed is
+ * still the fallback, because on a cold start it is the only close there is.
  */
 async function loadAnchors(
   supabase: SupabaseClient,
@@ -41,21 +47,28 @@ async function loadAnchors(
 ): Promise<SymbolAnchor[]> {
   const [instruments, quotes] = await Promise.all([
     supabase.from('instruments').select('symbol, prev_close').in('symbol', symbols),
-    supabase.from('quotes').select('symbol, ltp').in('symbol', symbols),
+    supabase.from('quotes').select('symbol, ltp, prev_close').in('symbol', symbols),
   ])
 
   if (instruments.error) throw instruments.error
   if (quotes.error) throw quotes.error
 
-  const lastPrice = new Map<string, number>(
-    (quotes.data ?? []).map((row: { symbol: string; ltp: number }) => [row.symbol, Number(row.ltp)])
+  const stored = new Map<string, { ltp: number; prevClose: number | null }>(
+    (quotes.data ?? []).map((row: { symbol: string; ltp: number; prev_close: number | null }) => [
+      row.symbol,
+      { ltp: Number(row.ltp), prevClose: row.prev_close === null ? null : Number(row.prev_close) },
+    ])
   )
 
-  return (instruments.data ?? []).map((row: { symbol: string; prev_close: number | null }) => ({
-    symbol: row.symbol,
-    lastPrice: lastPrice.get(row.symbol) ?? null,
-    prevClose: row.prev_close === null ? null : Number(row.prev_close),
-  }))
+  return (instruments.data ?? []).map((row: { symbol: string; prev_close: number | null }) => {
+    const seeded = row.prev_close === null ? null : Number(row.prev_close)
+    const quote = stored.get(row.symbol)
+    return {
+      symbol: row.symbol,
+      lastPrice: quote?.ltp ?? null,
+      prevClose: quote?.prevClose ?? seeded,
+    }
+  })
 }
 
 async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
@@ -65,6 +78,13 @@ async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
   if (!(await isTradingSession(supabase, now))) {
     return { ok: true, skipped: 'MARKET_CLOSED', at: now.toISOString() }
   }
+
+  // Before anything is read for pricing: if this is the first tick of a session,
+  // carry each stale quote's last price into its `prev_close`. The day change and
+  // the simulator's band are both measured from that column, so rolling it after
+  // `loadAnchors` would anchor this whole tick to yesterday.
+  const { error: rollError } = await supabase.rpc('roll_previous_close')
+  if (rollError) throw rollError
 
   const { data: demanded, error: demandError } = await supabase.rpc('select_demanded_symbols', {
     p_limit: MAX_SYMBOLS_PER_TICK,

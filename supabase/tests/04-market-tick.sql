@@ -4,7 +4,7 @@
 -- decision it delegates to the database — which symbols are worth a request this
 -- minute, in what order, and bounded by what.
 begin;
-select plan(13);
+select plan(22);
 
 -- ── Who may call it ─────────────────────────────────────────────────────────
 -- It reads every user's holdings, positions and watchlists and is `security
@@ -137,6 +137,74 @@ select is(
   (select count(*)::int from public.select_demanded_symbols(200) where symbol = 'RELIANCE'),
   0,
   'a delisted symbol is never sent to a provider, however much it is watched'
+);
+
+-- ── Rolling the previous close ──────────────────────────────────────────────
+-- `quotes.prev_close` is what a day change divides by and what the simulator's
+-- ±5% band is measured from. Seeded from bhavcopy and never advanced, it would
+-- pin both to the day the universe was seeded.
+
+select has_function(
+  'public', 'roll_previous_close', array['date'],
+  'the roll function exists'
+);
+
+select ok(
+  not has_function_privilege('authenticated', 'public.roll_previous_close(date)', 'execute'),
+  'a signed-in user cannot rewrite every price''s baseline'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.roll_previous_close(date)', 'execute'),
+  'and neither can an anonymous one'
+);
+
+delete from public.quotes;
+
+-- Three rows: one from a previous session, one already written today, and one
+-- whose previous close already equals its last price.
+insert into public.quotes (symbol, ltp, prev_close, provider, fetched_at) values
+  ('RELIANCE', 1400.00, 1316.00, 'SIMULATOR', '2026-08-20T10:00:00+05:30'),
+  ('TCS',      3100.00, 3000.00, 'SIMULATOR', '2026-08-21T10:00:00+05:30'),
+  ('INFY',      900.00,  900.00, 'SIMULATOR', '2026-08-20T10:00:00+05:30');
+
+select is(
+  public.roll_previous_close('2026-08-21'),
+  1,
+  'only the stale row with something to roll is touched'
+);
+
+select is(
+  (select prev_close from public.quotes where symbol = 'RELIANCE'),
+  1400.00::numeric,
+  'a previous session''s last price becomes this session''s previous close'
+);
+
+select is(
+  (select prev_close from public.quotes where symbol = 'TCS'),
+  3000.00::numeric,
+  'a row already written this session is left alone'
+);
+
+select is(
+  public.roll_previous_close('2026-08-21'),
+  0,
+  'running it again in the same session rolls nothing — the tick calls it every minute'
+);
+
+-- A symbol nobody demanded for several sessions: the honest previous close is
+-- the last price actually observed, so its day change reads as zero rather than
+-- being invented from a figure no one saw.
+select is(
+  public.roll_previous_close('2026-09-01'),
+  1,
+  'a gap of several sessions still rolls from the last price actually seen'
+);
+
+select is(
+  (select prev_close from public.quotes where symbol = 'TCS'),
+  3100.00::numeric,
+  'and it rolls to that price, not to anything interpolated for the sessions missed'
 );
 
 select * from finish();
