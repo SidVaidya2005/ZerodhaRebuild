@@ -1,4 +1,4 @@
-import type { QuoteProviderName } from '@/lib/market/provenance'
+import type { QuoteProviderName } from './provenance.ts'
 
 /**
  * The seam a real provider drops into.

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { SIMULATOR_MAX_MOVE_PCT } from '@/lib/constants'
-import { createSimulatorProvider } from '@/lib/market/providers/simulator'
-import { deriveSource } from '@/lib/market/provenance'
+import { createSimulatorProvider } from '@shared/simulator.ts'
+import { deriveSource } from '@shared/provenance.ts'
 
 /** A deterministic stand-in for Math.random, so a series is reproducible. */
 function seededRandom(seed: number): () => number {

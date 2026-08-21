@@ -84,65 +84,23 @@ export const DP_CHARGE_BASE = 13.0
 /** What the pricing page displays, because it is the figure on a real contract note. */
 export const DP_CHARGE_INCLUSIVE = 15.34
 
-/* ── Market hours (F15) ─────────────────────────────────────────────────────
+/* ── Market, quote and simulator values ─────────────────────────────────────
  *
- * All of these are IST minutes-from-midnight. India has observed no daylight
- * saving since 1945, so Asia/Kolkata is a permanent UTC+05:30 — which is why
- * the session arithmetic can use a fixed offset instead of a timezone database.
- * `market-hours.test.ts` checks that assumption against `Intl` rather than
- * trusting it.
+ * Defined in `supabase/functions/_shared/market-constants.ts` and re-exported
+ * here, because the Edge Function needs them too and cannot resolve the `@/`
+ * alias. App code still imports every one of them from this module, so
+ * `code-standards.md` → Import Conventions is unchanged.
  */
-
-/** Asia/Kolkata's fixed offset from UTC, in minutes. */
-export const IST_OFFSET_MINUTES = 330
-
-/** NSE's pre-open call auction. Not stated in the project docs — see F15. */
-export const PRE_OPEN_START_IST = 9 * 60
-
-/** Continuous trading opens. `project-overview.md`: 09:15–15:30 IST. */
-export const MARKET_OPEN_IST = 9 * 60 + 15
-
-/** Continuous trading closes. */
-export const MARKET_CLOSE_IST = 15 * 60 + 30
-
-/** `trading-contract.md` §10: every open MIS position is exited at or after this. */
-export const SQUARE_OFF_TIME_IST = 15 * 60 + 20
-
-/* ── Quote freshness (F15) ──────────────────────────────────────────────────
- *
- * These three are **unmeasured**. `architecture.md` carries a standing TODO to
- * measure Yahoo's real `regularMarketTime` lag during an open session, which
- * cannot be done while Yahoo is deferred to the end of the project. They are
- * deliberate assumptions, and the numbers should be revisited from data the
- * first time a real provider runs during market hours.
- */
-
-/**
- * A fill may not use a quote older than this (`trading-contract.md` §5).
- * The tick writes every minute, so five minutes means roughly five consecutive
- * failed ticks before orders stop filling — deliberately stricter than the
- * display windows below, because this one decides whether money moves.
- */
-export const QUOTE_STALE_AFTER_MS = 5 * 60 * 1000
-
-/**
- * Beyond this age a displayed price badges STALE rather than DELAYED.
- * Not interchangeable with the constant above: this one decides a label, that
- * one decides a fill.
- */
-export const QUOTE_DELAYED_WINDOW_MS = 15 * 60 * 1000
-
-/**
- * Inert by construction. A quote can only badge LIVE if its provider declares
- * itself realtime, and none does — every provider here polls. The window exists
- * so the rule is expressible, not because anything satisfies it.
- */
-export const QUOTE_LIVE_WINDOW_MS = 5 * 1000
-
-/* ── Simulator (F15) ────────────────────────────────────────────────────────*/
-
-/** The random walk never strays further than this from its session anchor. */
-export const SIMULATOR_MAX_MOVE_PCT = 0.05
-
-/** Standard deviation of a single simulated step, as a fraction of price. */
-export const SIMULATOR_STEP_VOLATILITY = 0.0015
+export {
+  IST_OFFSET_MINUTES,
+  MARKET_CLOSE_IST,
+  MARKET_OPEN_IST,
+  MAX_SYMBOLS_PER_TICK,
+  PRE_OPEN_START_IST,
+  QUOTE_DELAYED_WINDOW_MS,
+  QUOTE_LIVE_WINDOW_MS,
+  QUOTE_STALE_AFTER_MS,
+  SIMULATOR_MAX_MOVE_PCT,
+  SIMULATOR_STEP_VOLATILITY,
+  SQUARE_OFF_TIME_IST,
+} from '@shared/market-constants.ts'

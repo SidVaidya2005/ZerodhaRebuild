@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { createSimulatorProvider } from '@/lib/market/providers/simulator'
-import type { ProviderQuote, QuoteProvider } from '@/lib/market/providers/types'
-import { createQuoteService } from '@/lib/market/quote-service'
+import { createSimulatorProvider } from '@shared/simulator.ts'
+import type { ProviderQuote, QuoteProvider } from '@shared/provider-types.ts'
+import { createQuoteService } from '@shared/quote-service.ts'
 
 const ANCHORS = [{ symbol: 'RELIANCE', lastPrice: null, prevClose: 1316 }]
 

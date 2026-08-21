@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { QUOTE_DELAYED_WINDOW_MS, QUOTE_LIVE_WINDOW_MS } from '@/lib/constants'
-import { deriveSource, worstSource, type QuoteProviderName } from '@/lib/market/provenance'
+import { deriveSource, worstSource, type QuoteProviderName } from '@shared/provenance.ts'
 
 const NOW = new Date('2026-08-21T10:00:00Z')
 const agoMs = (ms: number) => new Date(NOW.getTime() - ms)

@@ -8,6 +8,10 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noEmit": true,
+    // The `_shared` modules are imported by Deno as well, which requires an
+    // explicit `.ts` on every specifier. Next's build never emits from here, so
+    // permitting the extension costs nothing and keeps one spelling for both.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
@@ -21,7 +25,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@shared/*": ["./supabase/functions/_shared/*"]
     }
   },
   "include": [

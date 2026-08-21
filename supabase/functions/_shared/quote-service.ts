@@ -1,4 +1,4 @@
-import type { ProviderQuote, QuoteProvider } from './providers/types'
+import type { ProviderQuote, QuoteProvider } from './provider-types.ts'
 
 /**
  * Walks the providers in order and returns the first usable answer, with a

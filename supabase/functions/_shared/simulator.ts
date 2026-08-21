@@ -1,6 +1,6 @@
-import { SIMULATOR_MAX_MOVE_PCT, SIMULATOR_STEP_VOLATILITY } from '@/lib/constants'
+import { SIMULATOR_MAX_MOVE_PCT, SIMULATOR_STEP_VOLATILITY } from './market-constants.ts'
 
-import type { ProviderQuote, QuoteProvider, SymbolAnchor } from './types'
+import type { ProviderQuote, QuoteProvider, SymbolAnchor } from './provider-types.ts'
 
 /**
  * The provider of last resort, and — while Yahoo is deferred — the only one that

@@ -1,4 +1,4 @@
-import { QUOTE_DELAYED_WINDOW_MS, QUOTE_LIVE_WINDOW_MS } from '@/lib/constants'
+import { QUOTE_DELAYED_WINDOW_MS, QUOTE_LIVE_WINDOW_MS } from './market-constants.ts'
 
 /**
  * The honesty guarantee, implemented as a derivation rather than a stored flag.

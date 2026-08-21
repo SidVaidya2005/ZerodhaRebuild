@@ -22,6 +22,9 @@ export default defineConfig({
       // vite-tsconfig-paths is not an approved dependency, so the alias is declared here
       // and must be kept in step with the `paths` entry in tsconfig.json.
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // The Edge Function's shared logic, imported by the app and by tier 1.
+      // Deno resolves these paths with an explicit `.ts`, which Vite strips.
+      '@shared': fileURLToPath(new URL('./supabase/functions/_shared', import.meta.url)),
       // `server-only` throws unless resolved under React's "react-server" condition,
       // which the node test environment does not set. Point it at the package's own
       // empty entry so the guarded module can be unit tested. This does not weaken the
