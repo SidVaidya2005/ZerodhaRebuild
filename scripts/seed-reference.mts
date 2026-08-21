@@ -25,6 +25,8 @@ import { exit } from 'node:process'
 
 import { createClient } from '@supabase/supabase-js'
 
+import { readEnvFile } from './env-file.mts'
+
 const SEED_DIR = join(process.cwd(), 'supabase', 'seed')
 
 type Instrument = {
@@ -50,17 +52,19 @@ function fail(message: string): never {
  * which is application code this script must not import.
  */
 function loadEnv(): { url: string; serviceRoleKey: string } {
-  let raw: string
-  try {
-    raw = readFileSync(join(process.cwd(), '.env.local'), 'utf8')
-  } catch {
+  // Shared with the tier 2 and tier 3 runners. This script used to carry its own
+  // copy of the same `[^"\n]+` regex those two had, which silently appends a
+  // carriage return on a CRLF file — here that means a service role key that
+  // fails auth with no hint as to why.
+  const values = readEnvFile('.env.local')
+  if (!values) {
     fail('.env.local is missing. It holds the project URL and the service role key.')
   }
 
   const read = (key: string): string => {
-    const match = raw.match(new RegExp(`^${key}\\s*=\\s*"?([^"\\n]+)"?`, 'm'))
-    if (!match?.[1]) fail(`${key} is not set in .env.local.`)
-    return match[1]
+    const value = values[key]
+    if (!value) fail(`${key} is not set in .env.local.`)
+    return value
   }
 
   return {

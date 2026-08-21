@@ -35,7 +35,18 @@ export async function proxy(request: NextRequest) {
     // page they asked for. `/auth/callback` re-validates it through safeNext().
     url.search = ''
     url.searchParams.set('next', request.nextUrl.pathname + request.nextUrl.search)
-    return NextResponse.redirect(url)
+
+    // Carry over whatever this pass wrote onto `response`. The case that matters
+    // is an expired refresh token: `getUser()` fails, `@supabase/ssr` calls
+    // setAll to *clear* the `sb-<ref>-auth-token` chunks, and returning a bare
+    // redirect would drop those Set-Cookie headers — leaving the dead chunks in
+    // the browser on every subsequent request. That is the HTTP 431 this
+    // project already documents, arrived at from the other direction.
+    const redirect = NextResponse.redirect(url)
+    for (const cookie of response.cookies.getAll()) {
+      redirect.cookies.set(cookie)
+    }
+    return redirect
   }
 
   // Returned unmodified. Attaching anything to a different response object drops

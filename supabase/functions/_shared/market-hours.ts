@@ -163,7 +163,19 @@ export async function loadHolidays(supabase: HolidayReader): Promise<HolidaySet>
     throw new Error('MARKET_CALENDAR_UNAVAILABLE')
   }
 
-  return new Set((data ?? []).map((row) => row.trading_date))
+  // **An empty calendar is a failure, not a year without holidays.** Guarding
+  // only the error case left the exact hole this function's comment describes:
+  // a successful read of zero rows — the seed never run against a new
+  // environment, the rows dropped, a caller whose role cannot see the table —
+  // turns every holiday into a trading day, silently. NSE publishes ~15 a year
+  // and `03-reference-data.sql` asserts at least 10 are present, so zero can
+  // only mean something is wrong.
+  if (!data || data.length === 0) {
+    console.error('[market-hours.loadHolidays] the calendar is empty')
+    throw new Error('MARKET_CALENDAR_UNAVAILABLE')
+  }
+
+  return new Set(data.map((row) => row.trading_date))
 }
 
 /** The gate the tick and the order functions ask before doing anything. */

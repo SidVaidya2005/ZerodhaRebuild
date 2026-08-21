@@ -219,8 +219,19 @@ describe('the database-backed wrappers', () => {
   })
 
   it('reports the status the pill renders', async () => {
-    const client = fakeClient({ data: [] })
+    const client = fakeClient({ data: [{ trading_date: '2026-01-26' }] })
     const status = await getMarketStatus(client, ist('2026-08-20', '09:05:00'))
     expect(status.state).toBe('PRE_OPEN')
+  })
+
+  it('treats an empty calendar as unavailable, not as a year without holidays', async () => {
+    // The other half of the failure above, and the one that reads as success. A
+    // clean read of zero rows — seed never run, rows dropped, a role that cannot
+    // see the table — would otherwise make every holiday a trading day with
+    // nothing in the logs. NSE publishes ~15 a year, so zero is always wrong.
+    await expect(loadHolidays(fakeClient({ data: [] }))).rejects.toThrow(
+      'MARKET_CALENDAR_UNAVAILABLE'
+    )
+    await expect(loadHolidays(fakeClient({}))).rejects.toThrow('MARKET_CALENDAR_UNAVAILABLE')
   })
 })

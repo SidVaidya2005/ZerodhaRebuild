@@ -55,12 +55,24 @@ export function createSimulatorProvider(options: SimulatorOptions): QuoteProvide
   /** The price each symbol is currently at, carried across calls. */
   const current = new Map<string, number>()
 
+  /**
+   * What the ±5% band is measured from: the published close, and **only** that.
+   *
+   * Falling back to the last price here is what an earlier version did, and it
+   * quietly removed the bound it looks like it preserves. The service is built
+   * fresh every tick, so `current` is always empty and the seed is the last price —
+   * meaning the band would be re-centred on wherever the walk had already got
+   * to, every minute. ±5% per tick compounds into an unbounded walk over days,
+   * which is the opposite of a clamp.
+   */
+  function anchorFor(symbol: string): number | null {
+    return anchors.get(symbol)?.prevClose ?? null
+  }
+
+  /** Where the walk starts: where trading actually got to, else the close. */
   function seedFor(symbol: string): number | null {
     const anchor = anchors.get(symbol)
     if (!anchor) return null
-    // Last observed price first, falling back to the published close. With
-    // neither, this symbol has no basis for a price and is skipped — inventing
-    // one is the thing this provider must not do.
     return anchor.lastPrice ?? anchor.prevClose
   }
 
@@ -68,26 +80,27 @@ export function createSimulatorProvider(options: SimulatorOptions): QuoteProvide
     name: 'SIMULATOR',
 
     async isAvailable(symbols) {
-      // Available only for symbols it can actually anchor. A fresh listing with
-      // no close and no prior quote makes it unavailable rather than creative.
-      return symbols.some((symbol) => seedFor(symbol) !== null)
+      // Available only for symbols it can bound. A fresh listing between two
+      // bhavcopies has no close, so it is declined rather than walked without a
+      // band — even if a prior quote exists to start from.
+      return symbols.some((symbol) => anchorFor(symbol) !== null)
     },
 
     async fetchQuotes(symbols) {
       const quotes: ProviderQuote[] = []
 
       for (const symbol of symbols) {
+        const anchor = anchorFor(symbol)
         const seed = seedFor(symbol)
-        if (seed === null) continue
+        if (anchor === null || seed === null) continue
 
-        const anchor = anchors.get(symbol)?.prevClose ?? seed
         const price = nextPrice(current.get(symbol) ?? seed, anchor, random)
         current.set(symbol, price)
 
         quotes.push({
           symbol,
           ltp: price,
-          prevClose: anchors.get(symbol)?.prevClose ?? null,
+          prevClose: anchor,
           dayOpen: null,
           dayHigh: null,
           dayLow: null,

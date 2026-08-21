@@ -44,6 +44,20 @@ describe('anchoring', () => {
     expect(quote!.ltp).toBeGreaterThan(1350)
   })
 
+  it('declines a symbol with a prior price but no published close', async () => {
+    // The band is measured from `prev_close`. With none, an earlier version
+    // centred it on the last price instead — and since the service is rebuilt
+    // every tick, that re-centred the band on wherever the walk had reached,
+    // turning a ±5% session clamp into ±5% *per tick* and an unbounded walk over
+    // days. Declining is the documented behaviour: unavailable, not creative.
+    const provider = createSimulatorProvider({
+      anchors: [{ symbol: 'NEWLISTING', lastPrice: 250, prevClose: null }],
+      random: seededRandom(4),
+    })
+    expect(await provider.isAvailable(['NEWLISTING'])).toBe(false)
+    expect(await provider.fetchQuotes(['NEWLISTING'])).toEqual([])
+  })
+
   it('refuses to invent a price when it has no anchor at all', async () => {
     const provider = createSimulatorProvider({
       anchors: [{ symbol: 'NEWLISTING', lastPrice: null, prevClose: null }],
