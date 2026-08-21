@@ -30,6 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# supabase CLI scratch state — holds the linked project ref and pooler host
+supabase/.temp
+
 # env files — the example is committed, every real one is not
 .env*
 !.env.example
