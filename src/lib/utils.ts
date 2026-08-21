@@ -25,6 +25,12 @@ const percentFormatter = new Intl.NumberFormat('en-IN', {
   maximumFractionDigits: 2,
 })
 
+/** Charge rates run to five decimals (0.00307%) and carry no trailing zeros. */
+const rateFormatter = new Intl.NumberFormat('en-IN', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 5,
+})
+
 const quantityFormatter = new Intl.NumberFormat('en-IN', {
   maximumFractionDigits: 0,
 })
@@ -50,6 +56,21 @@ export function formatSignedCurrency(value: number): string {
 /** `5.23%`. Takes a percentage, not a ratio — pass 5.23 for 5.23%. */
 export function formatPercent(value: number): string {
   return `${percentFormatter.format(value)}%`
+}
+
+/**
+ * `0.00307%`, `0.1%`, `18%` — a statutory charge rate, which needs far more
+ * precision than a P&L percentage and no trailing zeros.
+ *
+ * `formatPercent` is fixed at 2dp because that is right for day change, but it
+ * renders 0.00307% as "0.00%" and 0.015% as "0.02%" — wrong numbers on the
+ * pricing page rather than merely imprecise ones. Hence a separate function
+ * rather than a flag: the two have genuinely different jobs.
+ *
+ * Takes a percentage, not a ratio — pass 0.00307 for 0.00307%.
+ */
+export function formatRate(value: number): string {
+  return `${rateFormatter.format(value)}%`
 }
 
 /** `+5.23%` / `−5.23%`, for day change and returns. */

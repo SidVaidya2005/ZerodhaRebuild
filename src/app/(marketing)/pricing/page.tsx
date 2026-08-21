@@ -1,13 +1,21 @@
-// Placeholder so the public shell has no dead links. Feature 06 replaces
-// this file wholesale — nothing here is meant to survive.
+import type { Metadata } from 'next'
+
+import { ChargesTable } from '@/components/marketing/ChargesTable'
+import { PlanCard } from '@/components/marketing/PlanCard'
+import { WorkedExample } from '@/components/marketing/WorkedExample'
+
+export const metadata: Metadata = {
+  title: 'Pricing — ZerodhaRebuild',
+  description:
+    'The charge structure the simulated order engine applies: zero delivery brokerage, capped intraday brokerage, STT, exchange and SEBI charges, stamp duty, GST and DP charges, with a worked round trip.',
+}
+
 export default function PricingPage() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-section md:px-6">
-      <h1 className="text-display-sm font-semibold text-ink">Pricing</h1>
-      <p className="mt-4 max-w-prose text-body text-muted">
-        The exact charge structure the order engine applies — brokerage, STT, GST, stamp duty and
-        the rest. Not written yet.
-      </p>
-    </div>
+    <>
+      <PlanCard />
+      <ChargesTable />
+      <WorkedExample />
+    </>
   )
 }

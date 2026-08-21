@@ -5,6 +5,7 @@ import {
   formatCurrency,
   formatPercent,
   formatQuantity,
+  formatRate,
   formatSignedCurrency,
   formatSignedPercent,
 } from '@/lib/utils'
@@ -66,5 +67,20 @@ describe('cn', () => {
 
   it('drops falsey values', () => {
     expect(cn('text-body', false && 'hidden', undefined)).toBe('text-body')
+  })
+})
+
+describe('formatRate', () => {
+  it('keeps the precision a statutory rate needs', () => {
+    // formatPercent would render these as 0.00% and 0.02% — wrong, not just coarse.
+    expect(formatRate(0.00307)).toBe('0.00307%')
+    expect(formatRate(0.015)).toBe('0.015%')
+    expect(formatRate(0.0001)).toBe('0.0001%')
+  })
+
+  it('drops trailing zeros', () => {
+    expect(formatRate(18)).toBe('18%')
+    expect(formatRate(0.1)).toBe('0.1%')
+    expect(formatRate(0.03)).toBe('0.03%')
   })
 })
