@@ -850,25 +850,57 @@ and left in the other. Verified by running tiers 2 and 3 green against a CRLF co
 
 ### 17 Terminal shell layout
 
-
+The chrome every terminal page sits inside, and placeholder pages for all eight guarded routes so
+navigation never 404s. A layout feature: no prices, no watchlist contents, no dashboard widgets.
 
 **UI:**
 
-- Top nav: logo, market index strip (NIFTY 50, SENSEX, BANK NIFTY), nav links, funds summary, avatar menu.
-- Left watchlist sidebar container, collapsible on mobile.
+- Top nav: logo, index-strip slot, nav links, funds summary, avatar menu.
+- **The index strip ships as a slot with no values.** NIFTY 50, SENSEX and BANK NIFTY exist nowhere
+  in the data — `instruments` holds 200 NSE equities, so there is no row, no quote and no simulator
+  anchor for any of them, and SENSEX is BSE against an NSE-only scope. Three invented numbers in the
+  most prominent chrome on the page is the worst place in the app to fabricate data. The strip
+  renders its labels and an explicit awaiting-source state; **index data moves to F21**, where
+  `project-overview.md` already puts an index strip.
+- Left watchlist sidebar container, collapsing to a shadcn `Sheet` under 768px per `DESIGN.md`. Its
+  contents are F18's; F17 ships the container and an empty state.
 - Content region at the system's dense type scale (`--text-body`, `--text-number` in tables).
-- Market status pill: PRE-OPEN / OPEN / CLOSED with the next transition time.
+- **Market status pill: PRE-OPEN / OPEN / CLOSED with the next transition time, recomputed on a
+  timer.** It is F17's, not F20's — F20's UI and Logic bullets are entirely the data-source badge
+  despite its title. A server-rendered-once pill leaves a tab open past 15:30 still reading OPEN, so
+  the server passes the holiday set as a `string[]` and a client component calls the same pure
+  `marketStatusAt` the tick gates on.
 
 **Logic:**
 
-- `(terminal)` route-group layout loading the session, profile, and funds server-side.
-- Placeholder routes for every terminal page so navigation never 404s.
+- `(terminal)` route-group layout: `getUser()` and redirect on absence, then load profile, funds and
+  the holiday calendar once and compose the shell.
+- **The layout checks the session; pages trust it.** `dashboard/page.tsx` re-checked it itself on the
+  argument that `src/proxy.ts` is only a convenience; with a layout that buys nothing, because every
+  page beneath reads through RLS-scoped queries that return nothing without a session. One
+  `getUser()` per navigation, and no future page can forget.
+- `msUntilNextRecompute(status, now)` in `src/lib/terminal/pill.ts` — `min(30s, nextTransition - now)`
+  so the pill flips *on* the boundary rather than up to 30 seconds late. Pure, so tier 1 can drive it.
+- Placeholder pages for `/orders`, `/holdings`, `/positions`, `/funds`, `/reports`, `/settings` and
+  `/stocks/[symbol]`, plus `/dashboard` rewritten as one — a shared `TerminalPlaceholder` keeps them
+  thin, as F03 did for the public routes.
 
 **Verify:**
 
-- Every terminal nav link renders its page shell.
-- The layout redirects to login without a session.
-- The market status pill matches `market-hours.ts` at three probed times.
+- **Every guarded prefix has a page** — a tier-1 test maps each `TERMINAL_PREFIXES` entry to a file
+  on disk. This catches the real failure, a prefix added to the guard with no route behind it, which
+  a manual click-through would only find by accident.
+- `pnpm build` lists all eight terminal routes.
+- **The pill flips on the boundary** — tier 1 on `msUntilNextRecompute`: 30s mid-session, the exact
+  remainder near a transition, never negative or past the transition.
+- The pill agrees with the tick's gate because it calls `marketStatusAt` directly, already covered by
+  the tier-1 market-hours suite; confirm in the browser that it reads CLOSED outside a session.
+- Signed out, `/orders` redirects to `/auth/login?next=/orders`.
+- The shell holds at 1440px and 375px, and the sidebar sheet opens and closes on mobile.
+- **Terminal a11y is not audited here.** Lighthouse cannot reach these routes — they redirect to
+  login without a session — so landmarks and contrast are checked by reading, and the audit is F38's.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm build` and `pnpm format:check`
+  all exit zero.
 
 ### 18 Watchlist sidebar
 

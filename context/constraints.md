@@ -134,6 +134,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Testing
 
+- **Market-time logic takes its calendar as an argument so tier 1 can falsify it.** `marketStatusAt(at, holidays)` and `isTradingSessionAt(at, holidays)` are pure; the database-backed wrappers load the calendar and delegate. Keeping the arithmetic separable from the read is what lets the suite drive it across boundaries, timezones and holidays with no database — and it is why F17's status pill can call the same function client-side that the tick gates on. (F15, evicted from Key Decisions at F17)
+
 - **`fetch-reference-data.mts` treats any probe failure as "this symbol does not exist".** Its own comment argues that conflating "upstream refused us" with a 404 is the bug it was rewritten to fix, but the return path files 5xx and network errors into `broken` alongside genuine 404s, and `main` then refuses to write the seed. One transient Yahoo 5xx therefore kills a ~5-minute 200-symbol run. Only 404 should be a verdict; 5xx and socket errors should retry or abort as "upstream unavailable". Found by the Phase 2 review; not fixed, because the script is manual, rare, and re-runnable. (F14)
 
 
@@ -216,6 +218,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **The simulator disclaimer is dismissible and remembered, with no flash.** A blocking inline script in the root layout reads `localStorage` and stamps `data-disclaimer="dismissed"` on `<html>` before first paint; CSS hides the strip off that attribute. The same technique `next-themes` already runs here, and it keeps the `(marketing)` layout a Server Component — only the close button is a client island. (F03)
 
 ## Quote providers
+
+- **The universe is seeded but its Yahoo symbols are unvalidated, and the JSON records that.** `yahoo_validated: false` is written into `nifty200.json`, and the probe ships behind `--probe` rather than being deleted, because it is exactly what must run when Yahoo returns. `${symbol}.NS` remains a derivation nothing has confirmed against the live API. (F14, evicted from Key Decisions at F17)
 
 - **`quotes.prev_close` rolls at the first in-session tick, and the roll is derived from the data rather than scheduled.** `roll_previous_close()` carries each stale quote's `ltp` into its `prev_close` when the row's `fetched_at` falls on an earlier IST date than the running session. A 15:30 job would have been the obvious design and the wrong one here: Render sleeps, the cron window is coarse, and a missed run would leave the roll undone with nothing to notice. Because the condition is a fact about the row, a missed tick costs nothing and the next one repairs it, and it is idempotent within a session by construction. **`loadAnchors` must therefore prefer `quotes.prev_close` over `instruments.prev_close`** — reading the bhavcopy seed is what trapped every simulated price within 5% of the day the universe was seeded, and the seed is now only the cold-start fallback. (F16, resolving a Phase 2 review finding)
 
