@@ -347,8 +347,8 @@ itself installed cleanly on the hosted database (1.3.3), so only the *runner* wa
 
 - **Provisioning is already done** (2026-08-21): one project, `zerodha-rebuild-dev` / `kefggygenlprjzhiocai` / ap-south-1, linked, `.env.local` and `.env.test.local` written and both verified connecting. There is deliberately **no second project**.
 - **First migration of the project:** `enable_pgtap` creating the extension in the `extensions` schema. Tracked rather than created ad hoc by the runner — an untracked extension the tests silently depend on is worse than a tracked one, because a fresh database looks fine until the suite runs and the migration history stops describing the database. pgTAP adds functions in a schema nothing else uses and no tables, so the cost to the single production project is close to zero.
-- **`scripts/run-pgtap.ts` replaces `supabase test db`.** It reads `.env.test.local`, executes each `supabase/tests/*.sql` through `pg`, and collects the text rows the pgTAP functions return — `plan()` yields `1..n`, `ok()` yields `ok N - desc` or `not ok N - desc`, so those rows **are** the TAP stream and no reporter needs installing. It parses them, names the file and assertion on failure, and exits non-zero.
-- **Written in TypeScript with no new runner dependency.** Node 26 strips types natively (verified), so `node scripts/run-pgtap.ts` runs directly; adding `tsx` for one script would be a dependency the stack does not need.
+- **`scripts/run-pgtap.mts` replaces `supabase test db`.** It reads `.env.test.local`, executes each `supabase/tests/*.sql` through `pg`, and collects the text rows the pgTAP functions return — `plan()` yields `1..n`, `ok()` yields `ok N - desc` or `not ok N - desc`, so those rows **are** the TAP stream and no reporter needs installing. It parses them, names the file and assertion on failure, and exits non-zero.
+- **Written in TypeScript with no new runner dependency.** Node 26 strips types natively (verified), so `node scripts/run-pgtap.mts` runs directly; adding `tsx` for one script would be a dependency the stack does not need.
 - **The runner must catch a plan mismatch, not only `not ok`.** A file declaring `plan(2)` that runs one assertion has to fail — that is the failure mode a naive grep misses.
 - `tests/concurrency/helpers.ts`: client-pair factory, seeded fixtures under the `zr-race-` prefix, and `afterEach` cleanup that runs on failure as well as success.
 - **Tier 3 is gated behind `ALLOW_RACE_TESTS` and must exit before opening a connection** when it is unset. It commits into the single production database; that guard is the thing standing between a routine `pnpm test:all` and real rows.
@@ -421,6 +421,7 @@ itself installed cleanly on the hosted database (1.3.3), so only the *runner* wa
 
 - `/auth/login` with a single Google button, loading state, and error display.
 - Signed-in avatar and sign-out control in the header.
+- **Carried over from the Phase 1 checkpoint: the page this replaces has no `<main>` landmark**, and it is the only public route scoring below 100 on Lighthouse (97, `landmark-one-main`). The F03 stub was a bare `<div>`; the real page must render `<main>` and take the route to 100.
 
 **Logic:**
 
@@ -435,6 +436,9 @@ itself installed cleanly on the hosted database (1.3.3), so only the *runner* wa
 - Visiting `/holdings` signed out redirects to `/auth/login`.
 - Visiting `/pricing` signed out renders normally and is not intercepted.
 - Sign-out clears the session; the terminal is no longer reachable.
+- `pnpm audit:a11y /auth/login` scores **100**, closing the `landmark-one-main` failure the Phase 1 checkpoint recorded.
+- **`supabase/tests/01-rls-support-messages.sql` gains an `authenticated` arm.** This feature is what makes that role reachable on the contact form: the server client carries request cookies, so from here on a signed-in visitor inserts as `authenticated` rather than `anon`. The policy already names both, but only `anon` has ever been tested — so the role most submissions will use would otherwise ship with zero coverage. Assert insert allowed, and select / update / delete refused with `42501`, exactly as the `anon` arm does.
+- Also carried over: `SupportForm.tsx` suppresses the form-level error banner whenever `state.error.fields` is truthy, and `{}` is truthy. Any Zod issue with an empty path — a schema-level `.refine()`, an `unrecognized_keys` — would re-render the form with no visible explanation. Latent today because the schema has no such rule; key the banner off `Object.keys(fields).length === 0` before adding one.
 
 ### 13 Account bootstrap on first sign-in
 
@@ -525,6 +529,11 @@ The reliability core, built and tested before anything renders a price.
 ### Phase checkpoint
 
 The complete schema exists, the three test tiers run green, auth works end to end, and prices land in the database on a schedule. Confirm a fresh account bootstraps correctly, tier 2 proves RLS blocks cross-user reads on every table, tier 3 proves the lock guards hold, and the cron job has run unattended for at least an hour.
+
+**Carried over from the Phase 1 checkpoint** — harness hygiene found by reviewing F09's code, none of it blocking:
+
+- `tests/concurrency/connections.race.test.ts` — the `cleanup removed everything` case asserts `countScratchRows()` is null, which is equally true when the scratch table was never created. Run alone with `-t 'cleanup removed'` it passes vacuously. Since tier 3's whole justification is that it writes to the production database, that assertion has to be cleanup-specific: create the table and a prefixed row, then verify the drop.
+- `scripts/run-pgtap.mts` — the `TEST_DATABASE_URL` capture excludes `\n` but not `\r`, so a CRLF `.env.test.local` yields a URL ending in `\r` and every suite dies inside `connect()` with an opaque error instead of the named diagnostics that file exists to give. Trim the capture, as `run-race.mts` now does.
 
 ---
 
@@ -670,6 +679,11 @@ The terminal looks and feels like a real trading front end with live prices. Con
 - Unit tests reproduce a published Zerodha brokerage-calculator example for a delivery buy, a delivery sell, an intraday buy, and an intraday sell, each within one paisa.
 - A test asserts the TypeScript estimate and the Postgres result agree for 100 random inputs — including the two rules that are easy to get different on each side: GST is computed on **unrounded** sub-components and rounded once (§2), and `dp_base` is ₹13.00 with its GST inside the single `gst` key (§3).
 - Delivery brokerage is exactly zero; intraday brokerage is capped at ₹20.
+
+**Carried over from the Phase 1 checkpoint**, both in `src/lib/trading/charges.test.ts` and `constants.ts`:
+
+- The §2 reconciliation case recomputes `roundToPaise(Object.values(breakdown).reduce(…))` — character-for-character the expression `charges.ts` uses to produce `total`. It does still catch a switch to rounding the *unrounded* sum, so it is not inert, but it proves the property by restating the implementation rather than by independent expectation. Pin it to figures computed by hand, so the Postgres side this feature adds has something to be equal *to*.
+- `DP_CHARGE_INCLUSIVE` is a hand-entered `15.34` with nothing tying it to `DP_CHARGE_BASE * (1 + GST_RATE)`. The file's own comment warns these rates move by circular; change the base and `/pricing` keeps showing ₹15.34 while the worked example updates, with the suite green. Assert the derivation.
 
 ### 23 Margin reservation and release
 

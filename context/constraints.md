@@ -57,6 +57,20 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **Supabase grants `anon` and `authenticated` ALL privileges on new public tables by default** — verified on `support_messages`: SELECT, UPDATE, DELETE and TRUNCATE were all present, leaving RLS as the single layer. Revoke and grant back only what a role needs. It is defence in depth, and it turns a silent "affects zero rows" into a hard `42501` that a test can actually assert. (F07B)
 - **On a public-write table, prefer a missing grant to a filtering policy.** If a permissive policy is ever added by mistake, the absent grant still refuses. (F07B)
 
+## Verification routine
+
+- **Kill `next start` by PID from `lsof -nP -iTCP:3000 -sTCP:LISTEN` before trusting any post-rebuild check.** `pkill` does not reliably stop it, and the surviving process keeps port 3000 and serves the *previous* build — which has silently invalidated a verification pass twice. (F03, F04)
+
+- **`resize_window` does not change `window.innerWidth`** when the browser is in macOS fullscreen; it reports success and does nothing. Two working alternatives: measure inside a 375×760 `<iframe>`, or drive headless Brave through the `puppeteer-core` that ships under `lighthouse` and set the viewport directly. (F03, 1.00.06)
+
+- **pnpm appends extra script arguments rather than substituting `$1`.** `"audit:a11y": "lighthouse …${1:-/}"` silently audits `/` while the real path is tacked on as a stray argument — and returns a plausible score, so it looks like it worked. The script is wrapped in a shell function so appended args land in `$1`; confirm the target by reading `finalDisplayedUrl` out of the report, not by trusting the score. (F05)
+
+## Supabase CLI
+
+- **`supabase migration new` can hang past a 120s timeout having already written the file.** Check before assuming it failed and re-running it. (F09)
+
+- **There are two Supabase CLIs on this machine** — Homebrew 2.111.0 and the project's pinned 2.115.0 dev dependency — and authenticating one does not authenticate the other. The CLI also stores its token where `~/.supabase/` shows nothing, so an absent file proves nothing; `supabase projects list` failing is the only reliable check. (1.00.03)
+
 ## Testing
 
 - **`supabase test db` requires Docker even with `--db-url`.** It connects to the remote database, *then* shells out to `pg_prove` in a container and dies with `LegacyDockerRunError`. Tier 2 runs through `scripts/run-pgtap.mts` instead: pgTAP's functions return their TAP output as text rows, so executing a suite through `pg` and reading the rows *is* the TAP stream. (F09)
@@ -65,6 +79,14 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **Prove a negative with a positive control.** A first attempt at that proof used `console.log` and saw nothing in *either* case, because Vitest suppresses it — an absence that looked like evidence and was not. A filesystem marker gave both halves. (F09)
 
 - **Tier 1 tests run in Vitest's node environment with no jsdom and no Testing Library.** Neither is an approved dependency, and `code-standards.md` scopes tier 1 to pure logic. Component behaviour is proven in the browser, not in a simulated DOM. (F01)
+
+- **`server-only` cannot be imported by Vitest**, which does not resolve React's `react-server` condition. It is aliased to the package's own `empty.js` in `vitest.config.mts`. This does not weaken the guard — `next build` still resolves the throwing entry for client bundles, which is what the falsifiability check exercises. (F01)
+
+## Accessibility
+
+- **A horizontally scrollable region needs `tabIndex={0}` and a labelled `role="region"`,** or keyboard users cannot reach the overflowing columns. At 375px that is most of the table. **Lighthouse does not audit this; axe does** — the score alone is not evidence. Applies to every table in Phase 5. (F05)
+
+- **A Lighthouse 100 is not evidence about tap targets.** Target size is not in its audit set: `/support` scored 100 while every `<summary>` was 20px tall, under WCAG 2.2's 24px minimum. Measure `getBoundingClientRect()` at 375px instead. (F07)
 
 ## Theming and design tokens
 
@@ -81,15 +103,23 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **Inline links inside a text block carry a persistent underline**, deviating from DESIGN.md's `text-link` ("no underline by default"). WCAG 1.4.1 forbids identifying a link by colour alone, and Lighthouse's `link-in-text-block` catches it. Nav and footer-column links are not in a text block and keep the hover-only underline. (F04)
 - **Every `dark:` utility is stripped from added components.** Tailwind v4's built-in `dark:` variant is bound to `prefers-color-scheme`, so a leftover `dark:` class responds to the visitor's OS rather than this project's theme class — a live bug, not inert code. A grep guard enforces it. (F02)
 
+- **Interpolated class names generate no CSS.** Tailwind scans source for complete strings, so `bg-chart-${n}` produces nothing. Write every variant out literally. (F02)
+
 ## Formatting and display
 
 - **Two money formatters, not one with flags.** `formatCurrency` always renders ₹ and 2dp; `formatSignedCurrency` renders an explicit +/− where the sign carries meaning. `Intl.NumberFormat('en-IN')` produces Indian digit grouping natively, so nothing is hand-rolled. (F02)
+
+- **`formatPercent` is fixed at 2dp and is wrong for statutory rates** — it renders 0.00307% as "0.00%". `formatRate` (up to 5dp, no trailing zeros) exists for those. The two have genuinely different jobs: day change wants 2dp, a charge rate wants its real precision. (F06)
 
 ## shadcn/ui
 
 - **The shadcn CLI changed shape: `init -b radix -t next -p nova --css-variables -y`.** It now picks between Base UI, Radix and React Aria, and prompts for a style preset that `-y` does not skip. `shadcn` is also a *runtime* dependency shipping `shadcn/tailwind.css`. Resolves the standing TODO in `library-docs.md` → shadcn/ui. (F02)
 
 - **shadcn's token vocabulary is bridged onto this project's, never merged.** A `@theme inline` block maps shadcn's names onto our palette so `shadcn add` keeps working, while project code keeps using `bg-canvas` / `text-muted` / `border-hairline`. `--color-muted` is the one real collision — shadcn means a *surface* by it, this project means the *text* grey — and it is resolved in this project's favour, with `--color-muted-foreground` defined to the same value and `bg-muted` hand-fixed on add. (F02)
+
+- **Overriding a variant-prefixed utility needs the same prefix.** `SheetContent` sizes itself with `data-[side=right]:w-3/4`; a plain `w-full` loses on specificity, and `tailwind-merge` keeps both because it treats them as different keys — so the class list looks right while the width is wrong. Only measuring exposes it. (F03)
+
+- **`components/ui/table.tsx` is a Client Component.** Importing it puts a hydrated client boundary on the page, which a static marketing page must not have. Marketing tables use a plain semantic `<table>`; the terminal is where the primitive earns its cost. (F05)
 
 ## Marketing site
 
@@ -125,4 +155,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Next.js behaviour
 
+- **The 404 carries full public chrome; the error boundary carries none.** A mistyped URL is ordinary navigation and wants the nav, so `PublicShell` is extracted and shared — an unmatched URL never enters the `(marketing)` group, so the route-group layout cannot supply it. An error means this subtree already failed, so the fallback depends on as little as possible and stays a small client bundle. (F08)
+
 - **A Server Component throw renders nothing server-side; the boundary appears on hydration.** `curl` shows an empty body and a 500, which looks like the white screen the criterion forbids — the check only means something in a browser. Proven with a temporary throwing route, then deleted. (F08)
+
+- **Moving or renaming a route file leaves a stale `.next/types/validator.ts`** that fails `pnpm typecheck` *and* `pnpm build` on a module that no longer exists. `rm -rf .next` clears it. Every feature that moves a route will hit this. (F03)
+
+- **Next treats leading-underscore directories as private and does not route them.** A `__boom/` test page builds clean and simply does not exist — an absence that reads as a routing bug. (F08)

@@ -139,6 +139,7 @@ export async function cancelOrder(input: unknown): Promise<ActionResult<{ orderI
 ```
 
 - Every exported action is `async`, takes `input: unknown`, and returns `Promise<ActionResult<T>>`.
+- **One exception: an action driven by `useActionState`** takes `(previousState, formData)` instead, because React supplies those arguments — see `submitSupportMessage` (F07B). It still parses the `FormData` through a Zod schema first and still returns `ActionResult<T>`; only the parameter list differs, and it differs so the form works with JavaScript disabled. Do not use this shape for an action a Client Component calls directly.
 - Validate first, then get the client, then call the database. Never reorder those steps.
 - Never `throw` out of a Server Action — a thrown error becomes an opaque digest in production. Return the error shape.
 - **Never put `error.message` into the returned shape.** Map the Postgres error to a known code with `toRejectionCode()` and look the user-facing copy up in `ORDER_ERROR_COPY`. An unmapped error becomes `UNKNOWN` with generic copy. Raw database text is logged and nowhere else.
@@ -279,7 +280,7 @@ that can actually falsify it** — a test in the wrong tier passes whether or no
 | Tier | Runner | Proves | Command |
 | ---- | ------ | ------ | ------- |
 | 1 — logic | Vitest, no database | Charge estimates, `isTradingSession`, provider chain and circuit breaker, Zod parsers, tick interpolation | `pnpm test` |
-| 2 — database | pgTAP via the Supabase CLI | RLS, grants, CHECK constraints, function return values, reconciliation identities | `pnpm test:db` |
+| 2 — database | pgTAP via `scripts/run-pgtap.mts` | RLS, grants, CHECK constraints, function return values, reconciliation identities | `pnpm test:db` |
 | 3 — concurrency | Vitest driving two `pg` connections | Row-lock contention, double-fill, cancel-while-filling, margin races | `pnpm test:race` |
 
 **Why three.** pgTAP runs inside a single session and a single transaction, so it structurally cannot

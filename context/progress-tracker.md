@@ -16,9 +16,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Current Status
 
-**Phase:** Phase 1 — Foundation & Public Site
-**Last completed:** 07 Slice B — the contact form. First RLS policy in the project, proven by pgTAP and falsified three ways; works without JavaScript. Phase 1's features are now all complete
-**Next:** the Phase 1 checkpoint — run the verification commands, inspect the phase diff, compact `build-journal.md`, record follow-ups. Then 10 Database schema
+**Phase:** Phase 2 — Data Foundation & Auth
+**Last completed:** the Phase 1 checkpoint — all six tiers of verification green, every public route 97–100 on Lighthouse and free of overflow at 375px in both themes, `build-journal.md` compacted 243 → 85 lines, and four stale statements in `architecture.md` / `code-standards.md` reconciled against what F07B and F09 actually shipped
+**Next:** 10 Database schema: identity and market data — the enums plus `profiles`, `instruments`, `quotes`, `candles`, `candle_sync`, `symbol_demand`, `watchlist_items`, `market_holidays`, with the RLS and pgTAP suites that police them
 
 ---
 
@@ -34,7 +34,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 - [x] 06 Pricing page
 - [x] 07 Support page and contact form
 - [x] 08 Legal, error, and not-found pages
-- [ ] Phase checkpoint — verify Phase 1 — Foundation & Public Site is stable before starting the next phase
+- [x] Phase checkpoint — verify Phase 1 — Foundation & Public Site is stable before starting the next phase
 
 ### Phase 2 — Data Foundation & Auth
 
@@ -92,21 +92,17 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
+- **Nothing sweeps the non-money documents, so the phase checkpoint is where they get reconciled.** `trading-contract.md` §13 has a sweep because money rules are restated in four files — but the same restatement problem exists outside money, with no equivalent guard. This checkpoint found four statements describing a model already replaced: `architecture.md` and `code-standards.md` both still named `supabase test db` as the tier-2 runner F09 proved unusable, and `architecture.md` still had the support form built on react-hook-form in both its stack table and its data-flow diagram. All four are corrected, and `code-standards.md` now carries the `useActionState` exception to the Server Action shape rule that F07B's code has been deviating from since it shipped. (1.00.06)
+
 - **The support form uses React 19's form action and `useActionState`, not react-hook-form.** It submits and validates without JavaScript, matching the page it sits on, and needs no new dependency. `code-standards.md` is corrected in the same change; F25's order ticket is where react-hook-form actually earns its place. (F07B)
 - **`support_messages` gets `CHECK` length bounds and a honeypot; volume abuse is deliberately unmitigated.** The publishable key ships in the browser bundle, so anyone can write to that table — bounds cap the damage per request, the honeypot stops drive-by bots, and real rate limiting is out of scope for a portfolio contact form. Written down rather than left implicit. (F07B)
 
-- **`supabase test db --db-url` requires Docker even against a remote database** — it connects first, then dies with `LegacyDockerRunError`. Proven by running the spike F09 called for. Tier 2 therefore runs through our own `scripts/run-pgtap.ts` using `pg`: the text rows pgTAP's functions return *are* the TAP stream, so nothing extra needs installing. pgTAP itself (1.3.3) installed fine on the hosted database — only the runner was ever the problem. (F09)
+- **`supabase test db --db-url` requires Docker even against a remote database** — it connects first, then dies with `LegacyDockerRunError`. Proven by running the spike F09 called for. Tier 2 therefore runs through our own `scripts/run-pgtap.mts` using `pg`: the text rows pgTAP's functions return *are* the TAP stream, so nothing extra needs installing. pgTAP itself (1.3.3) installed fine on the hosted database — only the runner was ever the problem. (F09)
 - **pgTAP is enabled by a tracked migration, not created ad hoc by the runner.** With one project that means installing it into production, which is acceptable: it adds functions in a schema nothing else uses and no tables. An untracked extension the tests silently depend on is worse — a fresh database looks fine until the suite runs, and migration history stops describing the database. (F09)
-- **The tier-2 runner is a standalone TypeScript script with no new runner dependency.** Node 26 strips types natively, so `node scripts/run-pgtap.ts` runs directly; `tsx` would be a dependency for one file. Keeping it out of Vitest also means nothing about tier 2 can be picked up by `pnpm test`. (F09)
+- **The tier-2 runner is a standalone TypeScript script with no new runner dependency.** Node 26 strips types natively, so `node scripts/run-pgtap.mts` runs directly; `tsx` would be a dependency for one file. Keeping it out of Vitest also means nothing about tier 2 can be picked up by `pnpm test`. (F09)
 - **`pnpm db:push:test` is dropped.** One database means one push command, and a second script reaching the same place by a different mechanism — named for a test project that no longer exists — is a trap. (F09)
 
 - **F07 is split into two slices rather than renumbered.** It was placed in Phase 1 before anyone noticed the contact form needs `@supabase/ssr`, `lib/supabase/server.ts` (F12's), `src/types/database.ts` (F10's), `react-hook-form` and F09's harness. Slice A (help content) has none of those dependencies and ships now; Slice B (form, migration, RLS) waits for F09. Inserting a new feature number would have renumbered 08–40 and invalidated every journal and commit reference already written, so the `07` checkbox simply stays unticked until both slices land. (F07)
 
 - **One Supabase project, not two.** The test project was created and then deleted at the user's direction: a single project is simpler to operate and cannot silently pause while the other stays warm. `code-standards.md`, `CLAUDE.md`, `.env.example` and F09 were all rewritten in the same change, since all four mandated a second project. (1.00.03)
 - **Tier 3 therefore commits into the production database, and is gated behind `ALLOW_RACE_TESTS`.** It cannot roll back — proving two connections cannot both fill an order requires the first to commit. Recognisable seed prefix and failure-safe `afterEach` cleanup are the other two mandatory guards. (1.00.03)
-
-- **The 404 carries full public chrome; the error boundary carries none.** A mistyped URL is ordinary navigation and wants the nav, so `PublicShell` was extracted and shared — an unmatched URL never enters the `(marketing)` group, so the route-group layout cannot supply it. An error means this subtree already failed, so the fallback depends on as little as possible and stays a small client bundle. (F08)
-
-
-
-

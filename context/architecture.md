@@ -22,12 +22,12 @@
 | Client tick state | Zustand 5.0.15 | In-memory live quote store and tick interpolation loop |
 | Validation | Zod 4.4.3 | Every Server Action input and every external API response |
 | Theming | `next-themes` 0.4.6 | Light and dark from one token set, persisted without a flash on load (F02) |
-| Forms | `react-hook-form` 7.85.0 + `@hookform/resolvers` 5.9.1 | Order ticket and support form |
+| Forms | `react-hook-form` 7.85.0 + `@hookform/resolvers` 5.9.1 | Order ticket only. The support form uses React 19's form action + `useActionState`, so it submits without JavaScript (F07B) |
 | Portfolio charts | Recharts 3.10.1 | Top-10 holdings donut, P&L breakdown |
 | Price charts | `lightweight-charts` 5.2.1 | Candlestick chart on stock detail |
 | Quote sources | Yahoo Finance `v8/finance/chart` (keyless) → Twelve Data (optional key) → built-in simulator | Price data with graceful degradation |
 | Tests — logic | Vitest 4.1.11 | Charge estimator, provider chain, market-hours, parsers |
-| Tests — database | pgTAP via `supabase test db --db-url` | RLS, grants, constraints, function correctness |
+| Tests — database | pgTAP, run by `scripts/run-pgtap.mts` over `pg` | RLS, grants, constraints, function correctness. **Not** `supabase test db`: it needs Docker even with `--db-url` (F09) |
 | Tests — concurrency | `pg` 8.23.0, two live connections | Row-lock races the other tiers cannot express |
 | Accessibility | Lighthouse 13.4.1 | `pnpm audit:a11y <path>` — every public page audited as it ships, not once at the end (F04) |
 | Tooling | pnpm 11, ESLint 9.39.5, Prettier 3.9.6 | Install, lint, format. **Not ESLint 10**: `eslint-plugin-react` 7.37.5 — the newest release, pulled in by `eslint-config-next` — crashes on ESLint 10's rule-context API (F01) |
@@ -54,12 +54,12 @@ ZerodhaRebuild/
 │   │   ├── market-tick/index.ts    → the single scheduled job: refresh, match, square off
 │   │   └── _shared/                → dependency-free types and parsers shared with the app
 │   ├── tests/                      → tier 2, pgTAP; one numbered file per concern
-│   │   ├── 00-helpers.sql          → pgtap extension + shared fixtures
-│   │   ├── 01-rls.sql              → per-table read/write denial, and grant denial
-│   │   ├── 02-constraints.sql
-│   │   ├── 03-charges.sql
-│   │   ├── 04-margin.sql
-│   │   └── 05-execution.sql
+│   │   ├── 00-smoke.sql            → pgtap reachable; proves the runner hits a real database
+│   │   ├── 01-rls-*.sql            → per-table read/write denial, and grant denial
+│   │   ├── 02-constraints.sql      → planned, with F11
+│   │   ├── 03-charges.sql          → planned, with F22
+│   │   ├── 04-margin.sql           → planned, with F23
+│   │   └── 05-execution.sql        → planned, with F24
 │   └── seed/nifty200.json          → instrument universe seed data
 ├── src/
 │   ├── app/
@@ -231,10 +231,11 @@ Terminal page (Server Component)
 ### Support form submission
 
 ```
-Support form (Client Component, react-hook-form)
-  └─> Server Action `submitSupportMessage`
-        ├─ Zod parse
-        └─ insert support_messages   (RLS: public insert allowed, no select)
+Support form (React 19 form action + useActionState — no JavaScript required)
+  └─> Server Action `submitSupportMessage(previousState, formData)`
+        ├─ Zod parse of the FormData
+        ├─ honeypot filled? report success, insert nothing
+        └─ insert support_messages   (RLS: anon INSERT granted; no select policy for any role)
 ```
 
 ---
