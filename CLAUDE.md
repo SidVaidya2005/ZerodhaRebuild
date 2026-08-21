@@ -56,10 +56,9 @@ The `context/` folder is the source of truth for this project. **Read it before 
 - `pnpm typecheck` — `tsc --noEmit`
 - `pnpm audit:a11y` — Lighthouse accessibility score against a **running** server (`pnpm start` first)
 - `pnpm test` — tier 1: Vitest logic tests, no database
-- `pnpm test:db` — tier 2: pgTAP via `--db-url`, against the one project
+- `pnpm test:db` — tier 2: pgTAP suites in `supabase/tests/`, run by `scripts/run-pgtap.mts`. **Not** `supabase test db`, which needs Docker even against a remote database (F09)
 - `pnpm test:race` — tier 3: two-connection concurrency tests. **Commits to the real database**; needs `ALLOW_RACE_TESTS` set
 - `pnpm test:all` — all three tiers
-- `pnpm db:push:test` — apply the migration history via `TEST_DATABASE_URL` (same project; the name is historical)
 - `pnpm supabase db push` — apply migrations to the linked project
 - `pnpm supabase gen types typescript --linked > src/types/database.ts` — regenerate DB types (run after every migration)
 - `pnpm supabase functions deploy market-tick` — deploy the scheduled job
@@ -67,7 +66,7 @@ The `context/` folder is the source of truth for this project. **Read it before 
 ## Environment notes
 
 - **This machine has Brave, not Google Chrome.** `chrome-launcher` finds no install, so `pnpm audit:a11y` points `CHROME_PATH` at Brave's binary with a `${CHROME_PATH:-…}` override. Brave is Chromium, so Lighthouse drives it unchanged.
-- **No Docker on this machine** — `supabase start` and `supabase test db --local` will not run. Everything runs against the **one hosted project** (`zerodha-rebuild-dev`, `kefggygenlprjzhiocai`, ap-south-1), including pgTAP via `--db-url`. There is deliberately no separate test project. **Tier 3 commits into that database**, so `pnpm test:race` is gated behind `ALLOW_RACE_TESTS` — see `code-standards.md` → Testing. Free projects pause after a week idle.
+- **No Docker on this machine** — and `supabase test db` needs it **even with `--db-url`**: it connects to the remote database first, then dies with `LegacyDockerRunError`. Tier 2 therefore runs through `scripts/run-pgtap.mts`. Everything runs against the **one hosted project** (`zerodha-rebuild-dev`, `kefggygenlprjzhiocai`, ap-south-1). There is deliberately no separate test project. **Tier 3 commits into that database**, so `pnpm test:race` is gated behind `ALLOW_RACE_TESTS` — see `code-standards.md` → Testing. Free projects pause after a week idle.
 - **Render free tier has no cron jobs and no background workers**, and spins down after 15 minutes idle. All scheduled work lives in Supabase `pg_cron` (1-minute minimum) calling the `market-tick` Edge Function.
 - **Next.js 16 renamed `middleware.ts` to `proxy.ts`** with a named `proxy` export, running on the Node.js runtime only.
 - Upstream quote endpoints are undocumented and rate-limited. Verify a live response with `curl` before writing or changing a parser.
