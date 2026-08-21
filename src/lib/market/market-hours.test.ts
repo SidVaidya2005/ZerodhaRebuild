@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { describe, expect, it } from 'vitest'
 
 import { IST_OFFSET_MINUTES } from '@/lib/constants'
@@ -8,8 +9,20 @@ import {
   isTradingSessionAt,
   loadHolidays,
   marketStatusAt,
+  type HolidayReader,
   type HolidaySet,
 } from '@/lib/market/market-hours'
+import type { Database } from '@/types/database'
+
+/**
+ * The calendar readers take a structural client, so `_shared/` can stay
+ * import-free and be loaded by Deno. Nothing in the app calls them until F20,
+ * which means nothing would otherwise prove a *real* client still satisfies
+ * that shape — this assertion fails the build the moment it stops being true,
+ * rather than letting F20 discover it.
+ */
+type RealClientIsAHolidayReader = SupabaseClient<Database> extends HolidayReader ? true : never
+const _realClientIsAHolidayReader: RealClientIsAHolidayReader = true
 
 /** The 2026 calendar F14 seeded, trimmed to the dates these tests use. */
 const HOLIDAYS: HolidaySet = new Set([
@@ -69,6 +82,18 @@ describe('session boundaries', () => {
     expect(isTradingSessionAt(ist(day, '15:30:00'), HOLIDAYS)).toBe(false)
   })
 
+  it('outranks the cron window that invokes the tick', () => {
+    // 08:45 IST is 03:15 UTC, which `* 3-10 * * 1-5` fires on: the scheduler
+    // will call the tick here, half an hour before the market does anything.
+    // The window is a cost bound — no hours field can express 09:15–15:30 — so
+    // if the gate ever agreed with the schedule the tick would write quotes
+    // into a closed market every weekday morning.
+    const at = ist(day, '08:45:00')
+    expect(at.getUTCHours()).toBe(3) // inside the cron window
+    expect(isTradingSessionAt(at, HOLIDAYS)).toBe(false)
+    expect(marketStatusAt(at, HOLIDAYS).state).toBe('CLOSED')
+  })
+
   it('does not treat pre-open as a session', () => {
     // The call auction is not continuous trading: no quote is written and no
     // order fills, so the gate must say false even though the state is PRE_OPEN.
@@ -103,8 +128,14 @@ describe('the timezone is IST, not the server’s', () => {
 
 describe('the published calendar', () => {
   it('closes the market on a holiday that falls on a weekday', () => {
-    // Republic Day 2026 is a Monday: a weekday the market is shut.
-    expect(isTradingSessionAt(ist('2026-01-26', '11:00:00'), HOLIDAYS)).toBe(false)
+    // Republic Day 2026 is a Monday: a weekday the market is shut. 11:00 IST is
+    // 05:30 UTC, so `* 3-10 * * 1-5` fires the tick straight through it — no
+    // cron expression can encode ~15 annual closures, which is the whole reason
+    // this calendar outranks the schedule. `03-reference-data.sql` pins the same
+    // date as really present in `market_holidays`; this pins what it means.
+    const at = ist('2026-01-26', '11:00:00')
+    expect(at.getUTCHours()).toBe(5) // inside the cron window
+    expect(isTradingSessionAt(at, HOLIDAYS)).toBe(false)
     expect(isTradingDay('2026-01-26', HOLIDAYS)).toBe(false)
   })
 

@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2.49.4'
 
 import { MAX_SYMBOLS_PER_TICK } from '../_shared/market-constants.ts'
-import { isTradingSessionAt, type HolidaySet } from '../_shared/market-hours.ts'
+import { isTradingSession } from '../_shared/market-hours.ts'
 import { createSimulatorProvider } from '../_shared/simulator.ts'
 import { createQuoteService } from '../_shared/quote-service.ts'
 import type { SymbolAnchor } from '../_shared/provider-types.ts'
@@ -30,23 +30,6 @@ type TickResult =
   | { ok: true; skipped: 'MARKET_CLOSED'; at: string }
   | { ok: true; refreshed: number; provider: string | null; at: string }
   | { ok: false; error: string }
-
-/**
- * The published closures, as IST `YYYY-MM-DD` strings.
- *
- * **Throws rather than returning an empty set.** An empty calendar is
- * indistinguishable from a year with no holidays, and the failure it would cause
- * — the tick trading on Republic Day — is silent. The handler turns this into a
- * 200 `{ ok: false }` having written nothing.
- */
-async function loadHolidays(supabase: SupabaseClient): Promise<HolidaySet> {
-  const { data, error } = await supabase.from('market_holidays').select('trading_date')
-  if (error) {
-    console.error('[market-tick.loadHolidays]', error)
-    throw new Error('MARKET_CALENDAR_UNAVAILABLE')
-  }
-  return new Set((data ?? []).map((row: { trading_date: string }) => row.trading_date))
-}
 
 /**
  * The anchors the simulator walks from: the last observed price, falling back to
@@ -79,8 +62,7 @@ async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
   // The gate comes first, and nothing writes before it returns true. The
   // `pg_cron` window is a cost bound only: it cannot express 09:15–15:30 and
   // cannot encode a trading holiday, so trusting it would trade on Republic Day.
-  const holidays = await loadHolidays(supabase)
-  if (!isTradingSessionAt(now, holidays)) {
+  if (!(await isTradingSession(supabase, now))) {
     return { ok: true, skipped: 'MARKET_CLOSED', at: now.toISOString() }
   }
 

@@ -119,3 +119,59 @@ export function marketStatusAt(at: Date, holidays: HolidaySet): MarketStatus {
 export function isTradingSessionAt(at: Date, holidays: HolidaySet): boolean {
   return marketStatusAt(at, holidays).state === 'OPEN'
 }
+
+/* ── The calendar-backed wrappers ───────────────────────────────────────────
+ *
+ * These load the calendar the pure core takes as an argument. They live here
+ * rather than on the app side because **both runtimes need them** and the tick
+ * is the caller that matters most: an untested duplicate of `loadHolidays`
+ * inside the Edge Function is exactly the drift this feature moved the logic
+ * here to avoid.
+ *
+ * The client is described structurally, so this module still imports nothing.
+ * A real `SupabaseClient` satisfies it on either runtime, and a test can pass a
+ * plain object without a mocking library.
+ *
+ * Deliberately not cached. A module-level cache would outlive a request on the
+ * server and go stale in January with nothing to invalidate it; the calendar is
+ * twenty rows behind an indexed primary key, read once per tick.
+ */
+
+/** The narrowest shape of a Supabase client that can read the calendar. */
+export type HolidayReader = {
+  from(table: 'market_holidays'): {
+    select(columns: 'trading_date'): PromiseLike<{
+      data: { trading_date: string }[] | null
+      error: unknown
+    }>
+  }
+}
+
+/**
+ * The published closures as a set of IST `YYYY-MM-DD` dates.
+ *
+ * **Throws rather than degrading.** An empty calendar looks exactly like a
+ * successful read on a year with no holidays, and the failure it would cause —
+ * the tick trading on Republic Day, or a square-off that never runs — is
+ * silent. The tick turns this into a 200 `{ ok: false }` having written nothing.
+ */
+export async function loadHolidays(supabase: HolidayReader): Promise<HolidaySet> {
+  const { data, error } = await supabase.from('market_holidays').select('trading_date')
+
+  if (error) {
+    console.error('[market-hours.loadHolidays]', error)
+    throw new Error('MARKET_CALENDAR_UNAVAILABLE')
+  }
+
+  return new Set((data ?? []).map((row) => row.trading_date))
+}
+
+/** The gate the tick and the order functions ask before doing anything. */
+export async function isTradingSession(supabase: HolidayReader, at: Date): Promise<boolean> {
+  return isTradingSessionAt(at, await loadHolidays(supabase))
+}
+
+/** The state and next transition F20's market-status pill renders. */
+export async function getMarketStatus(supabase: HolidayReader, at: Date): Promise<MarketStatus> {
+  return marketStatusAt(at, await loadHolidays(supabase))
+}
