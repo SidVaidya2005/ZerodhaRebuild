@@ -21,6 +21,7 @@
 | Scheduled work | Supabase `pg_cron` + `pg_net` → Edge Functions (Deno) | Quote refresh, limit-order matching, MIS square-off |
 | Client tick state | Zustand 5.0.15 | In-memory live quote store and tick interpolation loop |
 | Validation | Zod 4.4.3 | Every Server Action input and every external API response |
+| Theming | `next-themes` 0.4.6 | Light and dark from one token set, persisted without a flash on load (F02) |
 | Forms | `react-hook-form` 7.85.0 + `@hookform/resolvers` 5.9.1 | Order ticket and support form |
 | Portfolio charts | Recharts 3.10.1 | Top-10 holdings donut, P&L breakdown |
 | Price charts | `lightweight-charts` 5.2.1 | Candlestick chart on stock detail |
@@ -28,6 +29,7 @@
 | Tests — logic | Vitest 4.1.11 | Charge estimator, provider chain, market-hours, parsers |
 | Tests — database | pgTAP via `supabase test db --db-url` | RLS, grants, constraints, function correctness |
 | Tests — concurrency | `pg` 8.23.0, two live connections | Row-lock races the other tiers cannot express |
+| Accessibility | Lighthouse 13.4.1 | `pnpm audit:a11y <path>` — every public page audited as it ships, not once at the end (F04) |
 | Tooling | pnpm 11, ESLint 9.39.5, Prettier 3.9.6 | Install, lint, format. **Not ESLint 10**: `eslint-plugin-react` 7.37.5 — the newest release, pulled in by `eslint-config-next` — crashes on ESLint 10's rule-context API (F01) |
 | Hosting | Render (free web service) + hosted Supabase | Deployment target |
 
