@@ -741,7 +741,17 @@ export type Database = {
         Args: { p_direction: string; p_symbol: string }
         Returns: number
       }
+      recompute_position_collateral: {
+        Args: {
+          p_new_net_quantity: number
+          p_symbol: string
+          p_user_id: string
+        }
+        Returns: number
+      }
+      release_margin: { Args: { p_order_id: string }; Returns: number }
       remove_watchlist_item: { Args: { p_symbol: string }; Returns: number }
+      reserve_margin: { Args: { p_order_id: string }; Returns: boolean }
       roll_previous_close: {
         Args: { p_session_date?: string }
         Returns: number
@@ -753,7 +763,24 @@ export type Database = {
           symbol: string
         }[]
       }
+      short_collateral_requirement: {
+        Args: { p_entry_reference_price: number; p_quantity: number }
+        Returns: number
+      }
+      short_margin_buffer: { Args: never; Returns: number }
       touch_symbol_demand: { Args: { p_symbols: string[] }; Returns: number }
+      transfer_margin_to_position: {
+        Args: {
+          p_actual_charges: number
+          p_fill_price: number
+          p_order_id: string
+        }
+        Returns: {
+          entry_reference_price: number
+          ok: boolean
+          required_collateral: number
+        }[]
+      }
     }
     Enums: {
       candle_interval: "FIVE_MIN" | "THIRTY_MIN" | "ONE_DAY"
