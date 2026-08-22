@@ -35,7 +35,7 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 - **The market-status pill is F17's, and it recomputes on a timer.** F20 turns out to be only the data-source badge — its UI and Logic bullets never mention market status despite its title. Server-rendering the pill once would leave a tab open past 15:30 still reading OPEN, so the server passes the holiday set as a `string[]` and a client component calls the same pure `marketStatusAt` the tick gates on. (F17)
 
-- **The index strip ships as a slot with no values, and index data moves to F21.** NIFTY 50, SENSEX and BANK NIFTY exist nowhere in the data — `instruments` holds 200 NSE equities, so there is no row, no quote and no simulator anchor for any of them, and SENSEX is BSE against an NSE-only scope. Three fabricated numbers in the most prominent chrome on the page is the worst place in the app to invent data. `project-overview.md` already puts an index strip on the Dashboard, so F21 gets it. (F17)
+- **The index strip is a derived composite over our own priced universe, never a named index.** F17 shipped it as an empty slot because NIFTY 50, SENSEX and BANK NIFTY exist nowhere in the data — `instruments` holds 200 NSE equities, so there is no row, no quote and no simulator anchor for any of them, and SENSEX is BSE against an NSE-only scope. F21 filled it with what we can honestly compute: an equal-weighted mean of per-symbol day change across every priced active instrument, with advances/declines and **the constituent count on screen**, so "10 of 200 priced" cannot be read as the Nifty 200. Simulating an index level instead would have fabricated data in the most prominent chrome on the page. If Yahoo ever lands, `^NSEI` and `^NSEBANK` may join it — they do not replace it, and neither may be badged LIVE. (F17, F21)
 
 - **The candle prune moves from F16 to F33.** Candles left F15, so retention logic here would run against a table nothing populates and its assertion would pass whether or not the rules were right. F33 builds the pipeline and its retention together. (F16)
 
@@ -184,6 +184,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Theming and design tokens
 
+- **The `--color-chart-*` categorical ramp is measured, not chosen, and `chart-ramp.test.ts` holds it that way.** The original ten were invented in `library-docs.md` behind a TODO and failed when finally checked: `#3b82f6` and `#8b5cf6` scored **0.8 apart under a deuteranopia simulation**, i.e. identical to a deuteranope. Three rules bind any future edit — (1) **hue alone cannot separate ten categories** for a deuteranope, whose discriminable axis is roughly blue↔yellow, so the ramp steps *lightness* too and holds two blues and two magentas at different depths on purpose; (2) the contrast target is **`--color-surface`, not `--color-canvas`** — WCAG 1.4.11's 3:1 covers graphics required to understand content, and every chart here ships beside a table carrying the same numbers, so the real requirement is only that no arc dissolves into its card; demanding 3:1 against both a white and a near-black canvas squeezes every colour into one luminance band and produced a palette of five near-identical oranges; (3) **no green and no red at all**, not merely the two trading tokens — any green reads as "up" and any red as "down" on a trading screen. (F21)
+
+- **An aggregated slice such as `Others` must not take a ramp colour.** It is drawn last, so a naive `index % 10` hands it chart-1 once ten named slices precede it, and the legend then shows two identical swatches on different rows. It takes the neutral, which also signals correctly that it is not a position. (F21)
+
 - **`cn()` silently deletes a custom type size when it meets a colour.** tailwind-merge groups by class prefix and cannot tell `text-number-sm` (a size) from `text-ink` (a colour) — it keeps the later one and drops the other, with no error and no warning. `src/lib/utils.ts` declares the project's `--text-*` scale to `extendTailwindMerge` to fix this; **a size added to `globals.css` and not to that list starts disappearing** the moment it shares a `cn()` with a colour. (F19)
 
 - **`profiles.theme` defaults to `'dark'`, and `architecture.md` was wrong.** It said `light` while `project-overview.md` specifies a dark-default terminal and `theme-provider.tsx` ships `defaultTheme="dark"`. CLAUDE.md's conflict order puts the scope document above `architecture.md`, so the doc is corrected rather than the code bent to it. (F10)
@@ -244,6 +248,16 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **The hero is typographic — no mock terminal UI.** It is what the build plan specifies, and F40 can screenshot the finished terminal, which beats a hand-built fake and avoids maintaining a second UI until the real one exists. (F04)
 
 - **The simulator disclaimer is dismissible and remembered, with no flash.** A blocking inline script in the root layout reads `localStorage` and stamps `data-disclaimer="dismissed"` on `<html>` before first paint; CSS hides the strip off that attribute. The same technique `next-themes` already runs here, and it keeps the `(marketing)` layout a Server Component — only the close button is a client island. (F03)
+
+## Live prices and interpolation
+
+- **The interpolation loop tweens between server anchors and invents nothing.** `build-plan.md` described "micro-ticks ... bounded so it never drifts beyond a small band", which is bounded jitter — figures no provider reported and the market never traded at. `architecture.md` → Interpolated values says the loop "moves prices between server anchors" and outranks a build-plan feature, so the build plan was rewritten. (F19, evicted from Key Decisions at F21)
+
+- **The interpolation bound is an interval, not a band.** The displayed value always lies on the closed segment between the previous and current anchor — strictly stronger than "within X% of the anchor", and testable at tier 1 with no DOM. (F19, evicted from Key Decisions at F21)
+
+- **The watchlist's day change is recomputed on the client once prices are live.** `library-docs.md`'s `LiveQuote` carries `prevClose` for exactly this. Display-only and never persisted, so `CLAUDE.md`'s money rule — which forbids computing a figure in TypeScript *and storing it* — is untouched; a ticking price beside a frozen change would be the worse outcome. (F19, evicted from Key Decisions at F21)
+
+- **Rows read `store ?? prop` with the store seeded in an effect.** Server and first client render both use the prop, so the HTML matches — the lesson F17's `serverNow` pill taught — and a symbol with no quote keeps its em dash instead of flashing into existence. (F19, evicted from Key Decisions at F21)
 
 ## Quote providers
 

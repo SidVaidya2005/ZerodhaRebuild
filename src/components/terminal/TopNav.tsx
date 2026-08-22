@@ -4,6 +4,8 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import type { UniverseEntry, WatchlistRow } from '@/lib/watchlist/schemas'
 
 import { AvatarMenu } from './AvatarMenu'
+import type { MarketComposite } from '@/lib/portfolio/types'
+
 import { DataSourceBadge } from './DataSourceBadge'
 import { FundsSummary } from './FundsSummary'
 import { IndexStrip } from './IndexStrip'
@@ -30,6 +32,8 @@ type TopNavProps = {
   /** Forwarded to the sheet: the rail's copy is rendered by the layout. */
   watchlist: WatchlistRow[]
   universe: UniverseEntry[]
+  /** The index strip's figures. Null when the read failed; the strip shows an em dash. */
+  composite: MarketComposite | null
 }
 
 export function TopNav({
@@ -41,6 +45,7 @@ export function TopNav({
   serverNow,
   watchlist,
   universe,
+  composite,
 }: TopNavProps) {
   return (
     <header className="sticky top-0 z-40 border-b border-hairline bg-canvas">
@@ -59,7 +64,7 @@ export function TopNav({
           ZerodhaRebuild
         </Link>
 
-        <IndexStrip />
+        <IndexStrip composite={composite} />
 
         <nav aria-label="Terminal" className="ml-auto hidden items-center gap-5 lg:flex">
           {TERMINAL_NAV_LINKS.map((link) => (

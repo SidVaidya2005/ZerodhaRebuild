@@ -1091,24 +1091,88 @@ feature is, is the data-source half.
 
 ### 21 Dashboard home
 
-
+The portfolio read, and the first page in the project whose whole job is money. **Nothing writes
+`holdings`, `orders` or `trades` until F24**, so every real user hits the empty state today and the
+populated path is verified against rows planted by SQL. That is expected rather than a gap: the
+aggregation has to exist and be proven correct before the engine that fills it arrives.
 
 **UI:**
 
 - Summary cards: total portfolio value, invested amount, overall P&L, day's P&L, available cash.
-- Top-10 holdings donut with an "Others" bucket.
-- Index strip and a recent-orders list.
-- A distinct empty state for a user who has never traded, pointing at the watchlist.
+  - `portfolio value = available_cash + Σ(quantity × ltp)` — cash included, because a dashboard that
+    reported only stock would drop a fifth of a fresh account's money off its own headline figure.
+  - `invested = Σ(quantity × average_price)`. Charges are already capitalised into `average_price`
+    (`trading-contract.md` §8), so they are not added again here.
+  - `overall P&L = market value − invested`. Unrealised only; realised P&L is Reports' figure (F34).
+  - `day's P&L = Σ quantity × (ltp − prev_close)` — the same basis as the watchlist's change column,
+    so the two cannot disagree on screen. Recorded in `trading-contract.md` §9 by this feature,
+    which is where money definitions live and where it was missing.
+- **Unpriced holdings are disclosed, never zeroed.** A held symbol with no `quotes` row cannot
+  contribute a market value, and treating that as zero understates the portfolio silently. The
+  summary carries an unpriced count and the tiles say so.
+- Top-10 holdings donut with an "Others" bucket, ranked by market value.
+- **The index strip becomes a derived composite, not a named index.** NIFTY 50 and BANK NIFTY have no
+  row, quote or simulator anchor anywhere — F17 shipped the slot empty for exactly that reason, and
+  Yahoo (`^NSEI`) is deferred to the end of the project. The strip renders an equal-weighted mean of
+  per-symbol day change % across every priced symbol, with advances/declines/unchanged and its
+  **constituent count on screen**, so "10 of 200 priced" can never be read as the Nifty 200. A
+  breadth statistic, labelled as one.
+- Recent-orders list.
+- A distinct empty state for a user who has **never traded** — no `holdings` rows *and* no `orders`
+  rows — pointing at the watchlist. A user who traded and closed out sees zeroes and their order
+  history instead, because that account has a history and the empty state would deny it.
 
 **Logic:**
 
-- Server-side aggregation joining `holdings` against `quotes`; the client only renders.
+- Server-side aggregation in three `security_invoker` views: `portfolio_holdings`
+  (holdings ⋈ instruments ⋈ quotes), `portfolio_summary` (the tile figures plus the unpriced count,
+  joined to `funds`), and `market_composite`. **No view carries a predicate of its own** — RLS
+  through `security_invoker` is the boundary, per the correction F18 made to `watchlist_rows`.
+- **Tiles jump on anchor and never tween.** `architecture.md`'s invariant — every monetary total
+  renders the server anchor, never an interpolated value — outranks its own line 517, which listed
+  the dashboard tiles as an ambient surface. That line is corrected in this change; the index strip
+  stays on it. The recompute is display-only and reaches nothing, exactly as F19's `dayChange` does.
+- **Held symbols join the terminal channel.** `QuoteChannel` filters server-side on the watchlist, so
+  a holding that is not watched would never tick. The layout unions held symbols into both the filter
+  and the seed — F30 and F31 need the same union.
+- **The composite does not recompute on the client.** It averages over every priced symbol in the
+  universe, but a user's store holds only their own watchlist; a client recompute would silently
+  change the constituent set and report a different number under the same label. It is a server
+  figure, restated on navigation, and its provenance is derived **pessimistically** — the worst
+  provider paired with the oldest timestamp — so it can never overclaim.
+- Holdings only. MIS positions stay on `/positions` (F31), which is Kite's own split.
+- Recharts 3.10.1, per the stack table and the worked donut in `library-docs.md` § Recharts: `shape`
+  for per-slice colour, the `--color-chart-*` ramp, never `--color-up`/`--color-down`.
 
 **Verify:**
 
-- With seeded holdings, the card totals match a hand-computed figure.
-- The donut shows the correct ten symbols ranked by market value.
-- A fresh account sees the empty state, not zeroes and a blank chart.
+- **With planted holdings, the card totals match a hand-computed figure** — two holdings and a quote
+  inserted by SQL, the five figures computed by hand, read off the rendered page, rows deleted. The
+  only check that can prove the SQL, since nothing writes `holdings` yet.
+- **No interpolated value enters a total** — tier 1 asserts the recompute helper reads `anchor`, and
+  confirmed by reading that no tile is passed `ltp`.
+- **A tile moves on a tick with no reload** — a SQL `update` to a planted holding's `quotes` row
+  changes the portfolio-value tile within two seconds. This proves the channel union works for a
+  symbol that is deliberately *not* on the watchlist, which is the part that can silently fail.
+- **The donut shows the correct ten by market value** — tier 1 on the bucketing helper: eleven
+  holdings yield ten named slices plus an `Others` equal to the eleventh, ranked by market value
+  rather than quantity.
+- **A fresh account sees the empty state** — a user with no holdings and no orders in the browser;
+  and a user with orders but no holdings sees zeroes and the list, not the empty state.
+- **Unpriced holdings are disclosed** — plant a holding whose symbol has no `quotes` row; the page
+  states the count rather than dropping it silently out of portfolio value.
+- **The composite never claims to be an index** — a grep asserts no `NIFTY`/`SENSEX` string renders
+  as a value, and the constituent count is on screen beside the figure.
+- **The composite's provenance is pessimistic** — tier 1: mixed providers with one stale constituent
+  yields STALE.
+- **RLS is falsifiable on all three views** — pgTAP: turning `security_invoker` off must start
+  leaking another user's rows. A view whose isolation survives that flip is not being tested.
+- **No price renders without accessible provenance** — F20's DOM sweep, re-run over `/dashboard`.
+- **The chart ramp is accessible** — each of the ten slice colours checked for 3:1 against both
+  `--color-canvas` values and for distinguishability under deuteranopia, closing the TODO
+  `library-docs.md` left against this dashboard.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm build` and `pnpm format:check`
+  all exit zero, and `pnpm audit:a11y /dashboard` scores as the other pages do.
 
 ### Phase checkpoint
 

@@ -16,10 +16,10 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Current Status
 
-**Phase:** Phase 2 — Data Foundation & Auth
-**Last completed:** 20 Data source badge and provenance — the shell badge summarising the worst source among the prices actually on screen, per-price provenance announced to screen readers as well as shown on hover, STALE muting, and one shared clock so freshness is derived rather than frozen
+**Phase:** Phase 3 — Terminal Shell & Live Prices (Phase 2 is complete bar F16 and its checkpoint, both blocked on a live session)
+**Last completed:** 21 Dashboard home — five summary tiles, a top-10 holdings donut with an Others bucket, recent orders and a never-traded empty state, all aggregated in three `security_invoker` views; the index strip is now a derived composite over our own priced universe rather than a named index it has no data for. The categorical chart ramp was measured for the first time, failed, and was replaced
 **In progress:** 16 Market tick Edge Function and schedule — built, deployed and green except for two session-dependent items that need Monday; see the blocked note below
-**Next:** 21 Dashboard home — portfolio value, day P&L, the index strip with real data at last, a top-10 holdings donut and recent orders. `PriceWithProvenance` exists for every price it renders, and the index strip has been a labels-only slot since F17 waiting for this
+**Next:** Phase 3 checkpoint — every feature is built. Run the phase verification, inspect the diff across F17–F21, split `build-journal.md`'s `## Phase 2` heading (F17–F21 are filed under it), compact the journal, and confirm ticking holds unattended for a full session with no Realtime channel leak. F16 and the Phase 2 checkpoint are still blocked on Monday's live session
 
 **Blocked until Monday 2026-08-24, first session after 09:15 IST.** F16's last two verify items and the Phase 2 checkpoint's own "prices land on a schedule" both need a live session, and the cron window is weekdays only. Check with one query:
 ```sql
@@ -63,7 +63,7 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 - [x] 18 Watchlist sidebar
 - [x] 19 Realtime quote store and tick interpolation
 - [x] 20 Data source badge and provenance
-- [ ] 21 Dashboard home
+- [x] 21 Dashboard home
 - [ ] Phase checkpoint — verify Phase 3 — Terminal Shell & Live Prices is stable before starting the next phase
 
 ### Phase 4 — Trading Engine
@@ -101,13 +101,22 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 
 ## Key Decisions
 
+- **The index strip is a derived composite over our own priced universe, never a named index.** NIFTY 50 and BANK NIFTY have no row, quote or simulator anchor anywhere and Yahoo is deferred to the end of the project, so the strip reports an equal-weighted mean of per-symbol day change % with its **constituent count on screen** — a breadth statistic, labelled as one. Simulating an index level instead would have invented data in the most prominent chrome on the page. (F21)
+
+- **Dashboard money tiles jump on the anchor and never tween.** `architecture.md` contradicted itself: line 517 listed the dashboard summary tiles as an ambient surface that may interpolate, while the invariant says every monetary total renders the server anchor. The invariant wins and line 517 is corrected in the same change — the index strip stays ambient. Tiles still recompute from anchors so they do not sit frozen beside a ticking watchlist, display-only exactly as F19's `dayChange`. (F21)
+
+- **Day's P&L is `Σ quantity × (ltp − prev_close)` over holdings**, recorded in `trading-contract.md` §9, which defined realised and unrealised P&L but never this one. It is the same basis as the watchlist's change column, so the two cannot disagree on screen, and it needs no read of `trades` — which matters because no trading engine exists to write them yet. (F21)
+
+- **The dashboard aggregates holdings only; MIS positions stay on `/positions`.** Portfolio value is `available_cash + Σ(quantity × ltp)`, invested is `Σ(quantity × average_price)` with charges already capitalised per §8, and overall P&L is unrealised only. Kite's own split, and it keeps the intraday sign handling out of a donut that would have to draw a negative slice. (F21)
+
 - **A backgrounded tab dispatches no focus events and runs no animation frames.** `element.focus()` sets `document.activeElement` and fires nothing — not even native listeners attached directly. Three features have now lost time to this family: F17's frozen exit animation, F19's frozen `requestAnimationFrame`, F20's focus handlers. Check `document.visibilityState` **first** whenever an automated browser check says an interaction does nothing. (F20)
+
 - **One ticking clock provided from the terminal layout, so the badge and every price read the same instant.** Otherwise a row can render DELAYED under a badge saying STALE — a contradiction the visitor can see. **F17's pill keeps its own timer**, because it deliberately lands *on* the session boundary rather than up to a heartbeat late. (F20)
+
 - **Only symbols currently rendering a price feed the data-source badge.** `worstSource([])` returns STALE by design, so counting the symbols with no quote row would pin the badge to STALE on account of absent data and say nothing about the prices actually visible. A row showing an em dash makes no claim and cannot be dishonest. (F20)
+
 - **Provenance is announced, not merely hoverable.** The facts render as `sr-only` text tied to the price by `aria-describedby` as well as in a HoverCard, because hover does not exist on touch and never fires for a screen reader — and the guarantee is that *no* price renders without accessible provenance. (F20)
+
 - **Only STALE prices are muted, not SIMULATED.** Every price in this build is simulated, so muting them all would render the whole terminal grey and the treatment would stop carrying information. The badge and the per-price disclosure carry that honesty instead, which is what `architecture.md` specifies. (F20)
+
 - **Realtime can subscribe successfully and deliver nothing, silently.** It authorises each subscriber against RLS by JWT, and `quotes` is readable by `authenticated` only; the cookie session loads asynchronously, so subscribing before the token exists opens a socket that reports `SUBSCRIBED` and never fires. Await `getSession()` and `realtime.setAuth(token)` before `.subscribe()`, and always pass a status callback so a channel cannot fail in silence. (F19)
-- **The interpolation loop tweens between server anchors and invents nothing.** `build-plan.md` described "micro-ticks ... bounded so it never drifts beyond a small band", which is bounded jitter — figures no provider reported and the market never traded at. `architecture.md` → Interpolated values says the loop "moves prices between server anchors" and outranks a build-plan feature, so the build plan was rewritten. (F19)
-- **The interpolation bound is an interval, not a band.** The displayed value always lies on the closed segment between the previous and current anchor — strictly stronger than "within X% of the anchor", and testable at tier 1 with no DOM. (F19)
-- **The watchlist's day change is recomputed on the client once prices are live.** `library-docs.md`'s `LiveQuote` carries `prevClose` for exactly this. Display-only and never persisted, so `CLAUDE.md`'s money rule — which forbids computing a figure in TypeScript *and storing it* — is untouched; a ticking price beside a frozen change would be the worse outcome. (F19)
-- **Rows read `store ?? prop` with the store seeded in an effect.** Server and first client render both use the prop, so the HTML matches — the lesson F17's `serverNow` pill taught — and a symbol with no quote keeps its em dash instead of flashing into existence. (F19)

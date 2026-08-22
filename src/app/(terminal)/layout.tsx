@@ -8,7 +8,36 @@ import { WatchlistRail } from '@/components/terminal/WatchlistSidebar'
 import { LOGIN_PATH } from '@/lib/auth/routes'
 import { loadHolidays } from '@/lib/market/market-hours'
 import { createClient } from '@/lib/supabase/server'
+import type { MarketComposite } from '@/lib/portfolio/types'
+import type { ServerQuote } from '@/lib/stores/quote-store'
 import type { UniverseEntry, WatchlistRow } from '@/lib/watchlist/schemas'
+
+/**
+ * Both the watchlist view and the holdings view carry the same five provenance
+ * and price columns, under the two naming conventions the codebase uses either
+ * side of PostgREST. One narrowing, so the channel cannot be seeded with a
+ * price from one source shaped differently from the other.
+ */
+function toServerQuote(row: {
+  symbol: string | null
+  ltp?: number | null
+  prevClose?: number | null
+  prev_close?: number | null
+  provider: ServerQuote['provider']
+  providerTs?: string | null
+  provider_ts?: string | null
+  fetchedAt?: string | null
+  fetched_at?: string | null
+}): ServerQuote {
+  return {
+    symbol: row.symbol ?? '',
+    ltp: row.ltp ?? null,
+    prevClose: row.prevClose ?? row.prev_close ?? null,
+    provider: row.provider,
+    providerTs: row.providerTs ?? row.provider_ts ?? null,
+    fetchedAt: row.fetchedAt ?? row.fetched_at ?? null,
+  }
+}
 
 /**
  * The chrome every terminal page sits inside, and the one place the session is
@@ -40,6 +69,8 @@ export default async function TerminalLayout({ children }: { children: ReactNode
     holidays,
     { data: watchlist, error: watchlistError },
     { data: universe, error: universeError },
+    { data: held, error: heldError },
+    { data: composite, error: compositeError },
   ] = await Promise.all([
     supabase.from('profiles').select('client_id, full_name').single(),
     supabase.from('funds').select('available_cash').single(),
@@ -62,6 +93,23 @@ export default async function TerminalLayout({ children }: { children: ReactNode
       .select('symbol, name, exchange')
       .eq('is_active', true)
       .order('symbol'),
+    // Held symbols, so a holding that is not on the watchlist still ticks. The
+    // Realtime channel is filtered server-side to the symbols it is given, so
+    // without this union the dashboard's portfolio value would sit frozen while
+    // the sidebar beside it moved — and F30 and F31 would each hit it again.
+    // A narrow projection of the same view the dashboard reads in full.
+    supabase
+      .from('portfolio_holdings')
+      .select('symbol, ltp, prev_close, provider, provider_ts, fetched_at'),
+    // The index strip. One row, aggregated in Postgres over every priced active
+    // instrument — see the view's own comment for why this is a breadth
+    // statistic and not an index.
+    supabase
+      .from('market_composite')
+      .select(
+        'constituents, universe_size, change_pct, advances, declines, unchanged, providers, oldest_provider_ts, oldest_fetched_at'
+      )
+      .maybeSingle(),
   ])
 
   // Prefer the profile the bootstrap wrote, then Google's claim, then the email.
@@ -78,6 +126,8 @@ export default async function TerminalLayout({ children }: { children: ReactNode
   // still usable without the sidebar, but the failure must not be silent.
   if (watchlistError) console.error('[terminal.layout] watchlist_rows', watchlistError)
   if (universeError) console.error('[terminal.layout] instruments', universeError)
+  if (heldError) console.error('[terminal.layout] portfolio_holdings', heldError)
+  if (compositeError) console.error('[terminal.layout] market_composite', compositeError)
 
   // Numbers cross PostgREST as JSON numbers, but every one of these is nullable
   // — a symbol with no quote row yet has no price at all — so each is narrowed
@@ -103,6 +153,31 @@ export default async function TerminalLayout({ children }: { children: ReactNode
     exchange: row.exchange,
   }))
 
+  // Every symbol the terminal needs live: what is on the watchlist, plus what
+  // the user actually owns. Deduplicated by symbol, watchlist first — the two
+  // sets overlap for most users, and a repeated symbol in the channel filter
+  // would subscribe twice to the same row.
+  const livePrices: ServerQuote[] = [...rows.map(toServerQuote), ...(held ?? []).map(toServerQuote)]
+    .filter((row, index, all) => all.findIndex((other) => other.symbol === row.symbol) === index)
+    .filter((row) => row.symbol !== '')
+
+  // Null rather than a zeroed object when the read fails: the strip renders an
+  // em dash for the absence of a figure, and a fabricated 0.00% would be a claim
+  // that the market is flat.
+  const marketComposite: MarketComposite | null = composite
+    ? {
+        constituents: Number(composite.constituents ?? 0),
+        universeSize: Number(composite.universe_size ?? 0),
+        changePct: composite.change_pct === null ? null : Number(composite.change_pct),
+        advances: Number(composite.advances ?? 0),
+        declines: Number(composite.declines ?? 0),
+        unchanged: Number(composite.unchanged ?? 0),
+        providers: composite.providers ?? [],
+        oldestProviderTs: composite.oldest_provider_ts,
+        oldestFetchedAt: composite.oldest_fetched_at,
+      }
+    : null
+
   // One instant for the whole render, shared by the market-status pill and the
   // provenance clock, so the two cannot disagree about when "now" was.
   const serverNow = new Date().toISOString()
@@ -122,21 +197,12 @@ export default async function TerminalLayout({ children }: { children: ReactNode
           serverNow={serverNow}
           watchlist={rows}
           universe={instruments}
+          composite={marketComposite}
         />
         {/* One channel and one animation loop for the whole terminal, mounted
           here so they survive navigation between pages rather than being torn
           down and rebuilt by each one. Renders nothing. */}
-        <QuoteChannel
-          symbols={rows.map((row) => row.symbol)}
-          seed={rows.map((row) => ({
-            symbol: row.symbol,
-            ltp: row.ltp,
-            prevClose: row.prevClose,
-            provider: row.provider,
-            providerTs: row.providerTs,
-            fetchedAt: row.fetchedAt,
-          }))}
-        />
+        <QuoteChannel symbols={livePrices.map((row) => row.symbol)} seed={livePrices} />
 
         <div className="flex flex-1">
           <WatchlistRail rows={rows} universe={instruments} />

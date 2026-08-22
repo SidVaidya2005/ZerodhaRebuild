@@ -434,6 +434,18 @@ Pruning runs once daily inside `market-tick`.
 | blocked_margin | numeric(14,2) | Collateral against an open short: `\|net_quantity\| × entry_reference_price × (1 + SHORT_MARGIN_BUFFER) + estimated_close_charges`, recomputed on every change. Zero for longs |
 | opened_at | timestamptz | Original entry; not reset when adding to the position. Used by the square-off job |
 
+### Portfolio views
+
+Three `security_invoker` views, added in F21. None carries a predicate of its own — RLS on the
+underlying table is the boundary, reached through `security_invoker`, which is the correction F18
+made to `watchlist_rows`.
+
+| View | Grain | Notes |
+| ---- | ----- | ----- |
+| `portfolio_holdings` | One row per holding | `holdings` ⋈ `instruments` ⋈ `quotes`, left-joined on quotes so an unpriced holding still appears with null valuation. Carries `invested`, `market_value`, `unrealised_pnl`, `day_pnl` and the three provenance columns |
+| `portfolio_summary` | One row per user | The dashboard tiles. Driven from `funds` so a never-traded account still produces a row. `unpriced_count` is what stops the sums silently omitting an unpriced holding |
+| `market_composite` | One row | Equal-weighted mean day change across every priced active instrument, with advances/declines and `universe_size`. **A breadth statistic, never an index** — it reports raw provenance inputs rather than a source, because freshness is derived at read time |
+
 ### `watchlist_items`
 
 | Column | Type | Notes |
@@ -514,7 +526,8 @@ The client's `requestAnimationFrame` loop moves prices between server anchors. T
 figures are **synthetic**, and the rules follow from that:
 
 - **Any surface where the number drives a decision renders the anchor, never the interpolated value**: the order ticket, the order confirmation, the stock detail header price, and every total on Funds, Holdings, Positions and Reports.
-- Ambient surfaces may render interpolated motion: the watchlist, the index strip, the dashboard summary tiles.
+- Ambient surfaces may render interpolated motion: the watchlist and the index strip.
+- **The dashboard summary tiles are not ambient**, though an earlier draft of this line listed them as such. They are monetary totals, and the invariant below admits no exception for them: they recompute from the anchor when a tick lands, and never mid-tween. F21 resolved the contradiction in the invariant's favour.
 - Wherever an interpolated figure is shown, its provenance carries `isInterpolated: true`, and the hover detail shows the true anchor, its provider, and its timestamp.
 - The shell badge reports the worst provenance among symbols on screen. It is a summary, **not a substitute** for per-price provenance — every individual price still resolves its own.
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { badgeSource, provenanceOf } from '@/lib/market/screen-provenance'
+import { badgeSource, compositeSource, provenanceOf } from '@/lib/market/screen-provenance'
 import type { LiveQuote } from '@/lib/stores/quote-store'
 
 const NOW = new Date('2026-08-22T09:00:00Z')
@@ -88,5 +88,32 @@ describe('the shell badge', () => {
     const quotes = { A: quote({ provider: 'YAHOO', providerTs: agoMs(60_000) }) }
     expect(badgeSource(quotes, NOW)).toBe('DELAYED')
     expect(badgeSource(quotes, new Date(NOW.getTime() + 20 * 60 * 1000))).toBe('STALE')
+  })
+})
+
+describe('the composite strip provenance', () => {
+  it('is null when nothing is priced, so the strip claims nothing', () => {
+    expect(compositeSource([], null, NOW)).toBeNull()
+  })
+
+  it('reports SIMULATED when every constituent is the simulator', () => {
+    expect(compositeSource(['SIMULATOR'], null, NOW)).toBe('SIMULATED')
+  })
+
+  it('pairs every provider with the oldest timestamp, so one stale constituent taints the whole', () => {
+    // 40 minutes is past the 15-minute delayed window, so Yahoo derives to
+    // STALE — worse than the simulator's SIMULATED, and therefore the answer.
+    expect(compositeSource(['SIMULATOR', 'YAHOO'], agoMs(40 * 60_000), NOW)).toBe('STALE')
+  })
+
+  it('errs downwards rather than upwards on a mixed set', () => {
+    // Fresh enough that Yahoo alone would be DELAYED. SIMULATED is worse, and
+    // the strip reports the worse one — it may under-claim, never over-claim.
+    expect(compositeSource(['SIMULATOR', 'YAHOO'], agoMs(60_000), NOW)).toBe('SIMULATED')
+    expect(compositeSource(['YAHOO'], agoMs(60_000), NOW)).toBe('DELAYED')
+  })
+
+  it('never reports LIVE, because no provider in this build streams', () => {
+    expect(compositeSource(['YAHOO'], NOW, NOW)).toBe('DELAYED')
   })
 })

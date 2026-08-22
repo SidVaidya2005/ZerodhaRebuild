@@ -149,8 +149,8 @@ export const STACK: readonly StackEntry[] = [
   {
     layer: 'Portfolio charts',
     pkg: 'recharts',
-    version: null,
-    status: 'planned',
+    version: '3.10.1',
+    status: 'installed',
     purpose: 'Top-ten holdings donut and P&L breakdown.',
   },
   {
