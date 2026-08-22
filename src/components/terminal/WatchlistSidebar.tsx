@@ -17,8 +17,12 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { createClient } from '@/lib/supabase/client'
 import { dayChange } from '@/lib/market/change'
+import { provenanceOf } from '@/lib/market/screen-provenance'
 import { useQuoteStore } from '@/lib/stores/quote-store'
 import { cn } from '@/lib/utils'
+
+import { PriceWithProvenance } from './PriceWithProvenance'
+import { useNow } from './TerminalClock'
 import { searchUniverse } from '@/lib/watchlist/search'
 import type { UniverseEntry, WatchlistRow } from '@/lib/watchlist/schemas'
 import { addToWatchlist, removeFromWatchlist, reorderWatchlist } from '@/server/actions/watchlist'
@@ -51,10 +55,6 @@ const priceFormatter = new Intl.NumberFormat('en-IN', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 })
-
-function formatPrice(value: number | null): string {
-  return value === null ? DASH : priceFormatter.format(value)
-}
 
 /** Signed, because a change without its sign is unreadable at a glance. */
 function formatChange(change: number | null, changePct: number | null): string {
@@ -117,6 +117,7 @@ type RowProps = {
  */
 function WatchlistRowItem({ row, isFirst, isLast, pending, run }: RowProps) {
   const live = useQuoteStore((state) => state.quotes[row.symbol])
+  const now = useNow()
 
   // The price on screen may be mid-tween and therefore synthetic. That is
   // allowed here and nowhere that drives a decision: `architecture.md` lists
@@ -149,12 +150,16 @@ function WatchlistRowItem({ row, isFirst, isLast, pending, run }: RowProps) {
       <span
         key={live?.flashKey ?? 0}
         className={cn(
-          'shrink-0 rounded-xs px-1 font-numeric text-number-sm text-ink tabular-nums',
+          'shrink-0 rounded-xs px-1 font-numeric text-number-sm',
           live?.direction === 'up' && 'tick-flash-up',
           live?.direction === 'down' && 'tick-flash-down'
         )}
       >
-        {formatPrice(ltp)}
+        <PriceWithProvenance
+          value={ltp}
+          anchor={live?.anchor ?? null}
+          provenance={live ? provenanceOf(live, now) : null}
+        />
       </span>
 
       {/* Absolutely positioned, not a flex sibling. `opacity-0` hides these but

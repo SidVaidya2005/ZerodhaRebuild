@@ -48,6 +48,8 @@ export type WatchlistRow = {
   prevClose: number | null
   provider: 'YAHOO' | 'TWELVE_DATA' | 'SIMULATOR' | null
   providerTs: string | null
+  /** When the tick wrote this row. Provenance reports it; F19 did not need it. */
+  fetchedAt: string | null
 }
 
 /** One instrument in the search palette. */

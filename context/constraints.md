@@ -29,6 +29,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Build plan sequencing
 
+- **B and S are not built in F18.** Order entry is F25/F26 and has no destination yet, so shipping the buttons would mean two dead controls — the same call F17 made for the index strip. The chart action links to `/stocks/[symbol]`, which F17 stubbed. (F18)
+
+- **Watchlist search filters a preloaded universe in `cmdk`; no trigram index, no migration, no round trip per keystroke.** 200 rows of symbol/name/exchange is ~12KB and Postgres seq-scans a table that small whatever index sits on it, so the index the build plan called for would never have been used. (F18)
+
 - **The market-status pill is F17's, and it recomputes on a timer.** F20 turns out to be only the data-source badge — its UI and Logic bullets never mention market status despite its title. Server-rendering the pill once would leave a tab open past 15:30 still reading OPEN, so the server passes the holiday set as a `string[]` and a client component calls the same pure `marketStatusAt` the tick gates on. (F17)
 
 - **The index strip ships as a slot with no values, and index data moves to F21.** NIFTY 50, SENSEX and BANK NIFTY exist nowhere in the data — `instruments` holds 200 NSE equities, so there is no row, no quote and no simulator anchor for any of them, and SENSEX is BSE against an NSE-only scope. Three fabricated numbers in the most prominent chrome on the page is the worst place in the app to invent data. `project-overview.md` already puts an index strip on the Dashboard, so F21 gets it. (F17)
@@ -86,6 +90,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Security and RLS
 
+- **The watchlist view was filtering twice, and the untested filter was the one that mattered.** It carried both a hand-written `where user_id = auth.uid()` and `security_invoker`; falsification showed the predicate alone was holding the line, leaving the invoker setting free to be dropped with every test still green. The predicate is application code doing RLS's job, so it was removed — `security_invoker` is now load-bearing and falsifiable. (F18)
+
 - **Supabase's `verify_jwt` accepts any valid project key, including the publishable one that ships in the browser bundle.** Measured in F16 against the deployed `market-tick`: no `Authorization` header is rejected by the gateway with `UNAUTHORIZED_NO_AUTH_HEADER`, but both `sb_secret_…` and `sb_publishable_…` return 200. Any Edge Function that writes data therefore needs a second layer — a Vault-held secret compared in the handler, in constant time, before it touches the database — and must refuse rather than fall open when that secret is unset. This also answers the standing question about the newer non-JWT secret keys: they do satisfy the gateway. (F16)
 
 - **The default watchlist seeds by `INSERT…SELECT` against `instruments`.** F14 populates that table and runs *after* F13, so a plain insert would violate `watchlist_items`' foreign key today. Intersecting a fixed symbol list against whatever is seeded is FK-safe by construction, idempotent, and needs no change when F14 lands. The "populated watchlist" half of F13's original verify moves to F14, which is where it becomes checkable. (F13)
@@ -128,6 +134,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Verification routine
 
+- **A backgrounded tab freezes animations and dispatches no focus events.** `element.focus()` sets `document.activeElement` and fires nothing, not even native listeners bound directly to the element; CSS animations never reach `animationend`; `requestAnimationFrame` never fires. An automated browser check will therefore report that a working interaction does nothing. **Read `document.visibilityState` before believing it.** Also note hover coordinates are in screenshot space, not CSS pixels — at `innerWidth` 1640 against a 1456-wide capture they differ by ~12%, enough to hover the wrong element. (F17, F19, F20)
+
 - **Kill `next start` by PID from `lsof -nP -iTCP:3000 -sTCP:LISTEN` before trusting any post-rebuild check.** `pkill` does not reliably stop it, and the surviving process keeps port 3000 and serves the *previous* build — which has silently invalidated a verification pass twice. (F03, F04)
 
 - **`resize_window` does not change `window.innerWidth`** when the browser is in macOS fullscreen; it reports success and does nothing. Two working alternatives: measure inside a 375×760 `<iframe>`, or drive headless Brave through the `puppeteer-core` that ships under `lighthouse` and set the viewport directly. (F03, 1.00.06)
@@ -167,6 +175,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **`server-only` cannot be imported by Vitest**, which does not resolve React's `react-server` condition. It is aliased to the package's own `empty.js` in `vitest.config.mts`. This does not weaken the guard — `next build` still resolves the throwing entry for client bundles, which is what the falsifiability check exercises. (F01)
 
 ## Accessibility
+
+- **Reorder ships as move-up / move-down, not drag.** Drag alone is unreachable by keyboard and the project has no drag-and-drop dependency; buttons are accessible by construction and write the same `sort_order`. Drag becomes a later enhancement over the same Server Action, and F38 inherits a passing surface rather than a filed gap. (F18)
 
 - **A horizontally scrollable region needs `tabIndex={0}` and a labelled `role="region"`,** or keyboard users cannot reach the overflowing columns. At 375px that is most of the table. **Lighthouse does not audit this; axe does** — the score alone is not evidence. Applies to every table in Phase 5. (F05)
 
@@ -263,6 +273,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **Yahoo throttles bursts at the IP level and the block outlasts any in-process backoff.** ~16 requests/second across 200 symbols got every one back as 429 — and the first version of the probe reported that as "200 symbols do not resolve", condemning a good universe. Never treat 429 as a verdict on a symbol: only 404 means the symbol is unknown. `curl` succeeding while `node fetch` gets 429 is a recovery-window artefact, not a client difference — both are blocked together once tripped. Probe sequentially (~1.5s apart) and cache results so a throttled run resumes instead of restarting. (F14)
 
 ## Charges and the trading contract
+
+- **The watchlist's change is computed in Postgres, in a `security_invoker` view.** `CLAUDE.md` puts money arithmetic in Postgres and leaves TypeScript formatting it; the view also makes the panel one round trip and gives F30's holdings day change and F33's header the same shape to read. (F18)
 
 - **The home page quotes no charge rates.** CNC vs MIS is explained as settlement versus 15:20 square-off, shorting rules, and the no-leverage point from `trading-contract.md` §1. §3 still carries a TODO that every rate needs a dated source before F06, and a second copy on the home page would be a second thing to keep in sync. Rates live on `/pricing` only. (F04)
 

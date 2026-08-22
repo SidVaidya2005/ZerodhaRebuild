@@ -1032,28 +1032,62 @@ moves them, with no reload and no polling.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm build` and `pnpm format:check`
   all exit zero.
 
-### 20 Data source badge and market status
+### 20 Data source badge and provenance
 
-
+**The market-status half of the original title was built in F17** — the pill reads PRE-OPEN / OPEN /
+CLOSED and recomputes on a timer that lands on the session boundary. What remains, and what this
+feature is, is the data-source half.
 
 **UI:**
 
-- A shell badge reading DELAYED, STALE or SIMULATED, summarising the worst provenance among symbols on screen, with a tooltip explaining what it means and why.
-- Per-price provenance on hover anywhere a price appears: provider, provider timestamp, fetch time, and whether the figure on screen is interpolated.
-- Stale prices visually muted once `deriveSource` returns `STALE`.
+- A shell badge reading SIMULATED, DELAYED or STALE — the worst provenance among the prices actually
+  on screen — beside the market-status pill, explaining on hover what it means and why.
+- Per-price provenance anywhere a price appears: provider, provider timestamp, fetch time, whether
+  the figure is interpolated, and the true anchor when it is.
+  - **Announced, not merely hoverable.** The same facts render as `sr-only` text tied to the price by
+    `aria-describedby`, because hover does not exist on touch and never fires for a screen reader.
+    "No price without accessible provenance" has to hold in both.
+  - A reusable `<PriceWithProvenance>`, not markup inlined into the watchlist row — F21, F30 and F33
+    each add price surfaces and must not each reinvent the disclosure.
+- Stale prices visually muted once `deriveSource` returns `STALE`. **Only STALE.** Every price in
+  this build is simulated, so muting SIMULATED would render the whole terminal grey and the treatment
+  would stop carrying information; the badge and the per-price disclosure carry that honesty instead.
 
 **Logic:**
 
-- Badge derives from the worst source among symbols currently on screen — one simulated symbol downgrades the whole badge — but never replaces per-price provenance.
-- `deriveSource()` recomputed on render, never read from a stored column.
+- `deriveSource()` recomputed on render, never read from a stored column. `quotes` has no `source`
+  column by design: freshness is a function of the current time, so a row written as LIVE is stale
+  minutes later with no write to invalidate it.
+- **One ticking clock, provided from the layout**, so the badge and every price read the same instant
+  and a row can never render DELAYED under a badge saying STALE. A 30s heartbeat is ample against a
+  15-minute delayed window. **F17's pill keeps its own timer** — it deliberately lands *on* the
+  session boundary rather than up to 30s late, which a coarse freshness heartbeat would undo.
+- **Only symbols currently rendering a price feed the badge.** `worstSource([])` returns STALE by
+  design, so counting the symbols with no quote row would pin the badge to STALE on account of absent
+  data and say nothing about the prices actually visible. A row showing an em dash makes no claim and
+  cannot be dishonest.
+- `fetchedAt` is carried through the `watchlist_rows` select, `WatchlistRow`, `LiveQuote`, the seed
+  and the Realtime payload — F19 did not need it and provenance does.
+- `isInterpolated` is derived as `ltp !== anchor`, never stored.
 
 **Verify:**
 
-- Forcing the simulator switches the badge to SIMULATED and the tooltip explains why.
-- No price anywhere in the UI renders without accessible provenance.
-- With Yahoo as provider the badge reads DELAYED, not LIVE — asserted in a test, because a LIVE badge over a polled endpoint is the failure this feature exists to prevent.
-- Leaving a tab open past the delayed window flips the badge to STALE with no new server data, proving freshness is derived rather than frozen.
-- An interpolated watchlist figure reports `isInterpolated: true` on hover and shows the true anchor beside it.
+- **With Yahoo as provider the badge reads DELAYED, not LIVE** — asserted in tier 1, because a LIVE
+  badge over a polled endpoint is the failure this feature exists to prevent. `LIVE` is structurally
+  unreachable in this build and the test is what keeps it that way.
+- The badge reports the worst source on screen — tier 1 on the reducer: a SIMULATED + STALE mix
+  yields STALE, and unpriced symbols do not drag it.
+- **Freshness is derived rather than frozen** — plant a `YAHOO` row aged past the delayed window,
+  hold the tab open, and watch the badge flip to STALE with no new server data. Neither STALE nor
+  DELAYED occurs naturally here, since every quote is `SIMULATOR`, so both are planted and restored.
+- **No price renders without accessible provenance** — a DOM sweep asserting every price cell has an
+  `aria-describedby` that resolves to non-empty provenance text.
+- An interpolated figure reports `isInterpolated: true` and shows the true anchor beside it — tier 1
+  on the derivation, browser for the rendering.
+- Stale prices are muted and simulated ones are not — read from the planted row's class list.
+- The badge and the rows agree, read from the same DOM snapshot.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm build` and `pnpm format:check`
+  all exit zero.
 
 ### 21 Dashboard home
 

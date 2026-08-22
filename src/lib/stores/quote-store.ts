@@ -27,6 +27,12 @@ export type LiveQuote = {
   prevClose: number | null
   provider: QuoteProviderName
   providerTs: Date | null
+  /**
+   * When the tick wrote the anchor. Distinct from `providerTs`, which is the
+   * provider's own clock — the gap between them is the pipeline's own latency,
+   * and provenance reports both.
+   */
+  fetchedAt: Date
   /** Direction of the last *anchor* change, not of the current frame. */
   direction: 'up' | 'down' | 'flat'
   /** Where the current tween started from. */
@@ -47,6 +53,7 @@ export type ServerQuote = {
   prevClose: number | null
   provider: QuoteProviderName | null
   providerTs: string | null
+  fetchedAt: string | null
 }
 
 type QuoteState = {
@@ -101,7 +108,10 @@ export const useQuoteStore = create<QuoteState>()((set) => ({
       for (const row of rows) {
         // A symbol with no quote row yet has no price at all. It must stay
         // absent rather than become a zero, so the row keeps its em dash.
-        if (row.ltp === null || row.provider === null) continue
+        // No price, or no record of when it was fetched, means there is nothing
+        // to vouch for — the row keeps its em dash rather than entering the
+        // store as a number with no provenance behind it.
+        if (row.ltp === null || row.provider === null || row.fetchedAt === null) continue
         // Never overwrite a live anchor with a stale server render. A seed that
         // ran after the first tick would visibly rewind the price.
         if (state.quotes[row.symbol]) continue
@@ -112,6 +122,7 @@ export const useQuoteStore = create<QuoteState>()((set) => ({
           prevClose: row.prevClose,
           provider: row.provider,
           providerTs: row.providerTs === null ? null : new Date(row.providerTs),
+          fetchedAt: new Date(row.fetchedAt),
           direction: 'flat',
           from: row.ltp,
           startedAt: 0,
@@ -125,7 +136,7 @@ export const useQuoteStore = create<QuoteState>()((set) => ({
 
   applyServerQuote: (row, options) =>
     set((state) => {
-      if (row.ltp === null || row.provider === null) return state
+      if (row.ltp === null || row.provider === null || row.fetchedAt === null) return state
       const previous = state.quotes[row.symbol]
       const moved = previous !== undefined && previous.anchor !== row.ltp
       const tween = moved && (options?.animate ?? shouldAnimate())
@@ -144,6 +155,7 @@ export const useQuoteStore = create<QuoteState>()((set) => ({
             prevClose: row.prevClose,
             provider: row.provider,
             providerTs: row.providerTs === null ? null : new Date(row.providerTs),
+            fetchedAt: new Date(row.fetchedAt),
             direction: moved ? directionOf(previous.anchor, row.ltp) : 'flat',
             flashKey: (previous?.flashKey ?? 0) + (moved ? 1 : 0),
           },

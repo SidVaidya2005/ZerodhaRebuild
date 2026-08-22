@@ -4,6 +4,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import type { UniverseEntry, WatchlistRow } from '@/lib/watchlist/schemas'
 
 import { AvatarMenu } from './AvatarMenu'
+import { DataSourceBadge } from './DataSourceBadge'
 import { FundsSummary } from './FundsSummary'
 import { IndexStrip } from './IndexStrip'
 import { MarketStatusPill } from './MarketStatusPill'
@@ -74,6 +75,9 @@ export function TopNav({
 
         <div className="ml-auto flex items-center gap-3 lg:ml-0">
           <MarketStatusPill holidays={holidays} serverNow={serverNow} />
+          {/* Where the prices came from, beside when the market is open. Renders
+              nothing while no price is on screen. */}
+          <DataSourceBadge />
           <FundsSummary availableCash={availableCash} />
           <ThemeToggle />
           <AvatarMenu name={name} email={email} clientId={clientId} />

@@ -79,6 +79,7 @@ export function QuoteChannel({ symbols, seed }: QuoteChannelProps) {
               prev_close: number | string | null
               provider: ServerQuote['provider']
               provider_ts: string | null
+              fetched_at: string | null
             }
 
             useQuoteStore.getState().applyServerQuote({
@@ -87,6 +88,7 @@ export function QuoteChannel({ symbols, seed }: QuoteChannelProps) {
               prevClose: row.prev_close === null ? null : Number(row.prev_close),
               provider: row.provider,
               providerTs: row.provider_ts,
+              fetchedAt: row.fetched_at,
             })
           }
         )

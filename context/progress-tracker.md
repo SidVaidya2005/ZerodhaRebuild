@@ -17,9 +17,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 2 — Data Foundation & Auth
-**Last completed:** 19 Realtime quote store and tick interpolation — a Zustand store, one JWT-authenticated Realtime channel mounted in the terminal layout and filtered server-side, and one rAF driver easing each price from its previous anchor to its new one. A SQL update reaches the DOM in well under a second and touches only the affected row
+**Last completed:** 20 Data source badge and provenance — the shell badge summarising the worst source among the prices actually on screen, per-price provenance announced to screen readers as well as shown on hover, STALE muting, and one shared clock so freshness is derived rather than frozen
 **In progress:** 16 Market tick Edge Function and schedule — built, deployed and green except for two session-dependent items that need Monday; see the blocked note below
-**Next:** 20 Data source badge and market status — the shell badge summarising the worst provenance on screen, and per-price provenance on hover. F19 already keeps `provider` and `providerTs` in the store and deliberately stores no `source`, so `deriveSource()` runs on render; the market-status half of this feature was built in F17
+**Next:** 21 Dashboard home — portfolio value, day P&L, the index strip with real data at last, a top-10 holdings donut and recent orders. `PriceWithProvenance` exists for every price it renders, and the index strip has been a labels-only slot since F17 waiting for this
 
 **Blocked until Monday 2026-08-24, first session after 09:15 IST.** F16's last two verify items and the Phase 2 checkpoint's own "prices land on a schedule" both need a live session, and the cron window is weekdays only. Check with one query:
 ```sql
@@ -62,7 +62,7 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 - [x] 17 Terminal shell layout
 - [x] 18 Watchlist sidebar
 - [x] 19 Realtime quote store and tick interpolation
-- [ ] 20 Data source badge and market status
+- [x] 20 Data source badge and provenance
 - [ ] 21 Dashboard home
 - [ ] Phase checkpoint — verify Phase 3 — Terminal Shell & Live Prices is stable before starting the next phase
 
@@ -101,13 +101,13 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 
 ## Key Decisions
 
+- **A backgrounded tab dispatches no focus events and runs no animation frames.** `element.focus()` sets `document.activeElement` and fires nothing — not even native listeners attached directly. Three features have now lost time to this family: F17's frozen exit animation, F19's frozen `requestAnimationFrame`, F20's focus handlers. Check `document.visibilityState` **first** whenever an automated browser check says an interaction does nothing. (F20)
+- **One ticking clock provided from the terminal layout, so the badge and every price read the same instant.** Otherwise a row can render DELAYED under a badge saying STALE — a contradiction the visitor can see. **F17's pill keeps its own timer**, because it deliberately lands *on* the session boundary rather than up to a heartbeat late. (F20)
+- **Only symbols currently rendering a price feed the data-source badge.** `worstSource([])` returns STALE by design, so counting the symbols with no quote row would pin the badge to STALE on account of absent data and say nothing about the prices actually visible. A row showing an em dash makes no claim and cannot be dishonest. (F20)
+- **Provenance is announced, not merely hoverable.** The facts render as `sr-only` text tied to the price by `aria-describedby` as well as in a HoverCard, because hover does not exist on touch and never fires for a screen reader — and the guarantee is that *no* price renders without accessible provenance. (F20)
+- **Only STALE prices are muted, not SIMULATED.** Every price in this build is simulated, so muting them all would render the whole terminal grey and the treatment would stop carrying information. The badge and the per-price disclosure carry that honesty instead, which is what `architecture.md` specifies. (F20)
 - **Realtime can subscribe successfully and deliver nothing, silently.** It authorises each subscriber against RLS by JWT, and `quotes` is readable by `authenticated` only; the cookie session loads asynchronously, so subscribing before the token exists opens a socket that reports `SUBSCRIBED` and never fires. Await `getSession()` and `realtime.setAuth(token)` before `.subscribe()`, and always pass a status callback so a channel cannot fail in silence. (F19)
 - **The interpolation loop tweens between server anchors and invents nothing.** `build-plan.md` described "micro-ticks ... bounded so it never drifts beyond a small band", which is bounded jitter — figures no provider reported and the market never traded at. `architecture.md` → Interpolated values says the loop "moves prices between server anchors" and outranks a build-plan feature, so the build plan was rewritten. (F19)
 - **The interpolation bound is an interval, not a band.** The displayed value always lies on the closed segment between the previous and current anchor — strictly stronger than "within X% of the anchor", and testable at tier 1 with no DOM. (F19)
 - **The watchlist's day change is recomputed on the client once prices are live.** `library-docs.md`'s `LiveQuote` carries `prevClose` for exactly this. Display-only and never persisted, so `CLAUDE.md`'s money rule — which forbids computing a figure in TypeScript *and storing it* — is untouched; a ticking price beside a frozen change would be the worse outcome. (F19)
 - **Rows read `store ?? prop` with the store seeded in an effect.** Server and first client render both use the prop, so the HTML matches — the lesson F17's `serverNow` pill taught — and a symbol with no quote keeps its em dash instead of flashing into existence. (F19)
-- **The watchlist view was filtering twice, and the untested filter was the one that mattered.** It carried both a hand-written `where user_id = auth.uid()` and `security_invoker`; falsification showed the predicate alone was holding the line, leaving the invoker setting free to be dropped with every test still green. The predicate is application code doing RLS's job, so it was removed — `security_invoker` is now load-bearing and falsifiable. (F18)
-- **Watchlist search filters a preloaded universe in `cmdk`; no trigram index, no migration, no round trip per keystroke.** 200 rows of symbol/name/exchange is ~12KB and Postgres seq-scans a table that small whatever index sits on it, so the index the build plan called for would never have been used. (F18)
-- **Reorder ships as move-up / move-down, not drag.** Drag alone is unreachable by keyboard and the project has no drag-and-drop dependency; buttons are accessible by construction and write the same `sort_order`. Drag becomes a later enhancement over the same Server Action, and F38 inherits a passing surface rather than a filed gap. (F18)
-- **The watchlist's change is computed in Postgres, in a `security_invoker` view.** `CLAUDE.md` puts money arithmetic in Postgres and leaves TypeScript formatting it; the view also makes the panel one round trip and gives F30's holdings day change and F33's header the same shape to read. (F18)
-- **B and S are not built in F18.** Order entry is F25/F26 and has no destination yet, so shipping the buttons would mean two dead controls — the same call F17 made for the index strip. The chart action links to `/stocks/[symbol]`, which F17 stubbed. (F18)

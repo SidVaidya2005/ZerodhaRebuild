@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import { TopNav } from '@/components/terminal/TopNav'
 import { QuoteChannel } from '@/components/terminal/QuoteChannel'
+import { TerminalClock } from '@/components/terminal/TerminalClock'
 import { WatchlistRail } from '@/components/terminal/WatchlistSidebar'
 import { LOGIN_PATH } from '@/lib/auth/routes'
 import { loadHolidays } from '@/lib/market/market-hours'
@@ -33,30 +34,35 @@ export default async function TerminalLayout({ children }: { children: ReactNode
 
   if (!user) redirect(LOGIN_PATH)
 
-  const [{ data: profile }, { data: funds }, holidays, { data: watchlist }, { data: universe }] =
-    await Promise.all([
-      supabase.from('profiles').select('client_id, full_name').single(),
-      supabase.from('funds').select('available_cash').single(),
-      loadHolidays(supabase),
-      // One round trip for the panel, with the change already computed. The view
-      // holds no predicate of its own — RLS on watchlist_items scopes it through
-      // security_invoker, which is what the pgTAP suite falsifies.
-      supabase
-        .from('watchlist_rows')
-        .select(
-          'symbol, name, exchange, sort_order, ltp, prev_close, change, change_pct, provider, provider_ts'
-        )
-        .order('sort_order'),
-      // The whole tradable universe, ~200 rows, for the search palette. Loaded
-      // here rather than queried per keystroke: Postgres seq-scans a table this
-      // small whatever index sits on it, so a round trip would buy nothing and
-      // cost a network hop on every character.
-      supabase
-        .from('instruments')
-        .select('symbol, name, exchange')
-        .eq('is_active', true)
-        .order('symbol'),
-    ])
+  const [
+    { data: profile },
+    { data: funds },
+    holidays,
+    { data: watchlist, error: watchlistError },
+    { data: universe, error: universeError },
+  ] = await Promise.all([
+    supabase.from('profiles').select('client_id, full_name').single(),
+    supabase.from('funds').select('available_cash').single(),
+    loadHolidays(supabase),
+    // One round trip for the panel, with the change already computed. The view
+    // holds no predicate of its own — RLS on watchlist_items scopes it through
+    // security_invoker, which is what the pgTAP suite falsifies.
+    supabase
+      .from('watchlist_rows')
+      .select(
+        'symbol, name, exchange, sort_order, ltp, prev_close, change, change_pct, provider, provider_ts, fetched_at'
+      )
+      .order('sort_order'),
+    // The whole tradable universe, ~200 rows, for the search palette. Loaded
+    // here rather than queried per keystroke: Postgres seq-scans a table this
+    // small whatever index sits on it, so a round trip would buy nothing and
+    // cost a network hop on every character.
+    supabase
+      .from('instruments')
+      .select('symbol, name, exchange')
+      .eq('is_active', true)
+      .order('symbol'),
+  ])
 
   // Prefer the profile the bootstrap wrote, then Google's claim, then the email.
   // The shell must always be able to say who is acting.
@@ -65,6 +71,13 @@ export default async function TerminalLayout({ children }: { children: ReactNode
     (user.user_metadata.full_name as string | undefined) ??
     user.email ??
     'Account'
+
+  // A failed read here renders an empty watchlist, which is indistinguishable
+  // from a genuinely empty one — and that is exactly how a broken query hid
+  // behind a plausible empty state. Logged rather than thrown: the shell is
+  // still usable without the sidebar, but the failure must not be silent.
+  if (watchlistError) console.error('[terminal.layout] watchlist_rows', watchlistError)
+  if (universeError) console.error('[terminal.layout] instruments', universeError)
 
   // Numbers cross PostgREST as JSON numbers, but every one of these is nullable
   // — a symbol with no quote row yet has no price at all — so each is narrowed
@@ -81,6 +94,7 @@ export default async function TerminalLayout({ children }: { children: ReactNode
     prevClose: row.prev_close === null ? null : Number(row.prev_close),
     provider: row.provider,
     providerTs: row.provider_ts,
+    fetchedAt: row.fetched_at,
   }))
 
   const instruments: UniverseEntry[] = (universe ?? []).map((row) => ({
@@ -89,36 +103,46 @@ export default async function TerminalLayout({ children }: { children: ReactNode
     exchange: row.exchange,
   }))
 
+  // One instant for the whole render, shared by the market-status pill and the
+  // provenance clock, so the two cannot disagree about when "now" was.
+  const serverNow = new Date().toISOString()
+
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
-      <TopNav
-        name={name}
-        email={user.email ?? ''}
-        clientId={profile?.client_id ?? null}
-        availableCash={funds ? Number(funds.available_cash) : null}
-        holidays={[...holidays]}
-        serverNow={new Date().toISOString()}
-        watchlist={rows}
-        universe={instruments}
-      />
-      {/* One channel and one animation loop for the whole terminal, mounted
+      {/* Provides the one `now` every provenance surface reads. Wraps the nav as
+          well as the content, because the badge lives in the nav and the prices
+          it summarises live below it — they must read the same instant. */}
+      <TerminalClock serverNow={serverNow}>
+        <TopNav
+          name={name}
+          email={user.email ?? ''}
+          clientId={profile?.client_id ?? null}
+          availableCash={funds ? Number(funds.available_cash) : null}
+          holidays={[...holidays]}
+          serverNow={serverNow}
+          watchlist={rows}
+          universe={instruments}
+        />
+        {/* One channel and one animation loop for the whole terminal, mounted
           here so they survive navigation between pages rather than being torn
           down and rebuilt by each one. Renders nothing. */}
-      <QuoteChannel
-        symbols={rows.map((row) => row.symbol)}
-        seed={rows.map((row) => ({
-          symbol: row.symbol,
-          ltp: row.ltp,
-          prevClose: row.prevClose,
-          provider: row.provider,
-          providerTs: row.providerTs,
-        }))}
-      />
+        <QuoteChannel
+          symbols={rows.map((row) => row.symbol)}
+          seed={rows.map((row) => ({
+            symbol: row.symbol,
+            ltp: row.ltp,
+            prevClose: row.prevClose,
+            provider: row.provider,
+            providerTs: row.providerTs,
+            fetchedAt: row.fetchedAt,
+          }))}
+        />
 
-      <div className="flex flex-1">
-        <WatchlistRail rows={rows} universe={instruments} />
-        <main className="min-w-0 flex-1">{children}</main>
-      </div>
+        <div className="flex flex-1">
+          <WatchlistRail rows={rows} universe={instruments} />
+          <main className="min-w-0 flex-1">{children}</main>
+        </div>
+      </TerminalClock>
     </div>
   )
 }

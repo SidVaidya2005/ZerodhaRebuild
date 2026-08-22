@@ -8,6 +8,7 @@ const row = (ltp: number | null, prevClose: number | null = 100) => ({
   prevClose,
   provider: 'SIMULATOR' as const,
   providerTs: null,
+  fetchedAt: '2026-08-22T09:00:00.000Z',
 })
 
 /** Narrowed: every caller below asserts on a row it has just written. */
@@ -26,6 +27,13 @@ describe('seeding from the server render', () => {
     // The visitor did not watch these arrive, so animating them would be theatre.
     useQuoteStore.getState().seedQuotes([row(105)])
     expect(get()).toMatchObject({ anchor: 105, ltp: 105, direction: 'flat', flashKey: 0 })
+  })
+
+  it('skips a row with no record of when it was fetched', () => {
+    // A number with no provenance behind it is exactly what F20 exists to
+    // prevent reaching the screen.
+    useQuoteStore.getState().seedQuotes([{ ...row(105), fetchedAt: null }])
+    expect(useQuoteStore.getState().quotes.RELIANCE).toBeUndefined()
   })
 
   it('skips a symbol with no price rather than inventing a zero', () => {
@@ -112,12 +120,17 @@ describe('advancing the tween', () => {
   })
 
   it('gives a new identity only to the symbol that moved', () => {
-    useQuoteStore
-      .getState()
-      .seedQuotes([
-        row(100),
-        { symbol: 'INFY', ltp: 50, prevClose: 50, provider: 'SIMULATOR', providerTs: null },
-      ])
+    useQuoteStore.getState().seedQuotes([
+      row(100),
+      {
+        symbol: 'INFY',
+        ltp: 50,
+        prevClose: 50,
+        provider: 'SIMULATOR',
+        providerTs: null,
+        fetchedAt: '2026-08-22T09:00:00.000Z',
+      },
+    ])
     useQuoteStore.getState().applyServerQuote(row(110), { animate: true })
     const before = useQuoteStore.getState().quotes
     useQuoteStore.getState().advance(performance.now() + TWEEN_DURATION_MS / 2)
