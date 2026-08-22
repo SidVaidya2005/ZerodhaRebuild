@@ -1400,36 +1400,119 @@ They catch different things — an arithmetic slip shows up in 08, while a path 
 
 ### 24 Order execution function
 
+The heart of the project. Built and tested entirely in SQL before any UI touches it. F23 already
+owns every movement of margin and collateral; this feature **sequences** those functions and adds
+everything else a fill does — pricing, charges, trades, holdings, positions, the ledger.
 
+**Two primitives first**, because two rules in `trading-contract.md` §5 currently have no
+implementation anywhere:
 
-The heart of the project. Built and tested entirely in SQL before any UI touches it.
+- `market_state(at timestamptz)` reading `market_holidays` — a **second implementation** of session
+  logic, and deliberately so. `place_order` rejects a MARKET order placed outside the session with
+  `MARKET_CLOSED`; a LIMIT order may be placed then and simply waits. A Server Action gate would sit
+  outside the security boundary, and `place_order` is granted to `authenticated` — anyone calling the
+  RPC directly would trade at any hour. `architecture.md`'s "one place decides market time" invariant
+  is amended to name both implementations, and **tier 4 proves them equal** rather than asking the
+  reader to trust the amendment.
+- `market_constants()` — the IST offset, the three session bounds and `quote_stale_after_ms`, as one
+  `IMMUTABLE` composite mirroring `_shared/market-constants.ts`, exactly as `charge_rates()` mirrors
+  the rate table. One composite rather than a function per constant, so tier 4 makes one comparison
+  and `market_state` has no magic numbers in its body. Without the staleness figure §5's "never filled
+  at a stale price" is unimplemented and a Monday fill can execute against Friday's close.
 
 **Logic:**
 
-- `place_order(...)` inserting the order, reserving margin, then calling `execute_order` for market orders.
-- `execute_order(order_id)` per the golden pattern: lock the order row, **return unless it is still `OPEN`**, lock the funds row, price it, compute charges, check margin against `available_cash + blocked_margin`, release the reservation, insert the trade, upsert the holding or position, update funds, append the ledger, complete the order.
-- Business rejections set `status = REJECTED` with a stable `rejection_reason`.
-- On completion the function retires the reservation the right way, **before writing the trade and the position**: `release_margin` for buys, long closes, cancellations and rejections; `transfer_margin_to_position(order_id, fill_price, actual_charges)` for a fill that opens a short. That one returns `(ok, required_collateral, entry_reference_price)` — on `ok = false` the reservation is already released and this function only has to set `REJECTED`/`INSUFFICIENT_FUNDS`; otherwise its two returned figures are written into the `positions` row.
-- A fill that **reduces** a short calls `recompute_position_collateral(user_id, symbol, new_net_quantity)` **before** writing the new quantity, which releases that fill's share of the collateral and handles full cover and flip-to-long uniformly. F23 owns both; F24 only sequences them.
-- `average_price` computed with the direction-correct formula from `trading-contract.md` §8 — charges added for a long, subtracted for a short.
-- `cancel_order(order_id)` for open orders only.
-- `reset_account()` wiping orders, trades, holdings and positions and restoring the opening balance in one transaction.
+- `place_order(p_symbol, p_side, p_order_type, p_product, p_quantity, p_limit_price)` returning
+  **`(order_id uuid, status order_status, rejection_reason text)`**. It inserts the order, applies the
+  pre-flight rejections, calls `reserve_margin`, and calls `execute_order` inline for a MARKET order.
+  - **The composite is not decoration.** A business rejection returns normally per
+    `code-standards.md`, so `error` is null and a bare uuid leaves the Server Action unable to tell a
+    fill from a rejection. Raising instead would roll back the REJECTED row that §4's lifecycle and
+    the Orders page both require. `architecture.md`'s example and `toRejectionCode`'s role are
+    corrected in the same change.
+  - Pre-flight rejections, each writing the order row first so it exists to be read:
+    `MARKET_CLOSED`, `INVALID_QUANTITY`, `NO_HOLDING` (a CNC sell beyond `holdings.quantity`),
+    `INSUFFICIENT_FUNDS` (`reserve_margin` returned false).
+  - Derives the user from `auth.uid()` and never accepts a `user_id` argument.
+- `execute_order(order_id)` per the golden pattern: lock the order row, **return unless it is still
+  `OPEN`**, lock the funds row, price it per §5, reject `NO_QUOTE` when there is no row or
+  `fetched_at` is beyond the staleness window, compute charges, retire the reservation, insert the
+  trade, upsert the holding or position, update funds, append the ledger, complete the order.
+- On completion the function retires the reservation the right way, **before writing the trade and the
+  position**: `release_margin` for buys, long closes, cancellations and rejections;
+  `transfer_margin_to_position(order_id, fill_price, actual_charges)` for a fill that opens a short.
+  That one returns `(ok, required_collateral, entry_reference_price)` — on `ok = false` the
+  reservation is already released and this function only has to set `REJECTED`/`INSUFFICIENT_FUNDS`;
+  otherwise its two returned figures are written into the `positions` row.
+- A fill that **reduces** a short calls `recompute_position_collateral(user_id, symbol, new_net_quantity)`
+  **before** writing the new quantity, which releases that fill's share of the collateral and handles
+  full cover and flip-to-long uniformly. F23 owns both; F24 only sequences them.
+- `average_price` computed with the direction-correct formula from `trading-contract.md` §8 — charges
+  added for a long, subtracted for a short.
+- **A fill that crosses zero apportions its charges pro-rata by quantity.** An MIS buy of 10 against an
+  open short of 4 covers 4 and opens a long of 6: the closing share reduces realised P&L per §9 and the
+  opening share capitalises into the new position's `average_price` per §8. The closing share is
+  rounded to the paisa and the **remainder** goes to the opening leg, so the two always sum to
+  `trades.charges` and §12.6 cannot fail by a paisa. §8 never covered this case; rejecting it instead
+  would make F23's shorting-excess reservation and its flip-to-long path unreachable.
+- **The §6 capped-loss path**: a cover that would drive `available_cash` below zero debits only
+  `min(loss, blocked_margin + available_cash − closing_charges)`, credits the remainder as
+  `SIMULATION_ADJUSTMENT` so identity 1 still holds, and still records the **true, uncapped** loss in
+  `trades.realised_pnl`. Built here for user-initiated covers; F29 reuses it for square-off.
+- `cancel_order(order_id)` for open orders only, retiring the reservation through `release_margin`.
+- `reset_account()` per §11, wiping orders, trades, holdings, positions and **all** ledger rows,
+  restoring the opening balance and inserting a single `SIGNUP_CREDIT`, and leaving `profiles`,
+  `watchlist_items`, `instruments` and `quotes` untouched. F35 only adds the button that calls it.
+- `place_order`, `cancel_order` and `reset_account` granted to `authenticated`; `execute_order`,
+  `market_state` and `market_constants` revoked, per the grant policy in `code-standards.md`.
 
-**Verify:**
+**Not built here:** `modify_order`, which `code-standards.md`'s grant list names but no feature builds.
+Filed against F27 rather than invented into scope.
 
-- Test: a CNC buy of 10 at a known price debits exactly (10 × price + charges) and creates the holding with that average price.
+**Verify:** — tier 2 (`10-orders.sql` hand-computed, `11-order-identities.sql` randomised), tier 3 for
+the two concurrency cases, tier 4 for the two primitives.
+
+- Test: a CNC buy of 10 at a known price debits exactly (10 × price + charges) and creates the holding
+  with that average price, hand-computed in a fixture comment.
 - Test: a second buy at a different price recomputes the weighted average correctly.
-- Test: **short entry charges lower `average_price`, they do not raise it.** Short 100 @ ₹100 with ₹30 charges gives `₹99.70`; covering flat at ₹100 reports a loss of ₹30 plus closing charges, never a ₹30 profit. Run this against a build using the long formula and confirm it fails.
-- Test: a short with entry charges plus a partial cover reports realised P&L matching a hand calculation to the paisa.
-- Test: a buy exceeding available cash is `REJECTED` with `INSUFFICIENT_FUNDS` and leaves `funds` byte-identical.
+- Test: **short entry charges lower `average_price`, they do not raise it.** Short 100 @ ₹100 with ₹30
+  charges gives `₹99.70`; covering flat at ₹100 reports a loss of ₹30 plus closing charges, never a
+  ₹30 profit. Run this against a build using the long formula and confirm it reports `+₹30`.
+- Test: a short with entry charges plus a partial cover reports realised P&L matching a hand
+  calculation to the paisa.
+- Test: **a fill crossing zero apportions charges and they still reconcile** — the closing and opening
+  shares sum to `trades.charges`, and `trades_breakdown_sums_to_charges` accepts the row.
+- Test: a buy exceeding available cash is `REJECTED` with `INSUFFICIENT_FUNDS` and leaves `funds`
+  byte-identical.
 - Test: a CNC sell without a holding is `REJECTED` with `NO_HOLDING`.
-- Test: two concurrent buys that each individually fit but together exceed the balance produce exactly one fill and one rejection — the row lock holds.
-- Test, **two concurrent sessions**: both call `execute_order` on the same open order at the same time. Exactly one trade, one ledger entry, and one debit result. Run this against a build with the status guard removed and confirm it fails — a test that cannot fail is not a test.
-- Test: an open limit buy reserves margin at placement; `used_margin` rises and `available_cash` falls by the same amount.
-- Test: cancelling that order restores both figures exactly; releasing twice is a no-op.
+- Test: a MARKET order outside the session is `REJECTED` with `MARKET_CLOSED`, and a LIMIT order placed
+  at the same instant stays `OPEN` — driven at 09:14:59, 09:15:00, 15:29:59, 15:30:00, a Saturday and a
+  seeded holiday.
+- Test: a quote older than the staleness window is `REJECTED` with `NO_QUOTE` rather than filled, and a
+  symbol with no quote row at all is too.
+- Test: **the SQL and TypeScript session logic agree** — `pnpm test:parity` over the same boundary
+  table, falsified by shifting `MARKET_CLOSE_IST` in SQL only and watching it fail.
+- Test: **the capped-loss path** — a cover exceeding the account leaves `available_cash` at exactly
+  0.00, writes a `SIMULATION_ADJUSTMENT` credit for the uncovered remainder, and still records the
+  true uncapped loss in `trades.realised_pnl`. Identity 1 holds across it.
+- Test, **two concurrent sessions**: two buys that each individually fit but together exceed the
+  balance produce exactly one fill and one rejection — the row lock holds.
+- Test, **two concurrent sessions**: both call `execute_order` on the same open order at the same time.
+  Exactly one trade, one ledger entry, and one debit. Run this against a build with the status guard
+  removed and confirm it fails — a test that cannot fail is not a test.
+- Test: an open limit buy reserves margin at placement; `used_margin` rises and `available_cash` falls
+  by the same amount.
+- Test: cancelling that order restores both figures exactly; cancelling twice is a no-op.
 - Test: an MIS short reserves margin, and a user with zero available cash cannot open one.
-- Test: `available_cash` never goes negative across a randomised sequence of 500 orders, and opening balance minus net debits plus net credits equals the final balance.
-- Test: `reset_account` returns every table to the post-signup state.
+- Test: `available_cash` never goes negative across a randomised sequence of 500 orders on a **pinned
+  seed**, and every §12 identity holds afterwards. The suite asserts the churn happened before it
+  asserts the identities.
+- Test: `reset_account` returns every table to the post-signup state — row counts zero, cash at
+  `OPENING_BALANCE`, `used_margin` zero, exactly one `SIGNUP_CREDIT`, and `watchlist_items` untouched.
+- Test: `place_order`, `cancel_order` and `reset_account` are executable by `authenticated`;
+  `execute_order`, `market_state` and `market_constants` raise `42501`.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:race`, `pnpm test:parity`,
+  `pnpm build` and `pnpm format:check` all exit zero.
 
 ### 25 Order ticket UI
 
