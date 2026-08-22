@@ -48,17 +48,32 @@
   --color-info: #3b82f6;
 
   /* ── Chart categorical ramp ── excludes up/down: those carry a fixed
-     price-direction meaning and must never encode category identity. */
-  --color-chart-1: #fcd535;
-  --color-chart-2: #2dbdb6;
-  --color-chart-3: #3b82f6;
-  --color-chart-4: #f0b90b;
-  --color-chart-5: #929aa5;
-  --color-chart-6: #8b5cf6;
-  --color-chart-7: #38bdf8;
-  --color-chart-8: #c2a633;
-  --color-chart-9: #707a8a;
-  --color-chart-10: #4a5568;
+     price-direction meaning and must never encode category identity. Green and
+     red are avoided entirely for the same reason, not merely the two exact
+     tokens.
+
+     Measured before the dashboard shipped, which is what the original ramp's
+     TODO asked for and what replaced it (F21). Two properties hold, and the
+     numbers are in library-docs.md § Recharts:
+       · every colour stays visible against --color-surface in BOTH themes, so
+         no arc dissolves into the card it is drawn on;
+       · every pair separates under normal vision AND under a deuteranopia
+         simulation. The previous ramp's #3b82f6 and #8b5cf6 scored 0.8 apart
+         for a deuteranope — effectively the same colour — and the worst pair
+         here is 23.9.
+     Hue alone cannot separate ten categories for a deuteranope, so this ramp
+     steps LIGHTNESS as well; that is why two blues and two magentas appear at
+     different depths rather than ten distinct hues. */
+  --color-chart-1: #d6be5c;
+  --color-chart-2: #1212f3;
+  --color-chart-3: #225159;
+  --color-chart-4: #cb0b98;
+  --color-chart-5: #ab812b;
+  --color-chart-6: #a5bd0a;
+  --color-chart-7: #849fbd;
+  --color-chart-8: #91087f;
+  --color-chart-9: #d68d5c;
+  --color-chart-10: #eda682;
 
   /* ── Type ── Inter substitutes BinanceNova, IBM Plex Sans substitutes BinancePlex */
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

@@ -333,16 +333,16 @@ export default config
   --color-info: #3b82f6;
 
   /* ── Chart categorical ramp ── see the Recharts rules for why up/down are excluded */
-  --color-chart-1: #fcd535;
-  --color-chart-2: #2dbdb6;
-  --color-chart-3: #3b82f6;
-  --color-chart-4: #f0b90b;
-  --color-chart-5: #929aa5;
-  --color-chart-6: #8b5cf6;
-  --color-chart-7: #38bdf8;
-  --color-chart-8: #c2a633;
-  --color-chart-9: #707a8a;
-  --color-chart-10: #4a5568;
+  --color-chart-1: #d6be5c;
+  --color-chart-2: #1212f3;
+  --color-chart-3: #225159;
+  --color-chart-4: #cb0b98;
+  --color-chart-5: #ab812b;
+  --color-chart-6: #a5bd0a;
+  --color-chart-7: #849fbd;
+  --color-chart-8: #91087f;
+  --color-chart-9: #d68d5c;
+  --color-chart-10: #eda682;
 
   /* ── Type ── Inter substitutes BinanceNova, IBM Plex Sans substitutes BinancePlex */
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -773,7 +773,9 @@ export function HoldingsDonut({ data }: { data: { name: string; value: number }[
     <ResponsiveContainer width="100%" height={280}>
       <PieChart>
         <Pie data={data} dataKey="value" nameKey="name" innerRadius={70} outerRadius={110} shape={HoldingSlice} />
-        <Tooltip formatter={(value: number) => formatCurrency(value)} />
+        {/* Recharts 3 types the formatter's value as ValueType | undefined. Annotating
+            the parameter `number` does not compile — narrow inside instead. */}
+        <Tooltip formatter={(value) => (typeof value === 'number' ? formatCurrency(value) : '—')} />
       </PieChart>
     </ResponsiveContainer>
   )
@@ -782,13 +784,18 @@ export function HoldingsDonut({ data }: { data: { name: string; value: number }[
 
 **Rules:**
 
-- Use the `shape` prop with a `PieSectorShapeProps` component for per-slice colour. `<Cell>` is the legacy approach in Recharts 3 and is being replaced.
+- Use the `shape` prop with a `PieSectorShapeProps` component for per-slice colour. `<Cell>` is the legacy approach in Recharts 3 and is being replaced. `props.index` is optional on that type — default it before indexing the ramp.
+- **`<Tooltip formatter={(value: number) => …}>` does not typecheck**, though an earlier draft of this file showed it that way. Recharts 3 types the value as `ValueType | undefined`; narrow inside the callback. (F21)
 - `ResponsiveContainer` needs a parent with a definite height; give the wrapper an explicit `h-[280px]`, or the chart collapses to zero.
 - Every Recharts component is client-side — the chart file carries `'use client'`, and the page passes it plain serialisable data.
 - Compute the top ten and the "Others" bucket on the server; the chart component never aggregates.
 - Colours come from the `--color-chart-*` tokens, not literals, so the donut re-themes with the app.
 - **Never colour a categorical chart with `--color-up` or `--color-down`.** They mean "price rose" and "price fell" everywhere else in the app; borrowing them for slice identity breaks that contract. Only a chart that genuinely encodes gain versus loss — the P&L breakdown bar — may use them.
-- The ramp is an extension of `DESIGN.md`, which defines no categorical palette. TODO: check each ramp colour for 3:1 contrast against both `--color-canvas` values and for distinguishability under deuteranopia before the dashboard ships.
+- The ramp is an extension of `DESIGN.md`, which defines no categorical palette. **It was measured before the dashboard shipped and replaced (F21)** — the original ramp failed. Two findings worth keeping:
+  - **`#3b82f6` and `#8b5cf6` were 0.8 apart under a deuteranopia simulation**, which is to say indistinguishable. Blue and violet collapse onto the same point for a deuteranope; the ramp had three colours in that family. The replacement's worst pair is 23.9.
+  - **Hue cannot separate ten categories for a deuteranope** — the discriminable axis is roughly blue↔yellow, and ten hues do not fit on it. The ramp therefore steps *lightness* as well, which is why it holds two blues and two magentas at different depths instead of ten distinct hues.
+- **The binding contrast requirement is against `--color-surface`, not `--color-canvas`.** WCAG 1.4.11's 3:1 applies to graphics *required to understand the content*, and the donut is paired with a data table listing every holding, its value and its share — remove all colour and nothing is lost. What must hold is that no arc dissolves into the card it is drawn on, in either theme, which is a ~1.7:1 floor. Requiring 3:1 against both a white and a near-black canvas forces every colour into one narrow luminance band, which is what pushed an earlier attempt at this ramp into five near-identical oranges.
+- **Never use green or red in this ramp** — not merely `--color-up` and `--color-down` themselves. Any green reads as "up" and any red as "down" to someone scanning a trading screen, whatever the exact hex.
 
 ---
 
