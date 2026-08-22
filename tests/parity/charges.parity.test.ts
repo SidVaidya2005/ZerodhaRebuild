@@ -9,6 +9,7 @@ import {
   EXCHANGE_TXN_RATE,
   GST_RATE,
   SEBI_TURNOVER_RATE,
+  SHORT_MARGIN_BUFFER,
   STAMP_DUTY_CNC_BUY_RATE,
   STAMP_DUTY_MIS_BUY_RATE,
   STT_CNC_RATE,
@@ -101,6 +102,17 @@ describe('the rate tables are the same rate table', () => {
     expect(Number(r.stamp_duty_mis_buy_rate)).toBe(STAMP_DUTY_MIS_BUY_RATE)
     expect(Number(r.gst_rate)).toBe(GST_RATE)
     expect(Number(r.dp_charge_base)).toBe(DP_CHARGE_BASE)
+  })
+
+  // The buffer is not a charge rate and so is not in that composite, but it
+  // drifts the same way and with a worse consequence: F25's ticket quotes the
+  // margin a short requires from the TypeScript copy, while the collateral
+  // actually held comes from the Postgres one. A divergence there quotes the
+  // user one figure and blocks another.
+  it('short_margin_buffer() matches SHORT_MARGIN_BUFFER', async () => {
+    const { rows } = await db.query('select public.short_margin_buffer() as buffer')
+
+    expect(Number(rows[0].buffer)).toBe(SHORT_MARGIN_BUFFER)
   })
 })
 

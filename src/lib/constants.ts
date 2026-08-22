@@ -3,8 +3,8 @@
  * requires every such value to live here rather than being inlined at a call
  * site, so a rate or a key can only change in one place.
  *
- * The remaining trading constants — SQUARE_OFF_TIME_IST, SHORT_MARGIN_BUFFER —
- * land here alongside the features that introduce them.
+ * SQUARE_OFF_TIME_IST is re-exported below from the shared market constants;
+ * SHORT_MARGIN_BUFFER arrived with feature 23.
  */
 
 /**
@@ -84,6 +84,25 @@ export const DP_CHARGE_BASE = 13.0
 
 /** What the pricing page displays, because it is the figure on a real contract note. */
 export const DP_CHARGE_INCLUSIVE = 15.34
+
+/* ── Margin ─────────────────────────────────────────────────────────────────
+ *
+ * Authoritative: `trading-contract.md` §6.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Cushion held over an open short's entry price, as a decimal fraction.
+ *
+ * NSE circuit limits cap a single-session move at 5/10/20% depending on the
+ * band, and an MIS position cannot survive the session, so 20% covers the worst
+ * same-day adverse move for a banded stock.
+ *
+ * The buffer applies to the **price**, so it is always applied to
+ * `entry_reference_price` — the gross average — and never to `average_price`,
+ * which is net of charges (§12.11). Postgres has its own copy in
+ * `short_margin_buffer()`; `pnpm test:parity` is what stops the two drifting.
+ */
+export const SHORT_MARGIN_BUFFER = 0.2
 
 /* ── Market, quote and simulator values ─────────────────────────────────────
  *
