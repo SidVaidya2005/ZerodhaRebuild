@@ -904,32 +904,71 @@ navigation never 404s. A layout feature: no prices, no watchlist contents, no da
 
 ### 18 Watchlist sidebar
 
-
+The real contents of `WatchlistPanel` — the one component F17 left both the desktop rail and the
+mobile sheet rendering. One list per user: `watchlist_items` is flat, scoped by `user_id`, with no
+`watchlists` table. Prices are server-rendered and hold still until reload; **F19 owns liveness.**
 
 **UI:**
 
-- Search input opening a `Command` palette over the instrument universe.
 - Rows: symbol, exchange tag, LTP, absolute and percentage change, coloured by direction.
   - The change is computed against `quotes.prev_close`, which **rolls at the first tick of each
     session** — `roll_previous_close()`, added at the Phase 2 checkpoint. Before that it was the
     frozen bhavcopy seed, so this column would have divided by the day the universe was seeded and
     the simulator's ±5% band was pinned to the same value. Nothing further is needed here; F30's
     holdings day change and F33's header read the same rolled column.
-- Hover reveals B / S / chart / remove actions.
-- Drag to reorder; empty state when the watchlist is cleared.
+  - **The change is computed in Postgres, never in TypeScript.** A `watchlist_rows` view joins
+    `watchlist_items → instruments → quotes` and returns the change and its percentage already
+    calculated, per `CLAUDE.md`'s money rule. It also makes the panel one round trip and gives F30
+    and F33 the same shape to read.
+- Search input opening a `Command` palette over the instrument universe.
+  - **The universe is preloaded and filtered in `cmdk`, with no index and no migration.** 200 rows of
+    symbol/name/exchange is ~12KB, and Postgres seq-scans a table that small whatever index sits on
+    it — a trigram index here would never be used. This removes the per-keystroke round trip the
+    300ms budget was written for. Symbols already on the list are excluded from the results.
+- Hover reveals remove and chart actions. **B and S are deliberately not built here**: order entry is
+  F25/F26 and has no destination yet, so shipping them would mean two dead controls — the same call
+  F17 made for the index strip. The chart action links to `/stocks/[symbol]`, which F17 stubbed.
+- **Reorder ships as move-up / move-down, not drag.** Drag alone is unreachable by keyboard and the
+  project has no drag-and-drop dependency; buttons are accessible by construction and write the same
+  `sort_order` drag would. Drag becomes a later enhancement over the same Server Action, and F38
+  inherits a passing surface rather than a filed gap.
+- Empty state when the watchlist is cleared.
 
 **Logic:**
 
-- `addToWatchlist`, `removeFromWatchlist`, `reorderWatchlist` Server Actions.
-- Search queries `instruments` with a trigram or prefix index, capped at 20 results.
-- Subscribing marks each visible symbol in `symbol_demand`.
+- `addToWatchlist`, `removeFromWatchlist`, `reorderWatchlist` Server Actions in
+  `src/server/actions/watchlist.ts`, each Zod-parsed and returning `ActionResult<T>`.
+- **Each action calls an RPC rather than writing through PostgREST.** `sort_order` assignment and the
+  reorder swap are set-based SQL that PostgREST cannot express, and doing them as read-then-write
+  would race. The functions are invoker-rights and scoped to `(select auth.uid())`, so RLS remains
+  the boundary.
+- **Existing rows must be renumbered.** The F16 backfill inserted 10 symbols at the column default
+  `sort_order = 0`, so ordering currently falls through to the symbol tiebreak and a naive swap is a
+  no-op. The migration renumbers densely per user, and `move_watchlist_item` renumbers defensively
+  before swapping.
+- `touch_symbol_demand(p_symbols text[])` — the client RPC `code-standards.md` already carves out as
+  one of exactly two Server Action exceptions. `security definer`, because `symbol_demand` has no
+  client write grant by design; refuses without a session, upserts `last_requested_at` only — never
+  `priority` — and ignores unknown symbols. Fired from an effect keyed on the symbol list, once per
+  change and never per tick.
+- Revalidation lists the terminal paths explicitly rather than revalidating the layout, per
+  `code-standards.md`. `/stocks` needs `revalidatePath('/stocks/[symbol]', 'page')` — a prefix string
+  does not match a dynamic segment.
 
 **Verify:**
 
 - Adding a symbol persists across reload; removing it persists too.
-- Reordering survives a reload in the new order.
-- Typing "rel" surfaces RELIANCE within 300ms.
+- **Reordering survives a reload in the new order** — run against the backfilled rows, which all
+  start at `sort_order = 0`, so this also proves the renumbering rather than assuming it.
+- Typing "rel" surfaces RELIANCE with no request in flight, because filtering is local.
 - Symbols on screen appear in `symbol_demand` with a fresh `last_requested_at`.
+- **The RPC cannot be abused** — tier 2: no session refuses, an unknown symbol is ignored, `priority`
+  is unchanged, and no user can write into another user's watchlist through any of the four
+  functions or read another's rows through the view.
+- The change is computed in Postgres — confirmed by reading the view definition and by no
+  subtraction of prices appearing in any `.tsx`.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm build` and `pnpm format:check`
+  all exit zero.
 
 ### 19 Realtime quote store and tick interpolation
 

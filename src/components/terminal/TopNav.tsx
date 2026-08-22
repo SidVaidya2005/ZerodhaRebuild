@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { ThemeToggle } from '@/components/ThemeToggle'
+import type { UniverseEntry, WatchlistRow } from '@/lib/watchlist/schemas'
 
 import { AvatarMenu } from './AvatarMenu'
 import { FundsSummary } from './FundsSummary'
@@ -25,9 +26,21 @@ type TopNavProps = {
   availableCash: number | null
   holidays: string[]
   serverNow: string
+  /** Forwarded to the sheet: the rail's copy is rendered by the layout. */
+  watchlist: WatchlistRow[]
+  universe: UniverseEntry[]
 }
 
-export function TopNav({ name, email, clientId, availableCash, holidays, serverNow }: TopNavProps) {
+export function TopNav({
+  name,
+  email,
+  clientId,
+  availableCash,
+  holidays,
+  serverNow,
+  watchlist,
+  universe,
+}: TopNavProps) {
   return (
     <header className="sticky top-0 z-40 border-b border-hairline bg-canvas">
       {/* Tighter gap and padding on the smallest screens: at 375px the
@@ -36,7 +49,7 @@ export function TopNav({ name, email, clientId, availableCash, holidays, serverN
       <div className="flex h-16 items-center gap-3 px-3 sm:px-4 md:gap-4 md:px-6">
         {/* Only the mobile trigger. The desktop rail is a column beside
             <main>, not a nav item — see the layout. */}
-        <WatchlistSheet />
+        <WatchlistSheet rows={watchlist} universe={universe} />
 
         <Link
           href="/dashboard"

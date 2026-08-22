@@ -208,6 +208,7 @@ export type Database = {
           exchange: string
           is_active: boolean
           name: string
+          prev_close: number | null
           sector: string | null
           symbol: string
           tick_size: number
@@ -217,6 +218,7 @@ export type Database = {
           exchange?: string
           is_active?: boolean
           name: string
+          prev_close?: number | null
           sector?: string | null
           symbol: string
           tick_size?: number
@@ -226,6 +228,7 @@ export type Database = {
           exchange?: string
           is_active?: boolean
           name?: string
+          prev_close?: number | null
           sector?: string | null
           symbol?: string
           tick_size?: number
@@ -606,10 +609,52 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      watchlist_rows: {
+        Row: {
+          change: number | null
+          change_pct: number | null
+          exchange: string | null
+          fetched_at: string | null
+          is_active: boolean | null
+          ltp: number | null
+          name: string | null
+          prev_close: number | null
+          provider: Database["public"]["Enums"]["quote_provider"] | null
+          provider_ts: string | null
+          sort_order: number | null
+          symbol: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "watchlist_items_symbol_fkey"
+            columns: ["symbol"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["symbol"]
+          },
+        ]
+      }
     }
     Functions: {
+      add_watchlist_item: { Args: { p_symbol: string }; Returns: number }
       generate_client_id: { Args: never; Returns: string }
+      move_watchlist_item: {
+        Args: { p_direction: string; p_symbol: string }
+        Returns: number
+      }
+      remove_watchlist_item: { Args: { p_symbol: string }; Returns: number }
+      roll_previous_close: {
+        Args: { p_session_date?: string }
+        Returns: number
+      }
+      select_demanded_symbols: {
+        Args: { p_limit?: number }
+        Returns: {
+          priority: number
+          symbol: string
+        }[]
+      }
+      touch_symbol_demand: { Args: { p_symbols: string[] }; Returns: number }
     }
     Enums: {
       candle_interval: "FIVE_MIN" | "THIRTY_MIN" | "ONE_DAY"

@@ -29,6 +29,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Build plan sequencing
 
+- **The candle prune moves from F16 to F33.** Candles left F15, so retention logic here would run against a table nothing populates and its assertion would pass whether or not the rules were right. F33 builds the pipeline and its retention together. (F16)
+
 - **Candles move out of F15 to F33.** No source covers the 1D and 1W intraday ranges — bhavcopy gives one daily bar, Yahoo's chart endpoint is deferred — and F33 is the first feature that draws a chart. Designing a chart pipeline four features before anything renders one is the thing being avoided. (F15)
 
 - **`isTradingSession()` coverage moves from F14 to F15**, which is where the function and its unit tests already live. F14 proves the seeded data instead: the published dates are present, correctly dated in `Asia/Kolkata`, and described. Same precedent F13 set when its watchlist check moved here. (F14)
@@ -136,6 +138,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Testing
 
+- **The market-hours core is shared, not duplicated, so the planned drift test was never written.** An Edge Function cannot import from `src/` — but nothing stops the dependency running the other way. The pure logic moved into `supabase/functions/_shared/`, Deno reads it relatively and the app through a new `@shared/*` alias, leaving one copy that tier 1 already covers. A drift test earns its place when duplication is forced, as with the F05 stack table; here removing the duplication removes the failure instead of policing it. **`loadHolidays` and the session wrappers moved too**, once the tick was found carrying its own untested copy: they take a structurally-typed client so `_shared/` still imports nothing, and a compile-time assertion in the tier-1 suite proves a real `SupabaseClient` satisfies that shape, since nothing calls them from the app until F20. (F16)
+
 - **Market-time logic takes its calendar as an argument so tier 1 can falsify it.** `marketStatusAt(at, holidays)` and `isTradingSessionAt(at, holidays)` are pure; the database-backed wrappers load the calendar and delegate. Keeping the arithmetic separable from the read is what lets the suite drive it across boundaries, timezones and holidays with no database — and it is why F17's status pill can call the same function client-side that the tick gates on. (F15, evicted from Key Decisions at F17)
 
 - **`fetch-reference-data.mts` treats any probe failure as "this symbol does not exist".** Its own comment argues that conflating "upstream refused us" with a 404 is the bug it was rewritten to fix, but the return path files 5xx and network errors into `broken` alongside genuine 404s, and `main` then refuses to write the seed. One transient Yahoo 5xx therefore kills a ~5-minute 200-symbol run. Only 404 should be a verdict; 5xx and socket errors should retry or abort as "upstream unavailable". Found by the Phase 2 review; not fixed, because the script is manual, rare, and re-runnable. (F14)
@@ -220,6 +224,12 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **The simulator disclaimer is dismissible and remembered, with no flash.** A blocking inline script in the root layout reads `localStorage` and stamps `data-disclaimer="dismissed"` on `<html>` before first paint; CSS hides the strip off that attribute. The same technique `next-themes` already runs here, and it keeps the `(marketing)` layout a Server Component — only the close button is a client island. (F03)
 
 ## Quote providers
+
+- **Watchlists join the tick's demand union.** `symbol_demand` has no write path until F18 and nobody holds anything yet, so the union as originally specified would select zero symbols and the whole write path — upsert, provenance columns, `fetched_at` — would ship untested. A watched symbol is genuinely demanded, and this stays correct once F18 narrows refreshes to what is on screen. (F16)
+
+- **The provider seam is built but the limiter is not.** `QuoteProvider`, an ordered chain and a per-provider circuit breaker, all exercised against a deliberately failing fake — retrofitting a chain around a hardcoded simulator later is worse than the seam costing a little now, and F14 proved the breaker is the piece that matters. A token bucket in front of a local simulator caps nothing, so it waits for a provider that makes outbound requests. (F15)
+
+- **The simulator walks from a real NSE close, seeded into `instruments.prev_close` from bhavcopy.** `library-docs.md` said it seeds from "instruments reference data", but that table carried no price, so a cold start had nothing to walk from. Bhavcopy is on the reachable archive host, not the blocked API. The close is a seed and never a quote — no `NSE_BHAVCOPY` enum value, no provenance rewrite, and every price still badges `SIMULATED`. (F15)
 
 - **The universe is seeded but its Yahoo symbols are unvalidated, and the JSON records that.** `yahoo_validated: false` is written into `nifty200.json`, and the probe ships behind `--probe` rather than being deleted, because it is exactly what must run when Yahoo returns. `${symbol}.NS` remains a derivation nothing has confirmed against the live API. (F14, evicted from Key Decisions at F17)
 
