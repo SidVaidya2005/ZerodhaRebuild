@@ -219,10 +219,19 @@ Exact rows written per event. Every row moves `available_cash`; `balance_after` 
 | Buy fill (CNC or MIS long) | `MARGIN_RELEASE` `+reservation`, `BUY_DEBIT` `−trade_value`, `CHARGES` `−charges` |
 | Sell fill closing a long | `SELL_CREDIT` `+trade_value`, `CHARGES` `−charges` |
 | Short entry (MIS sell, no existing long) | Three rows, per §6 steps 4 and 6: `MARGIN_RELEASE` `+|delta|`, then `MARGIN_RELEASE` `+charges` and `CHARGES` `−charges`. Net `+(reservation − collateral − charges)`. The paired charge rows are not noise — they are what makes "estimated charges are never paid twice" auditable in the ledger instead of netted away inside the function. The collateral moves to `positions.blocked_margin` and writes **no ledger row**, because no cash moves. **No proceeds are credited** — a short's cash settles on cover, not on entry. |
-| Short cover | `MARGIN_RELEASE` `+position.blocked_margin`, `CHARGES` `−charges`, `REALISED_PNL` `±(average_price − cover_price) × quantity` |
+| Short cover | `MARGIN_RELEASE` `+position.blocked_margin`, `CHARGES` `−charges`, `REALISED_PNL` `±(entry_reference_price − cover_price) × quantity` — the **gross** basis, see below |
 | Short cover exceeding the account | the rows above with `REALISED_PNL` capped per §6, plus `SIMULATION_ADJUSTMENT` `+uncovered_remainder`. Cash floors at zero; `trades.realised_pnl` still carries the true loss |
 
 Rationale for not crediting short proceeds on entry: crediting them and then re-blocking an equal margin produces two offsetting rows and a balance that momentarily looks spendable. Settling on cover keeps the ledger legible and the balance honest.
+
+**The cover's cash row uses the gross `entry_reference_price`, while `trades.realised_pnl` uses the net
+`average_price`. Those are different numbers on purpose.** The gross proceeds of a short are never
+credited at entry, and the entry charges *are* debited at entry as their own `CHARGES` row. A cash row
+computed from `average_price` — which already has those charges baked in — would therefore debit them a
+second time, and `available_cash` would end a full round trip short by exactly the entry charges. Worked
+through: a short of 100 at ₹100 with ₹6.42 of entry charges has `average_price` ₹99.94; covering at ₹90
+credits `(100.00 − 90.00) × 100 = ₹1,000.00`, not `₹994.00`, and only the first lands on the balance the
+trade actually produced. Identity 1 fails on every short cover otherwise.
 
 **A ledger row means cash moved.** The collateral transfer on short entry deliberately writes none — `available_cash` is byte-identical before and after. Anything that writes a `MARGIN_RELEASE` for the *full* reservation on a short entry has made the collateral spendable while the obligation is still open, which is the exact defect this split exists to prevent.
 
@@ -268,6 +277,16 @@ Rationale for not crediting short proceeds on entry: crediting them and then re-
   and `(average_price − exit_price) × quantity − closing_charges` for a short.
 - Opening-leg charges are already capitalised into `average_price`, so they must not be subtracted twice.
 - `trades.realised_pnl` is `0.00` on every opening leg, never null.
+- **This is the *reported* figure, not the cash movement.** For a short cover the two differ by the entry
+  charges, which are already inside `average_price` here and were already debited in cash at entry — see
+  §7. A single number cannot be both, and conflating them is how identity 1 breaks.
+- **A fill that crosses zero** — a sell of 10 against a long of 4, or a buy of 10 against a short of 4 —
+  is one order with a closing leg and an opening leg. Its charges are computed **once on the whole
+  order** and written as **one** `CHARGES` ledger row; the split is derivational only. The closing
+  share, `round(charges × closing_quantity / quantity, 2)`, reduces `trades.realised_pnl`; the
+  **remainder** capitalises into the new position's `average_price`, so the two always sum to
+  `trades.charges` exactly and §12.6 cannot fail by a paisa. §8 did not cover this case; rejecting it
+  instead would make the shorting-excess reservation in §6 unreachable.
 - Unrealised P&L is computed at read time from `quotes.ltp` and never stored.
 
 **Day's P&L** is the portfolio's move since the previous close, over the holdings currently held:
@@ -331,7 +350,7 @@ These are the equations the tests assert. Each must hold for every user at every
 9. **Cash reconciliation.** For any closed position, the sum of **every** ledger row referencing its orders — `MARGIN_BLOCK`, `MARGIN_RELEASE`, `BUY_DEBIT`, `SELL_CREDIT`, `CHARGES`, `REALISED_PNL`, `SIMULATION_ADJUSTMENT` — equals the net change in `available_cash` across its lifetime. Every row is included; omitting `CHARGES`, the margin movements, or a capping adjustment makes this false.
 10. **P&L correctness**, asserted separately from cash and per closing trade, never by summing ledger rows: `trades.realised_pnl` equals `(exit_price − average_price) × quantity − closing_charges` for a long and `(average_price − exit_price) × quantity − closing_charges` for a short. Opening charges are already inside `average_price` and must not appear again.
 
-11. **The two averages never cross.** No collateral calculation reads `average_price`; no P&L calculation reads `entry_reference_price`.
+11. **The two averages never cross.** No collateral calculation reads `average_price`; **`trades.realised_pnl` never reads `entry_reference_price`**. The short cover's `REALISED_PNL` *ledger* row is the one deliberate exception and is not a P&L calculation — it is the cash settlement of proceeds that were never credited, and §7 explains why it must be the gross basis. Reported P&L and settled cash are different questions with different right answers.
 12. **`positions.blocked_margin`** equals `|net_quantity| × entry_reference_price × (1 + SHORT_MARGIN_BUFFER) + estimated_close_charges` for every open short, and `0` for every long.
 
 Identities 9 and 10 are deliberately separate. A long close settles through `SELL_CREDIT`, a short cover settles through `REALISED_PNL`, and one identity spanning both mechanisms cannot hold — which is why an earlier draft's combined version was wrong.
