@@ -35,7 +35,8 @@ export const DISCLAIMER_DISMISSED = 'dismissed'
    the order engine applies, and feature 22 must give its Postgres calculator
    the identical set.
 
-   Source: https://zerodha.com/charges/ — every rate below confirmed 2026-08-21.
+   Source: https://zerodha.com/charges/ — every rate below confirmed 2026-08-21,
+   re-confirmed 2026-08-22 at the start of Phase 4, all unchanged.
 
    Most of these are statutory: STT, stamp duty, the SEBI fee, exchange
    transaction charges and GST are set by regulators and the exchange, not by a

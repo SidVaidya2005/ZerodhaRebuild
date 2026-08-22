@@ -42,7 +42,7 @@ Charges are computed per executed order, on turnover = `quantity * price`.
 | GST | 18% of (brokerage + exchange + SEBI + `dp_base`) | same | same | same |
 | DP charge (`dp_base`) | — | ₹13.00 flat per scrip | — | — |
 
-**Source: <https://zerodha.com/charges/>, confirmed 2026-08-21.** Statutory components (STT, stamp
+**Source: <https://zerodha.com/charges/>, confirmed 2026-08-21, re-confirmed 2026-08-22 at the start of Phase 4 with every rate unchanged.** Statutory components (STT, stamp
 duty, the SEBI fee, exchange transaction charges, GST) are set by regulators and the exchange, not by
 a broker, and change by circular — **re-check this table at the start of each phase that touches
 money, and on any Union Budget**. The exchange transaction rate has already moved once (0.00297% →
@@ -52,6 +52,7 @@ Rules:
 
 - **Stamp duty is buy-side only.** **STT on MIS is sell-side only.** **DP charge applies only to a CNC sell** and is flat regardless of quantity.
 - **`dp_base` is ₹13.00, not ₹15.34.** The familiar ₹15.34 is `dp_base` plus its own ₹2.34 of GST (₹3.50 CDSL + ₹9.50 broker = ₹13.00, ×1.18 = ₹15.34). Treating ₹15.34 as the base and adding GST again over-charges every CNC sell by ₹2.34 — an earlier draft of this table did exactly that. The pricing page displays ₹15.34 because that is the figure on a real contract note, footnoted with the split.
+- **Zerodha's page prints GST as "18% on (brokerage + SEBI charges + transaction charges)" and does not name `dp_base` in it** — because it folds GST on DP into the ₹15.34 DP line instead (₹3.50 CDSL + ₹9.50 Zerodha + ₹2.34 GST). That is a presentation difference, not a rate difference, and the totals agree. Recorded here so a future re-check does not read it as drift and "correct" the GST base. (Re-verified 2026-08-22.)
 - **GST covers `dp_base` too, and all of it lands in the single `gst` key.** There is no separate `dp_gst` key: `gst` means *all* GST on the trade, so its meaning never depends on whether a DP charge was involved. GST still never applies to STT or stamp duty.
 - **DP is charged once per sell *order*. Zerodha charges once per scrip per *day*.** This is a deliberate simplification, not an oversight: matching reality would make `execute_order` query the user's same-day trades for that symbol inside the locked transaction, and give `reset_account` another case to reason about. It is disclosed in the simulation-simplifications list on `/legal` (build-plan feature 08).
 - `trades.charge_breakdown` is a `jsonb` object with one key per component above, each a 2dp number. Absent components are `0`, not missing keys.
