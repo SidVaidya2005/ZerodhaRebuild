@@ -123,3 +123,43 @@ export async function countRaceAccounts(): Promise<number> {
     await client.end().catch(() => undefined)
   }
 }
+
+/** Symbol tier 3 trades against, so no test ever writes a real instrument's quote. */
+export const RACE_SYMBOL = 'ZRRACE'
+
+/**
+ * A tradeable instrument and a fresh quote for it, created **inactive**.
+ *
+ * Tier 3 runs against the one real database, and `quotes` is the market tick's
+ * table — writing a price for RELIANCE to test a fill would put a fabricated
+ * figure on someone's screen. `is_active = false` also keeps the symbol out of
+ * the tick's demand union and out of F21's index composite, so it is invisible
+ * to everything except the order under test.
+ */
+export async function seedRaceInstrument(client: Client, ltp: number): Promise<void> {
+  await client.query(
+    `insert into public.instruments (symbol, name, yahoo_symbol, is_active)
+     values ($1, 'Tier 3 Race Fixture', $1 || '.NS', false)
+     on conflict (symbol) do update set is_active = false`,
+    [RACE_SYMBOL]
+  )
+  await client.query(
+    `insert into public.quotes (symbol, ltp, prev_close, provider, fetched_at)
+     values ($1, $2, $2, 'SIMULATOR', now())
+     on conflict (symbol) do update
+       set ltp = excluded.ltp, fetched_at = now(), provider_ts = null`,
+    [RACE_SYMBOL, ltp.toFixed(2)]
+  )
+}
+
+/** Runs in `afterEach` including after a failure, like every other cleanup here. */
+export async function cleanupRaceInstrument(): Promise<void> {
+  const client = new Client({ connectionString: connectionString() })
+  try {
+    await client.connect()
+    await client.query(`delete from public.quotes where symbol = $1`, [RACE_SYMBOL])
+    await client.query(`delete from public.instruments where symbol = $1`, [RACE_SYMBOL])
+  } finally {
+    await client.end().catch(() => undefined)
+  }
+}

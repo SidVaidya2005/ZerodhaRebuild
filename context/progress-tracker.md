@@ -17,9 +17,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 4 — Trading Engine (Phase 2 remains open on F16 and its own checkpoint, both blocked on a live session)
-**Last completed:** 23 Margin reservation and release — six internal-only functions (`short_margin_buffer`, `short_collateral_requirement`, `reserve_margin`, `release_margin`, `transfer_margin_to_position`, `recompute_position_collateral`), 66 tier-2 assertions across two suites including 500 randomised operations, falsified twice. `trading-contract.md` §6/§7 were wrong in four places and were amended first
+**Last completed:** 24 Order execution function — `place_order`, `execute_order`, `cancel_order`, `reset_account`, plus `market_state`/`market_constants`. 89 tier-2 assertions across two new suites including 500 randomised orders, two tier-3 concurrency tests, and session parity at tier 4. **Four defects found and fixed along the way**, three of them in already-shipped code: §7's cover row double-debited entry charges, `reserve_margin` made covers unaffordable, `execute_order` wrote two CHARGES rows on a short entry, and the capped-loss path credited the shortfall on top of a partial debit
 **In progress:** nothing
-**Next:** 24 Order execution function — `place_order`, `execute_order`, `cancel_order`, `reset_account`, plus the two §5 primitives that have no implementation anywhere yet: `market_state(at)` reading `market_holidays` and `market_constants()`. Planned 2026-08-22; `build-plan.md` §24 carries the confirmed plan. F23's functions are what it sequences — retire the reservation **before** writing the trade and position rows. `modify_order` is deliberately not built here; it is filed against F27
+**Next:** 25 Order ticket UI — the first Phase 4 feature with a screen. The engine is complete and proven in SQL; F25 builds the ticket, F26 wires the Server Action to `place_order`, whose `(order_id, status, rejection_reason)` composite is what lets the action tell a fill from a rejection. `modify_order` is still unbuilt and filed against F27
 
 **Not verified at this checkpoint, and deliberately so:** the build-plan's own Phase 3 criterion is that "ticking works unattended for a full market session". Today is Saturday 2026-08-22 — the market is closed and `pg_cron`'s window is weekdays only, so no unattended session can be observed. The Realtime half *was* verified: a production build, ten client-side navigations across all six terminal pages, exactly one `SUBSCRIBED` and no channel churn, then a live `UPDATE` reaching the browser. The unattended-session half rides along with F16's pending items on Monday
 
@@ -72,7 +72,7 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 
 - [x] 22 Charge calculator
 - [x] 23 Margin reservation and release
-- [ ] 24 Order execution function
+- [x] 24 Order execution function
 - [ ] 25 Order ticket UI
 - [ ] 26 Place order end to end
 - [ ] 27 Orders page
@@ -103,6 +103,12 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 
 ## Key Decisions
 
+- **Reported P&L and settled cash are different numbers on a short cover.** §7 settled from `average_price`, which is net of entry charges that were already debited at entry — so every cover debited them twice and identity 1 failed. The cash row now uses the gross `entry_reference_price`; `trades.realised_pnl` keeps the net average per §9. §12.11 narrowed to say what it meant: the *reported* P&L never reads the gross average. (F24)
+
+- **A cover is reserved from its collateral, not from cash.** F23's `reserve_margin` asked for `quantity × price` on every buy, so a user who shorted most of their balance could not close their own position — the money was in `used_margin` by construction. Symmetric to the sell rule it already had. Found by F24 reading the cash path, not by a test. (F23, fixed at F24)
+
+- **`now()` ties every row a transaction writes, and three columns ordered by it.** `fund_ledger.created_at`, `trades.traded_at` and `orders.placed_at` are all `clock_timestamp()` now. Not cosmetic: F28's matcher fills every crossed order in one run and F29's square-off closes every position in one, so Reports would order a whole square-off arbitrarily. (F23, F24)
+
 - **`place_order` returns `(order_id, status, rejection_reason)`, not a bare uuid.** A business rejection returns normally per `code-standards.md`, so `error` is null and the Server Action cannot tell a fill from a rejection; raising instead would roll back the REJECTED row §4 and the Orders page both require. `architecture.md`'s example and `toRejectionCode`'s role are corrected in the same change. (F24)
 
 - **Session logic gets a second implementation, in Postgres, and tier 4 proves the two equal.** `market_state(at)` reads `market_holidays` so `place_order` can reject a MARKET order with `MARKET_CLOSED`. A Server Action gate would sit outside the security boundary — `place_order` is granted to `authenticated`, so anyone calling the RPC directly would trade at any hour. `architecture.md`'s "one place decides market time" invariant is amended to name both rather than quietly broken. (F24)
@@ -116,9 +122,3 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 - **`transfer_margin_to_position` runs *before* F24 writes the trade and the position**, taking `(p_order_id, p_fill_price, p_actual_charges)` and returning `(ok, required_collateral, entry_reference_price)`. On a shortfall it releases the whole reservation itself and returns `ok = false`, so nothing needs unwinding — the alternative was a raised exception and a plpgsql subtransaction rollback. It also computes the gross `entry_reference_price`, making the collateral module the only writer of that concept and §12.11 structural. (F23)
 
 - **A fourth function, `recompute_position_collateral`, owns the release side.** Transfer is the block path, recompute is the release path, and both call one `IMMUTABLE` `short_collateral_requirement` — which is what makes §6's "one collateral formula, everywhere" true structurally rather than by care. Without it F23's partial-cover tests would assert against code that does not exist until F24. (F23)
-
-- **An MIS sell crossing zero reserves on the shorting excess only** — `quantity − max(net_quantity, 0)`, with estimated charges for the whole order. The quantity that closes an existing long carries no obligation. The contract covered neither this case nor `delta` on a fill that *adds* to a short, whose §6 step 2 formula double-blocked; both are amended. (F23)
-
-- **A short entry writes three ledger rows, not two.** §6 steps 4 and 6 beat §7's summary table: `MARGIN_RELEASE +|delta|`, `MARGIN_RELEASE +actual_charges`, `CHARGES −actual_charges`. Same net cash, but the paired charge rows make "estimated charges are never paid twice" auditable in the ledger rather than netted away inside the function. (F23)
-
-- **The charge parity test gets a fourth, read-only test tier.** Proving the TypeScript estimator and the Postgres calculator equal needs both in one process, and none of the three tiers can host it: tier 1 has no database, tier 2 is SQL-only, and tier 3 is gated behind `ALLOW_RACE_TESTS` because it commits. `calculate_charges` writes nothing, so `pnpm test:parity` runs read-only and joins `test:all` — putting it in tier 3 would leave the feature's headline test skipped inside a green run. (F22)

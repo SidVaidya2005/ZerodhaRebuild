@@ -322,6 +322,12 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Charges and the trading contract
 
+- **An MIS sell crossing zero reserves on the shorting excess only** — `quantity − max(net_quantity, 0)`, with estimated charges for the whole order. The quantity that closes an existing long carries no obligation. The contract covered neither this case nor `delta` on a fill that *adds* to a short, whose §6 step 2 formula double-blocked; both are amended. (F23)
+
+- **A short entry writes three ledger rows, not two.** §6 steps 4 and 6 beat §7's summary table: `MARGIN_RELEASE +|delta|`, `MARGIN_RELEASE +actual_charges`, `CHARGES −actual_charges`. Same net cash, but the paired charge rows make "estimated charges are never paid twice" auditable in the ledger rather than netted away inside the function. (F23)
+
+- **The charge parity test gets a fourth, read-only test tier.** Proving the TypeScript estimator and the Postgres calculator equal needs both in one process, and none of the three tiers can host it: tier 1 has no database, tier 2 is SQL-only, and tier 3 is gated behind `ALLOW_RACE_TESTS` because it commits. `calculate_charges` writes nothing, so `pnpm test:parity` runs read-only and joins `test:all` — putting it in tier 3 would leave the feature's headline test skipped inside a green run. (F22, evicted from Key Decisions at F24)
+
 - **`calculate_charges` returns `(total numeric, breakdown jsonb)`.** F24 does `select … into` and inserts both `trades.charges` and `trades.charge_breakdown` with no cast on the money path. The jsonb keys are snake_case and were already pinned by the `trades_breakdown_has_all_components` CHECK constraint, so they were never this feature's choice to make. (F22, evicted from Key Decisions at F24)
 
 - **Postgres holds the charge rates in one `IMMUTABLE` `charge_rates()` composite, not in literals or a table.** Postgres inlines immutable SQL functions, so there is no per-call cost when F24 calls the calculator inside `execute_order` under a row lock, and the parity test can read the rates directly rather than only inferring them from results. A table would have made the function `STABLE` and put a lookup inside the locked transaction. (F22, evicted from Key Decisions at F24)
