@@ -609,6 +609,77 @@ export type Database = {
       }
     }
     Views: {
+      market_composite: {
+        Row: {
+          advances: number | null
+          change_pct: number | null
+          constituents: number | null
+          declines: number | null
+          oldest_fetched_at: string | null
+          oldest_provider_ts: string | null
+          providers: Database["public"]["Enums"]["quote_provider"][] | null
+          unchanged: number | null
+          universe_size: number | null
+        }
+        Relationships: []
+      }
+      portfolio_holdings: {
+        Row: {
+          average_price: number | null
+          day_pnl: number | null
+          exchange: string | null
+          fetched_at: string | null
+          invested: number | null
+          ltp: number | null
+          market_value: number | null
+          name: string | null
+          prev_close: number | null
+          provider: Database["public"]["Enums"]["quote_provider"] | null
+          provider_ts: string | null
+          quantity: number | null
+          symbol: string | null
+          unrealised_pnl: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "holdings_symbol_fkey"
+            columns: ["symbol"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["symbol"]
+          },
+          {
+            foreignKeyName: "holdings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_summary: {
+        Row: {
+          available_cash: number | null
+          day_pnl: number | null
+          holding_count: number | null
+          invested: number | null
+          market_value: number | null
+          overall_pnl: number | null
+          portfolio_value: number | null
+          unpriced_count: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funds_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       watchlist_rows: {
         Row: {
           change: number | null

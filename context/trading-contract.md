@@ -259,6 +259,25 @@ Rationale for not crediting short proceeds on entry: crediting them and then re-
 - `trades.realised_pnl` is `0.00` on every opening leg, never null.
 - Unrealised P&L is computed at read time from `quotes.ltp` and never stored.
 
+**Day's P&L** is the portfolio's move since the previous close, over the holdings currently held:
+
+```
+day_pnl = Σ over holdings of  quantity × (ltp − prev_close)
+```
+
+- It is **not** unrealised P&L. Unrealised measures against `average_price` and answers "what has this
+  position made since I opened it"; day's P&L measures against `prev_close` and answers "what has it
+  done today". For a position held a month the two differ by the whole month.
+- It uses the same basis as the watchlist's change column, so a symbol reporting +2% there cannot
+  contribute a loss to the day's P&L tile beside it.
+- **Null, never zero, when `prev_close` is absent.** A zero is a claim that the price is unchanged;
+  the absence of a previous close is the absence of any claim at all.
+- Shares bought today are measured against `prev_close` like everything else. A broker splits them
+  out and measures the day's purchases against their buy price; this simulator does not, because the
+  figure would then depend on `trades` and the difference is visible only on the day of purchase.
+  Recorded as a deliberate divergence, alongside the DP simplification in §3.
+- Like unrealised P&L, it is computed at read time and never stored.
+
 ---
 
 ## 10. Auto square-off
