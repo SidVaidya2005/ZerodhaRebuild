@@ -8,6 +8,7 @@ import {
   DP_CHARGE_BASE,
   EXCHANGE_TXN_RATE,
   GST_RATE,
+  OPENING_BALANCE,
   SEBI_TURNOVER_RATE,
   SHORT_MARGIN_BUFFER,
   STAMP_DUTY_CNC_BUY_RATE,
@@ -113,6 +114,16 @@ describe('the rate tables are the same rate table', () => {
     const { rows } = await db.query('select public.short_margin_buffer() as buffer')
 
     expect(Number(rows[0].buffer)).toBe(SHORT_MARGIN_BUFFER)
+  })
+
+  // §11's criterion is that a reset returns the account to *exactly* the
+  // post-signup state. `handle_new_user` and `reset_account` now read one
+  // function rather than two literals, but that function and `constants.ts`
+  // are still two copies, and the home page quotes the TypeScript one.
+  it('opening_balance() matches OPENING_BALANCE', async () => {
+    const { rows } = await db.query('select public.opening_balance() as balance')
+
+    expect(Number(rows[0].balance)).toBe(OPENING_BALANCE)
   })
 })
 

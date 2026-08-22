@@ -720,6 +720,7 @@ export type Database = {
           total: number
         }[]
       }
+      cancel_order: { Args: { p_order_id: string }; Returns: boolean }
       charge_rates: {
         Args: never
         Returns: {
@@ -736,9 +737,50 @@ export type Database = {
           stt_mis_sell_rate: number
         }[]
       }
+      execute_order: { Args: { p_order_id: string }; Returns: undefined }
       generate_client_id: { Args: never; Returns: string }
+      market_constants: {
+        Args: never
+        Returns: {
+          ist_offset_minutes: number
+          market_close_ist: number
+          market_open_ist: number
+          pre_open_start_ist: number
+          quote_stale_after_ms: number
+        }[]
+      }
+      market_state: {
+        Args: { p_at?: string }
+        Returns: Database["public"]["Enums"]["market_session_state"]
+      }
       move_watchlist_item: {
         Args: { p_direction: string; p_symbol: string }
+        Returns: number
+      }
+      opening_balance: { Args: never; Returns: number }
+      place_order: {
+        Args: {
+          p_limit_price?: number
+          p_order_type: Database["public"]["Enums"]["order_type"]
+          p_product: Database["public"]["Enums"]["product_type"]
+          p_quantity: number
+          p_side: Database["public"]["Enums"]["order_side"]
+          p_symbol: string
+        }
+        Returns: {
+          order_id: string
+          rejection_reason: string
+          status: Database["public"]["Enums"]["order_status"]
+        }[]
+      }
+      post_ledger: {
+        Args: {
+          p_amount: number
+          p_note: string
+          p_order_id: string
+          p_type: Database["public"]["Enums"]["ledger_type"]
+          p_user_id: string
+        }
         Returns: number
       }
       recompute_position_collateral: {
@@ -752,6 +794,7 @@ export type Database = {
       release_margin: { Args: { p_order_id: string }; Returns: number }
       remove_watchlist_item: { Args: { p_symbol: string }; Returns: number }
       reserve_margin: { Args: { p_order_id: string }; Returns: boolean }
+      reset_account: { Args: never; Returns: undefined }
       roll_previous_close: {
         Args: { p_session_date?: string }
         Returns: number
@@ -793,6 +836,7 @@ export type Database = {
         | "CHARGES"
         | "REALISED_PNL"
         | "SIMULATION_ADJUSTMENT"
+      market_session_state: "PRE_OPEN" | "OPEN" | "CLOSED"
       order_side: "BUY" | "SELL"
       order_status: "OPEN" | "COMPLETE" | "CANCELLED" | "REJECTED"
       order_type: "MARKET" | "LIMIT"
@@ -936,6 +980,7 @@ export const Constants = {
         "REALISED_PNL",
         "SIMULATION_ADJUSTMENT",
       ],
+      market_session_state: ["PRE_OPEN", "OPEN", "CLOSED"],
       order_side: ["BUY", "SELL"],
       order_status: ["OPEN", "COMPLETE", "CANCELLED", "REJECTED"],
       order_type: ["MARKET", "LIMIT"],
