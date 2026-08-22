@@ -1578,8 +1578,10 @@ with no database, and the double-submit guard is a UI concern that belongs here 
 - Browser: selecting LIMIT reveals the price field, and MARKET hides it again.
 - Browser: submitting a LIMIT order with the price empty shows a field error and no order is
   attempted.
-- Browser: **double-clicking submit places exactly one order** — `formState.isSubmitting` disables
-  the button for the whole await, and the second click lands on a disabled control.
+- Browser: **double-clicking submit calls the handler exactly once** — F25 has no action to place an
+  order with, so the guard is what is under test: `formState.isSubmitting` disables the button for
+  the whole await, and the second click lands on a disabled control. Proven with a temporary probe
+  supplying a slow counting `onSubmit`, then deleted.
 - **`pnpm test:parity`: the margin shown is the margin the engine reserves, exactly.** Ten hand-picked
   cases plus seeded-random ones, across buy, short entry, full cover, partial cover and a fill that
   crosses zero, compared against `short_collateral_requirement` + `calculate_charges`. **Exact

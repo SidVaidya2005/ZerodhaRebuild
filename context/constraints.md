@@ -176,6 +176,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Accessibility
 
+- **A dialog opened from a store restores focus itself; Radix cannot.** Radix returns focus to its `DialogTrigger`, and a dialog mounted once and opened imperatively has none — closing the order ticket dropped focus on `<body>`. The store captures `document.activeElement` at the click and `onCloseAutoFocus` puts it back, guarding `isConnected` for a trigger whose row has since gone. Applies to every call site F31 and later add. (F25)
+
 - **Lighthouse cannot audit any `(terminal)` page.** It carries no session, follows the redirect, and reports a perfect score for `/auth/login?next=…` — a 1.00 that says nothing whatever about the page requested. `pnpm audit:a11y /dashboard` is therefore not evidence for the dashboard. Signed-in pages need either an authenticated Lighthouse run or a DOM-level check (heading order, table captions and scopes, labelled regions, every `aria-describedby` resolving). Applies to the whole of Phase 5 and to F38. (Phase 3 checkpoint)
 
 - **A Radix `DropdownMenuItem asChild` must wrap the interactive element, never a `<form>`.** The menu item handles Enter and Space by calling `event.currentTarget.click()`, and `HTMLFormElement.click()` has no default action — so a form-as-menu-item is operable by mouse (the full-width button covers it) and dead to the keyboard. Put the form outside and `asChild` on the button, which keeps the no-JavaScript submit intact. (F17, fixed at the Phase 3 checkpoint)
@@ -189,6 +191,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **A Lighthouse 100 is not evidence about tap targets.** Target size is not in its audit set: `/support` scored 100 while every `<summary>` was 20px tall, under WCAG 2.2's 24px minimum. Measure `getBoundingClientRect()` at 375px instead. (F07)
 
 ## Theming and design tokens
+
+- **Validation errors are `text-body`, not `text-down`.** `--color-down` means "price fell" everywhere in the app, and `library-docs.md` forbids spending it on a non-price meaning — F07B's support form already renders field errors in ordinary body text. The red signal on an invalid field comes from the shadcn bridge instead: `Input` carries `aria-invalid:border-destructive`, and `--color-destructive` maps onto `--color-down` inside the bridge, which is where that mapping belongs. (F25)
 
 - **The `--color-chart-*` categorical ramp is measured, not chosen, and `chart-ramp.test.ts` holds it that way.** The original ten were invented in `library-docs.md` behind a TODO and failed when finally checked: `#3b82f6` and `#8b5cf6` scored **0.8 apart under a deuteranopia simulation**, i.e. identical to a deuteranope. Three rules bind any future edit — (1) **hue alone cannot separate ten categories** for a deuteranope, whose discriminable axis is roughly blue↔yellow, so the ramp steps *lightness* too and holds two blues and two magentas at different depths on purpose; (2) the contrast target is **`--color-surface`, not `--color-canvas`** — WCAG 1.4.11's 3:1 covers graphics required to understand content, and every chart here ships beside a table carrying the same numbers, so the real requirement is only that no arc dissolves into its card; demanding 3:1 against both a white and a near-black canvas squeezes every colour into one luminance band and produced a palette of five near-identical oranges; (3) **no green and no red at all**, not merely the two trading tokens — any green reads as "up" and any red as "down" on a trading screen. (F21)
 
@@ -321,6 +325,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **Yahoo throttles bursts at the IP level and the block outlasts any in-process backoff.** ~16 requests/second across 200 symbols got every one back as 429 — and the first version of the probe reported that as "200 symbols do not resolve", condemning a good universe. Never treat 429 as a verdict on a symbol: only 404 means the symbol is unknown. `curl` succeeding while `node fetch` gets 429 is a recovery-window artefact, not a client difference — both are blocked together once tripped. Probe sequentially (~1.5s apart) and cache results so a throttled run resumes instead of restarting. (F14)
 
 ## Charges and the trading contract
+
+- **`execute_order` enforces §5's staleness window**, with `market_constants()` mirroring `_shared/market-constants.ts` exactly as `charge_rates()` mirrors the rate table and tier 4 comparing them. Without it "never filled at a stale price" has no implementation anywhere and a Monday fill can execute against Friday's close. (F24, evicted from Key Decisions at F25)
 
 - **A fill crossing zero apportions its charges pro-rata by quantity**, closing share rounded and the remainder to the opening leg so the two always sum to `trades.charges`. §8 never covered the case; rejecting it would make F23's shorting-excess reservation and flip-to-long path unreachable. (F24, evicted from Key Decisions at F25)
 

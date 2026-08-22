@@ -17,9 +17,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 4 — Trading Engine (Phase 2 remains open on F16 and its own checkpoint, both blocked on a live session)
-**Last completed:** 24 Order execution function — `place_order`, `execute_order`, `cancel_order`, `reset_account`, plus `market_state`/`market_constants`. 89 tier-2 assertions across two new suites including 500 randomised orders, two tier-3 concurrency tests, and session parity at tier 4. **Four defects found and fixed along the way**, three of them in already-shipped code: §7's cover row double-debited entry charges, `reserve_margin` made covers unaffordable, `execute_order` wrote two CHARGES rows on a short entry, and the capped-loss path credited the shortfall on top of a partial debit
+**Last completed:** 25 Order ticket UI — the dialog mounted once in the terminal layout, `placeOrderSchema`, `margin.ts` and a live estimate panel, all opened from the watchlist through `openTicket`. Margin proven exactly equal to the engine at tier 4 (36 parity assertions). **Four defects found in the browser, none of which any test tier would have caught**: an untouched limit price reported "Price must be more than zero", closing the ticket dropped focus on `<body>`, validation errors were painted in the reserved `--color-down`, and available cash sat inside the panel labelled *Estimate*
 **In progress:** nothing
-**Next:** 25 Order ticket UI — the dialog, `placeOrderSchema`, and `src/lib/trading/margin.ts`, the TypeScript half of §6's reservation rules proven exactly equal to Postgres at tier 4. Planned 2026-08-22; `build-plan.md` §25 carries the confirmed plan. The seam with F26 is an injected `onSubmit` prop, so the whole ticket is tier-1 testable with no database
+**Next:** 26 Place order end to end — the `placeOrder` Server Action behind F25's injected `onSubmit` seam, plus the toasts. F25 leaves the ticket calling an optional handler and closing when there is none, so the whole wiring is one prop
 
 **Not verified at this checkpoint, and deliberately so:** the build-plan's own Phase 3 criterion is that "ticking works unattended for a full market session". Today is Saturday 2026-08-22 — the market is closed and `pg_cron`'s window is weekdays only, so no unattended session can be observed. The Realtime half *was* verified: a production build, ten client-side navigations across all six terminal pages, exactly one `SUBSCRIBED` and no channel churn, then a live `UPDATE` reaching the browser. The unattended-session half rides along with F16's pending items on Monday
 
@@ -73,7 +73,7 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 - [x] 22 Charge calculator
 - [x] 23 Margin reservation and release
 - [x] 24 Order execution function
-- [ ] 25 Order ticket UI
+- [x] 25 Order ticket UI
 - [ ] 26 Place order end to end
 - [ ] 27 Orders page
 - [ ] 28 Limit order matching
@@ -103,6 +103,8 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 
 ## Key Decisions
 
+- **An uncontrolled `type="number"` field has no single "empty" value, so the limit price is a `Controller` that maps empty to `null` at the field.** `''`, `null`, `undefined` and `NaN` all reached the schema depending on whether the user or `setValue` wrote last, and `Number(null)` is 0 — so a user who had typed nothing was told their price must be more than zero. Two tier-1 cases now pin `null` and `undefined` to the absence message and a typed `0` to the price message. **Found by using the form, not by a test**: every arithmetic path was already green. (F25)
+
 - **The order ticket is mounted once in the terminal layout and opened through a `useOrderTicket` store.** Not premature: F18's watchlist panel renders twice — the `md` rail and the mobile sheet — so a per-row dialog would mount two copies of the same form for one symbol. Call sites get a button, not a dialog, which is what makes F31's exit-position flow three lines. (F25)
 
 - **Margin shown in the ticket is position-aware, and proven exactly equal to the engine at tier 4.** `src/lib/trading/margin.ts` implements §6's reservation rules over the user's actual holding and MIS position; the naive notional figure would tell a user covering a 100-share short that they need ₹10,029 where the engine reserves ₹29. The build-plan's "within one paisa" is corrected to exact — the looser bar hides the drift the test exists to catch. (F25)
@@ -120,5 +122,3 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 - **`place_order` returns `(order_id, status, rejection_reason)`, not a bare uuid.** A business rejection returns normally per `code-standards.md`, so `error` is null and the Server Action cannot tell a fill from a rejection; raising instead would roll back the REJECTED row §4 and the Orders page both require. `architecture.md`'s example and `toRejectionCode`'s role are corrected in the same change. (F24)
 
 - **Session logic gets a second implementation, in Postgres, and tier 4 proves the two equal.** `market_state(at)` reads `market_holidays` so `place_order` can reject a MARKET order with `MARKET_CLOSED`. A Server Action gate would sit outside the security boundary — `place_order` is granted to `authenticated`, so anyone calling the RPC directly would trade at any hour. `architecture.md`'s "one place decides market time" invariant is amended to name both rather than quietly broken. (F24)
-
-- **`execute_order` enforces §5's staleness window**, with `market_constants()` mirroring `_shared/market-constants.ts` exactly as `charge_rates()` mirrors the rate table and tier 4 comparing them. Without it "never filled at a stale price" has no implementation anywhere and a Monday fill can execute against Friday's close. (F24)

@@ -2,14 +2,18 @@
 
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useMemo, useState } from 'react'
-import { useForm, useWatch } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useQuoteStore } from '@/lib/stores/quote-store'
-import { useOrderTicketStore, type OrderTicketRequest } from '@/lib/stores/order-ticket-store'
+import {
+  consumeTicketTrigger,
+  useOrderTicketStore,
+  type OrderTicketRequest,
+} from '@/lib/stores/order-ticket-store'
 import { createClient } from '@/lib/supabase/client'
 import { estimateCharges, type OrderProduct } from '@/lib/trading/charges'
 import { NO_EXPOSURE, estimateMargin, type SymbolExposure } from '@/lib/trading/margin'
@@ -256,9 +260,11 @@ function TicketForm({
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
-          <span className={cn('font-medium', isBuy ? 'text-up' : 'text-down')}>
-            {isBuy ? 'Buy' : 'Sell'}
-          </span>
+          {/* Uncoloured on purpose. The side selector below is filled green or
+              red and is the one place this screen spends the trading tokens;
+              tinting the title too would spend them on a label rather than on
+              a control, which is what `DESIGN.md` reserves them for. */}
+          <span className="font-medium">{isBuy ? 'Buy' : 'Sell'}</span>
           <span>{symbol}</span>
         </DialogTitle>
       </DialogHeader>
@@ -305,8 +311,12 @@ function TicketForm({
             setValue('orderType', value)
             // The schema refuses a market order carrying a price, mirroring
             // `orders_limit_price_iff_limit`, so the field is cleared rather
-            // than left holding a stale figure the user cannot see.
-            setValue('limitPrice', value === 'LIMIT' ? (ltp ?? null) : null)
+            // than left holding a stale figure the user cannot see. Seeded from
+            // the live price only when there IS one: `ltp` is null for a symbol
+            // with no quote — which is every symbol outside a session — and a
+            // non-positive seed puts a figure in the field that the schema then
+            // rejects as a bad price rather than as an absence.
+            setValue('limitPrice', value === 'LIMIT' && ltp !== null && ltp > 0 ? ltp : null)
           }}
           options={[
             { value: 'MARKET', label: 'Market' },
@@ -329,7 +339,7 @@ function TicketForm({
               {...register('quantity', { valueAsNumber: true })}
             />
             {formState.errors.quantity ? (
-              <p role="alert" className="text-caption text-down">
+              <p role="alert" className="text-caption text-body">
                 {formState.errors.quantity.message}
               </p>
             ) : null}
@@ -340,18 +350,36 @@ function TicketForm({
               <label htmlFor="order-limit-price" className="text-body-sm text-muted">
                 Limit price
               </label>
-              <Input
-                id="order-limit-price"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                aria-invalid={formState.errors.limitPrice ? true : undefined}
-                {...register('limitPrice', {
-                  setValueAs: (value: string) => (value === '' ? null : Number(value)),
-                })}
+              {/* Controlled, so the empty-to-null mapping is written here
+                  rather than inferred from react-hook-form's coercion. An
+                  uncontrolled `type="number"` field has no single "empty" value
+                  — `''`, `null`, `undefined` and `NaN` all occur depending on
+                  whether the user or `setValue` wrote it last — and depending on
+                  which one arrived told a user who had typed nothing that their
+                  price must be more than zero, because `Number(null)` is 0. */}
+              <Controller
+                control={control}
+                name="limitPrice"
+                render={({ field }) => (
+                  <Input
+                    id="order-limit-price"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    aria-invalid={formState.errors.limitPrice ? true : undefined}
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ''}
+                    onChange={(event) => {
+                      const raw = event.target.value
+                      field.onChange(raw === '' ? null : Number(raw))
+                    }}
+                  />
+                )}
               />
               {formState.errors.limitPrice ? (
-                <p role="alert" className="text-caption text-down">
+                <p role="alert" className="text-caption text-body">
                   {formState.errors.limitPrice.message}
                 </p>
               ) : null}
@@ -420,18 +448,24 @@ function TicketForm({
                       ))
                   : null}
               </ul>
-              <div className="border-t border-hairline pt-2">
-                <Figure
-                  label="Available cash"
-                  value={availableCash === null ? DASH : formatCurrency(availableCash)}
-                />
-              </div>
             </>
           )}
         </section>
 
+        {/* Outside the estimate section on purpose. This one is not an
+            estimate: it is `funds.available_cash`, computed in Postgres and
+            read straight out. §1 asks TypeScript to label what it works out
+            for itself — labelling a figure the database owns as an estimate
+            would be just as inaccurate, in the other direction. */}
+        <div className="flex justify-between gap-4 px-3 text-body-sm">
+          <span className="text-muted">Available cash</span>
+          <span className="font-mono tabular-nums">
+            {availableCash === null ? DASH : formatCurrency(availableCash)}
+          </span>
+        </div>
+
         {failure ? (
-          <p role="alert" className="text-body-sm text-down">
+          <p role="alert" className="text-body-sm text-body">
             {failure}
           </p>
         ) : null}
@@ -458,7 +492,22 @@ export function OrderTicket({ availableCash, onSubmit, loadExposure }: OrderTick
 
   return (
     <Dialog open={request !== null} onOpenChange={(open) => !open && closeTicket()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        // Radix restores focus to its `DialogTrigger`, and there is none here:
+        // the ticket is opened from a store so that one dialog serves every
+        // call site. Without this, closing dropped focus on `<body>` and a
+        // keyboard user landed back at the top of the document.
+        onCloseAutoFocus={(event) => {
+          const trigger = consumeTicketTrigger()
+          // A row can be gone by the time the ticket closes — removed from the
+          // watchlist, or navigated away from. Radix's default is the better
+          // answer then than focusing a detached node.
+          if (!trigger?.isConnected) return
+          event.preventDefault()
+          trigger.focus()
+        }}
+      >
         {request ? (
           <TicketForm
             key={`${request.symbol}:${request.side}`}

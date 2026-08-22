@@ -73,6 +73,26 @@ describe('placeOrderSchema', () => {
     )
   })
 
+  // The two shapes an untouched limit-price field reaches the schema as. Both
+  // mean "nothing typed", and neither may be read as a zero price — F25's ticket
+  // reported "Price must be more than zero" to a user who had typed nothing,
+  // because `Number(null)` is 0 and the field only mapped the empty string. The
+  // third shape, `''`, never gets this far: the ticket's `Controller` maps it to
+  // null at the field, which is the fix this case exists to hold in place.
+  it.each([[null], [undefined]])('reads %s as an absent limit price, not a zero', (value) => {
+    expect(errorFor({ ...base, orderType: 'LIMIT', limitPrice: value }, 'limitPrice')).toBe(
+      'A limit order needs a limit price.'
+    )
+  })
+
+  // Zero is deliberately NOT in that list: a typed 0 is a real, invalid price
+  // and keeps its own message.
+  it('still rejects a typed zero as a price, not as an absence', () => {
+    expect(errorFor({ ...base, orderType: 'LIMIT', limitPrice: 0 }, 'limitPrice')).toBe(
+      'Price must be more than zero.'
+    )
+  })
+
   it('rejects a symbol that is not one', () => {
     expect(errorFor({ ...base, symbol: 'reliance; drop table' }, 'symbol')).toBe(
       'That is not a symbol.'
