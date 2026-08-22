@@ -708,6 +708,34 @@ export type Database = {
     }
     Functions: {
       add_watchlist_item: { Args: { p_symbol: string }; Returns: number }
+      calculate_charges: {
+        Args: {
+          p_price: number
+          p_product: Database["public"]["Enums"]["product_type"]
+          p_quantity: number
+          p_side: Database["public"]["Enums"]["order_side"]
+        }
+        Returns: {
+          breakdown: Json
+          total: number
+        }[]
+      }
+      charge_rates: {
+        Args: never
+        Returns: {
+          brokerage_cnc_rate: number
+          brokerage_mis_cap: number
+          brokerage_mis_rate: number
+          dp_charge_base: number
+          exchange_txn_rate: number
+          gst_rate: number
+          sebi_turnover_rate: number
+          stamp_duty_cnc_buy_rate: number
+          stamp_duty_mis_buy_rate: number
+          stt_cnc_rate: number
+          stt_mis_sell_rate: number
+        }[]
+      }
       generate_client_id: { Args: never; Returns: string }
       move_watchlist_item: {
         Args: { p_direction: string; p_symbol: string }
