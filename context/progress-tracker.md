@@ -17,9 +17,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 2 — Data Foundation & Auth
-**Last completed:** 15 Quote provider chain — NSE session logic, provenance where `LIVE` is structurally unreachable, a simulator anchored on real bhavcopy closes, and a provider chain with a per-provider circuit breaker
-**In progress:** 16 Market tick Edge Function and schedule — **built, deployed and verified except for two session-dependent items.** `market-tick` is live behind `pg_cron` (`* 3-10 * * 1-5`) with Vault credentials; the session logic is one shared copy under `@shared/*`; 154 tier-1 tests and 22 pgTAP assertions pass; lint, typecheck and build are zero. The gateway was measured directly: **the publishable key that ships in the browser bundle satisfies `verify_jwt`**, so the Vault-held `x-scheduler-secret` compared in the handler is the real access control
-**Next:** 17 Terminal shell layout — planned 2026-08-22. The `(terminal)` layout, top nav, collapsible watchlist container, a live market-status pill, and placeholder pages for all eight guarded routes. The index strip ships as a slot with no values, because no index exists in the data; index data moves to F21
+**Last completed:** 17 Terminal shell layout — the `(terminal)` layout with one session check, a top nav carrying the index-strip slot, funds, theme toggle and avatar menu, a watchlist rail beside `<main>` that becomes a full-bleed sheet under 768px, a client-side market-status pill, and placeholder pages for all eight guarded routes
+**In progress:** 16 Market tick Edge Function and schedule — built, deployed and green except for two session-dependent items that need Monday; see the blocked note below
+**Next:** 18 Watchlist sidebar — fill `WatchlistPanel`, the one component both the desktop rail and the mobile sheet render, with the real list plus search, reorder and row actions. The 10 seeded symbols are already backfilled and already drive the tick's demand union
 
 **Blocked until Monday 2026-08-24, first session after 09:15 IST.** F16's last two verify items and the Phase 2 checkpoint's own "prices land on a schedule" both need a live session, and the cron window is weekdays only. Check with one query:
 ```sql
@@ -59,7 +59,7 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 
 ### Phase 3 — Terminal Shell & Live Prices
 
-- [ ] 17 Terminal shell layout
+- [x] 17 Terminal shell layout
 - [ ] 18 Watchlist sidebar
 - [ ] 19 Realtime quote store and tick interpolation
 - [ ] 20 Data source badge and market status
@@ -101,6 +101,7 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 
 ## Key Decisions
 
+- **The watchlist rail lives in the layout beside `<main>`; only the sheet trigger lives in the nav.** Exporting one component that rendered both shells put the 288px `aside` inside the header's 64px flex row, where it was clipped to the nav's height and pushed the brand, index strip and pill until they wrapped. `WatchlistRail` and `WatchlistSheet` are separate exports over one shared `WatchlistPanel`, so F18 fills the panel once and both breakpoints follow. (F17)
 - **The index strip ships as a slot with no values, and index data moves to F21.** NIFTY 50, SENSEX and BANK NIFTY exist nowhere in the data — `instruments` holds 200 NSE equities, so there is no row, no quote and no simulator anchor for any of them, and SENSEX is BSE against an NSE-only scope. Three fabricated numbers in the most prominent chrome on the page is the worst place in the app to invent data. `project-overview.md` already puts an index strip on the Dashboard, so F21 gets it. (F17)
 - **The market-status pill is F17's, and it recomputes on a timer.** F20 turns out to be only the data-source badge — its UI and Logic bullets never mention market status despite its title. Server-rendering the pill once would leave a tab open past 15:30 still reading OPEN, so the server passes the holiday set as a `string[]` and a client component calls the same pure `marketStatusAt` the tick gates on. (F17)
 - **The `(terminal)` layout checks the session once and pages trust it.** `dashboard/page.tsx` re-checked it itself on the argument that the proxy is only a convenience; with a layout that argument buys nothing, because every page beneath reads through RLS-scoped queries that return nothing without a session. One `getUser()` per navigation instead of one per page, and no future page can forget to check. (F17)
@@ -110,4 +111,3 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 - **The candle prune moves from F16 to F33.** Candles left F15, so retention logic here would run against a table nothing populates and its assertion would pass whether or not the rules were right. F33 builds the pipeline and its retention together. (F16)
 - **The simulator walks from a real NSE close, seeded into `instruments.prev_close` from bhavcopy.** `library-docs.md` said it seeds from "instruments reference data", but that table carried no price, so a cold start had nothing to walk from. Bhavcopy is on the reachable archive host, not the blocked API. The close is a seed and never a quote — no `NSE_BHAVCOPY` enum value, no provenance rewrite, and every price still badges `SIMULATED`. (F15)
 - **The provider seam is built but the limiter is not.** `QuoteProvider`, an ordered chain and a per-provider circuit breaker, all exercised against a deliberately failing fake — retrofitting a chain around a hardcoded simulator later is worse than the seam costing a little now, and F14 proved the breaker is the piece that matters. A token bucket in front of a local simulator caps nothing, so it waits for a provider that makes outbound requests. (F15)
-- **Candles move out of F15 to F33.** No source covers the 1D and 1W intraday ranges — bhavcopy gives one daily bar, Yahoo's chart endpoint is deferred — and F33 is the first feature that draws a chart. Designing a chart pipeline four features before anything renders one is the thing being avoided. (F15)

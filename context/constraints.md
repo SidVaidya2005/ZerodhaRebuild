@@ -29,6 +29,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Build plan sequencing
 
+- **Candles move out of F15 to F33.** No source covers the 1D and 1W intraday ranges — bhavcopy gives one daily bar, Yahoo's chart endpoint is deferred — and F33 is the first feature that draws a chart. Designing a chart pipeline four features before anything renders one is the thing being avoided. (F15)
+
 - **`isTradingSession()` coverage moves from F14 to F15**, which is where the function and its unit tests already live. F14 proves the seeded data instead: the published dates are present, correctly dated in `Asia/Kolkata`, and described. Same precedent F13 set when its watchlist check moved here. (F14)
 
 - **F10 creates only the two enums its own tables reference** — `quote_provider` and `candle_interval`. The five that only F11's tables use are created there. Each migration then reviews against the tables it creates, and nobody reading the schema in between finds five types with no referents. (F10)
