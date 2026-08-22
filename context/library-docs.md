@@ -560,7 +560,7 @@ const { ltp, direction } = useQuoteStore(
 - Never call `useQuoteStore()` with no selector in a component. The store updates several times a second; an unselected subscription re-renders the entire terminal on every tick.
 - Selectors returning a new object or array **must** be wrapped in `useShallow` — this is a v5 requirement and the most common cause of infinite render loops here.
 - The store holds live prices only. Orders, holdings, funds and positions are server state and never enter Zustand.
-- **`ltp` may be interpolated; `anchor` never is.** The order ticket, order confirmation, stock detail header, and every monetary total read `anchor`. Only ambient surfaces — watchlist, index strip, summary tiles — read `ltp`.
+- **`ltp` may be interpolated; `anchor` never is.** The order ticket, order confirmation, stock detail header, and every monetary total read `anchor`. Only ambient surfaces read `ltp`, and today that is the watchlist alone. **The dashboard summary tiles are not among them** — they are monetary totals, and F21 resolved `architecture.md`'s contradiction on that point in the invariant's favour.
 - Never store a derived `source` in the store. Compute it on render with `deriveSource(provider, providerTs, new Date())`; freshness changes with the clock, so a stored value goes wrong without any state change.
 - The interpolation loop runs in exactly one `requestAnimationFrame` driver mounted once in the terminal layout — never one per row.
 - Read outside React with `useQuoteStore.getState()`; never subscribe from a non-component module.

@@ -16,10 +16,12 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Current Status
 
-**Phase:** Phase 3 — Terminal Shell & Live Prices (Phase 2 is complete bar F16 and its checkpoint, both blocked on a live session)
-**Last completed:** 21 Dashboard home — five summary tiles, a top-10 holdings donut with an Others bucket, recent orders and a never-traded empty state, all aggregated in three `security_invoker` views; the index strip is now a derived composite over our own priced universe rather than a named index it has no data for. The categorical chart ramp was measured for the first time, failed, and was replaced
-**In progress:** 16 Market tick Edge Function and schedule — built, deployed and green except for two session-dependent items that need Monday; see the blocked note below
-**Next:** Phase 3 checkpoint — every feature is built. Run the phase verification, inspect the diff across F17–F21, split `build-journal.md`'s `## Phase 2` heading (F17–F21 are filed under it), compact the journal, and confirm ticking holds unattended for a full session with no Realtime channel leak. F16 and the Phase 2 checkpoint are still blocked on Monday's live session
+**Phase:** Phase 3 — Terminal Shell & Live Prices, closed at the checkpoint (Phase 2 remains open on F16 and its own checkpoint, both blocked on a live session)
+**Last completed:** Phase 3 checkpoint — full gate green (lint, typecheck, 250 tier-1 tests, 11 pgTAP files, build, format). The phase review found five real defects and one false guarantee; all six are fixed in `3.00.01`, and the two it found that this checkpoint chose not to fix are filed in `constraints.md`
+**In progress:** nothing
+**Next:** 22 Charge calculator — the Postgres side of the charge model, made provably equal to the TypeScript estimator F06 already built. `trading-contract.md` §2 and §3 are authoritative, and F22 carries two items from the Phase 1 checkpoint: pin the reconciliation case to hand-computed figures rather than restating the implementation, and assert `DP_CHARGE_INCLUSIVE` derives from `DP_CHARGE_BASE`
+
+**Not verified at this checkpoint, and deliberately so:** the build-plan's own Phase 3 criterion is that "ticking works unattended for a full market session". Today is Saturday 2026-08-22 — the market is closed and `pg_cron`'s window is weekdays only, so no unattended session can be observed. The Realtime half *was* verified: a production build, ten client-side navigations across all six terminal pages, exactly one `SUBSCRIBED` and no channel churn, then a live `UPDATE` reaching the browser. The unattended-session half rides along with F16's pending items on Monday
 
 **Blocked until Monday 2026-08-24, first session after 09:15 IST.** F16's last two verify items and the Phase 2 checkpoint's own "prices land on a schedule" both need a live session, and the cron window is weekdays only. Check with one query:
 ```sql
@@ -64,7 +66,7 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 - [x] 19 Realtime quote store and tick interpolation
 - [x] 20 Data source badge and provenance
 - [x] 21 Dashboard home
-- [ ] Phase checkpoint — verify Phase 3 — Terminal Shell & Live Prices is stable before starting the next phase
+- [x] Phase checkpoint — verify Phase 3 — Terminal Shell & Live Prices is stable before starting the next phase
 
 ### Phase 4 — Trading Engine
 

@@ -112,9 +112,18 @@ export const useQuoteStore = create<QuoteState>()((set) => ({
         // to vouch for — the row keeps its em dash rather than entering the
         // store as a number with no provenance behind it.
         if (row.ltp === null || row.provider === null || row.fetchedAt === null) continue
-        // Never overwrite a live anchor with a stale server render. A seed that
-        // ran after the first tick would visibly rewind the price.
-        if (state.quotes[row.symbol]) continue
+        // Never overwrite a live anchor with a *stale* server render — a seed
+        // that ran after the first tick would visibly rewind the price. But
+        // "already present" is not the same as "fresher", and skipping on
+        // presence alone pinned a symbol to its first-ever seed for the whole
+        // session: the store lives in the terminal layout and survives every
+        // client-side navigation, so if the Realtime channel never delivers
+        // (no token, CHANNEL_ERROR, the free tier's connection cap — each of
+        // which only logs), every later server render carried a newer price
+        // that could not get in. Compare the timestamps instead.
+        const existing = state.quotes[row.symbol]
+        const fetchedAt = new Date(row.fetchedAt)
+        if (existing && fetchedAt.getTime() <= existing.fetchedAt.getTime()) continue
 
         quotes[row.symbol] = {
           anchor: row.ltp,
@@ -122,11 +131,15 @@ export const useQuoteStore = create<QuoteState>()((set) => ({
           prevClose: row.prevClose,
           provider: row.provider,
           providerTs: row.providerTs === null ? null : new Date(row.providerTs),
-          fetchedAt: new Date(row.fetchedAt),
+          fetchedAt,
+          // No flash and no tween: the visitor did not watch this price arrive,
+          // so animating it would be theatre. `flashKey` is carried forward
+          // rather than reset, so adopting a fresher server row cannot make a
+          // row flash as though a tick had landed.
           direction: 'flat',
           from: row.ltp,
           startedAt: 0,
-          flashKey: 0,
+          flashKey: existing?.flashKey ?? 0,
         }
         changed = true
       }

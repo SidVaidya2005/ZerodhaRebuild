@@ -109,3 +109,42 @@ export function compositeSource(
   if (providers.length === 0) return null
   return worstSource(providers.map((provider) => deriveSource(provider, oldestProviderTs, now)))
 }
+
+/**
+ * Provenance for a row that has not entered the live store yet.
+ *
+ * **Without this, a server-rendered price has no provenance and therefore no
+ * price.** `PriceWithProvenance` renders an em dash whenever provenance is null
+ * — correctly, since a figure with nothing behind it must not be shown — so a
+ * surface that passed `live ? provenanceOf(live, now) : null` rendered every
+ * price as an em dash on the server and on the first client render, while the
+ * change column beside it displayed the server's own figure. A row claiming a
+ * 25% move with no price is worse than either half alone. Found at the Phase 3
+ * checkpoint, in the SSR HTML.
+ *
+ * `isInterpolated` is false by construction: nothing has tweened yet.
+ *
+ * Null when the row carries no price, no provider or no fetch time — there is
+ * nothing to vouch for, and the em dash is then the honest render.
+ */
+export function serverProvenance(
+  row: {
+    ltp: number | null
+    provider: QuoteProviderName | null
+    providerTs: string | null
+    fetchedAt: string | null
+  },
+  now: Date
+): Provenance | null {
+  if (row.ltp === null || row.provider === null || row.fetchedAt === null) return null
+
+  const providerTs = row.providerTs === null ? null : new Date(row.providerTs)
+
+  return {
+    source: deriveSource(row.provider, providerTs, now),
+    provider: row.provider,
+    providerTs,
+    fetchedAt: new Date(row.fetchedAt),
+    isInterpolated: false,
+  }
+}

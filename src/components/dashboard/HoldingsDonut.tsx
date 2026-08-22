@@ -11,7 +11,7 @@ import {
 
 import { toDonutSlices, type DonutSlice } from '@/lib/portfolio/totals'
 import type { HoldingRow } from '@/lib/portfolio/types'
-import { useQuoteStore } from '@/lib/stores/quote-store'
+import { useHoldingPrices } from '@/components/dashboard/use-holding-prices'
 import { formatCurrency } from '@/lib/utils'
 
 /**
@@ -61,8 +61,8 @@ const HoldingSlice = (props: PieSectorShapeProps) => {
 }
 
 export function HoldingsDonut({ holdings }: { holdings: HoldingRow[] }) {
-  const quotes = useQuoteStore((state) => state.quotes)
-  const slices = toDonutSlices(holdings, quotes)
+  const { anchors } = useHoldingPrices(holdings)
+  const slices = toDonutSlices(holdings, anchors)
 
   // Two different absences, and saying the wrong one is a small lie about the
   // account: a user who has closed everything out holds nothing, while a user

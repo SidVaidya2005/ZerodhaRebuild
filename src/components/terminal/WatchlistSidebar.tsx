@@ -17,7 +17,7 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { createClient } from '@/lib/supabase/client'
 import { dayChange } from '@/lib/market/change'
-import { provenanceOf } from '@/lib/market/screen-provenance'
+import { provenanceOf, serverProvenance } from '@/lib/market/screen-provenance'
 import { useQuoteStore } from '@/lib/stores/quote-store'
 import { cn } from '@/lib/utils'
 
@@ -155,10 +155,14 @@ function WatchlistRowItem({ row, isFirst, isLast, pending, run }: RowProps) {
           live?.direction === 'down' && 'tick-flash-down'
         )}
       >
+        {/* The server row is the fallback for provenance as well as for the
+            price. Passing `null` here rendered every row as an em dash until
+            the store seeded — including in the SSR HTML, beside a change
+            column showing the server's figure. */}
         <PriceWithProvenance
           value={ltp}
           anchor={live?.anchor ?? null}
-          provenance={live ? provenanceOf(live, now) : null}
+          provenance={live ? provenanceOf(live, now) : serverProvenance(row, now)}
         />
       </span>
 

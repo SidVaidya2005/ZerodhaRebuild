@@ -176,6 +176,12 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Accessibility
 
+- **Lighthouse cannot audit any `(terminal)` page.** It carries no session, follows the redirect, and reports a perfect score for `/auth/login?next=…` — a 1.00 that says nothing whatever about the page requested. `pnpm audit:a11y /dashboard` is therefore not evidence for the dashboard. Signed-in pages need either an authenticated Lighthouse run or a DOM-level check (heading order, table captions and scopes, labelled regions, every `aria-describedby` resolving). Applies to the whole of Phase 5 and to F38. (Phase 3 checkpoint)
+
+- **A Radix `DropdownMenuItem asChild` must wrap the interactive element, never a `<form>`.** The menu item handles Enter and Space by calling `event.currentTarget.click()`, and `HTMLFormElement.click()` has no default action — so a form-as-menu-item is operable by mouse (the full-width button covers it) and dead to the keyboard. Put the form outside and `asChild` on the button, which keeps the no-JavaScript submit intact. (F17, fixed at the Phase 3 checkpoint)
+
+- **Recharts stamps `role="application"` on its SVG**, which tells a screen reader to hand the chart every keystroke and breaks browse mode on a graphic with no interaction to offer. Pair every chart with a table carrying the same numbers and mark the chart `aria-hidden`. (F21)
+
 - **Reorder ships as move-up / move-down, not drag.** Drag alone is unreachable by keyboard and the project has no drag-and-drop dependency; buttons are accessible by construction and write the same `sort_order`. Drag becomes a later enhancement over the same Server Action, and F38 inherits a passing surface rather than a filed gap. (F18)
 
 - **A horizontally scrollable region needs `tabIndex={0}` and a labelled `role="region"`,** or keyboard users cannot reach the overflowing columns. At 375px that is most of the table. **Lighthouse does not audit this; axe does** — the score alone is not evidence. Applies to every table in Phase 5. (F05)
@@ -251,6 +257,16 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Live prices and interpolation
 
+- **`touch_symbol_demand` fires twice while the mobile sheet is open.** `WatchlistPanel` is mounted by both `WatchlistRail` (always mounted, hidden at `md`) and `WatchlistSheet` (mounted on open), and each calls `useSymbolDemand`; both also render the full row list at once. Harmless — the RPC is idempotent — but it is a duplicated round trip and a duplicated subscription, and it is why the demand count moves in twos. Worth hoisting the hook when the responsive pass (F37) touches this. (F18, found at the Phase 3 checkpoint)
+
+- **Every surface that renders a price must pass provenance for the *server* row too, not only for the live one.** `PriceWithProvenance` renders an em dash whenever provenance is null — correctly, since a figure with nothing behind it must not be shown — so `provenance={live ? provenanceOf(live, now) : null}` renders every price as an em dash in the SSR HTML and on the first client render, beside a change column showing the server's own figure. Use `serverProvenance(row, now)` as the fallback. **Hydration hides this**: the screen looks right within a second, and only the `fetch()`ed HTML shows it. Applies to F30, F31 and F33, which all add price surfaces. (F20, found and fixed at the Phase 3 checkpoint)
+
+- **The Realtime channel subscribes to `UPDATE` only, so a symbol's *first* quote row does not reach an open browser.** The tick upserts, and the first tick for a never-quoted symbol is an `INSERT`; the row stays an em dash until the next server render. Acceptable today because the demand union means a watched symbol is usually already quoted, but any feature that adds a symbol to a live page needs either an `INSERT` subscription or a `router.refresh()`. (Phase 3 checkpoint)
+
+- **Never subscribe a component to `state.quotes` wholesale.** The interpolation loop rebuilds that map every animation frame, so the component re-renders ~60×/s for the ~800ms after each tick — and for anything reading `anchor`, to produce identical output. Two dashboard components did this, one of them re-rendering a Recharts SVG. Select flat maps of primitives through `useShallow`; a map of `LiveQuote` objects compares unequal every frame and fixes nothing. (Phase 3 checkpoint)
+
+- **`seedQuotes` adopts a server row that is *fresher*, not merely a row for a symbol it has not seen.** Skipping on presence alone pinned a symbol to its first-ever seed for the whole session: the store lives in the terminal layout and survives every client-side navigation, so if Realtime never delivers — no token, `CHANNEL_ERROR`, the free tier's connection cap, each of which only logs — every later server render carried a newer price that could not get in. Compare `fetchedAt`. (F19, fixed at the Phase 3 checkpoint)
+
 - **The interpolation loop tweens between server anchors and invents nothing.** `build-plan.md` described "micro-ticks ... bounded so it never drifts beyond a small band", which is bounded jitter — figures no provider reported and the market never traded at. `architecture.md` → Interpolated values says the loop "moves prices between server anchors" and outranks a build-plan feature, so the build plan was rewritten. (F19, evicted from Key Decisions at F21)
 
 - **The interpolation bound is an interval, not a band.** The displayed value always lies on the closed segment between the previous and current anchor — strictly stronger than "within X% of the anchor", and testable at tier 1 with no DOM. (F19, evicted from Key Decisions at F21)
@@ -258,6 +274,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **The watchlist's day change is recomputed on the client once prices are live.** `library-docs.md`'s `LiveQuote` carries `prevClose` for exactly this. Display-only and never persisted, so `CLAUDE.md`'s money rule — which forbids computing a figure in TypeScript *and storing it* — is untouched; a ticking price beside a frozen change would be the worse outcome. (F19, evicted from Key Decisions at F21)
 
 - **Rows read `store ?? prop` with the store seeded in an effect.** Server and first client render both use the prop, so the HTML matches — the lesson F17's `serverNow` pill taught — and a symbol with no quote keeps its em dash instead of flashing into existence. (F19, evicted from Key Decisions at F21)
+
+## Database concurrency
+
+- **`add_watchlist_item` still races on `sort_order`, and its own comment describes the wrong failure.** The header says the function exists because "two concurrent adds read the same maximum and collide on the primary key" — but the PK is `(user_id, symbol)`, so there is no collision. The real defect is that `select max(sort_order) + 1` is unserialised, so two concurrent adds take the *same* `sort_order`, which is exactly the duplicate state the migration's renumber preamble says makes reorder a silent no-op. It self-heals only once `move_watchlist_item` runs, because that renumbers first. **Not fixed** — the fix wants `select … for update` on the user's rows or an advisory lock, plus a tier-3 two-connection test, and tier 3 commits into the one real database. Whoever next touches the watchlist writes owns this. (F18, found at the Phase 3 checkpoint)
 
 ## Quote providers
 

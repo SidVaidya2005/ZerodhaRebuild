@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import type { LiveQuote } from '@/lib/stores/quote-store'
 import { DONUT_SLICE_LIMIT, recomputeSummary, toDonutSlices } from '@/lib/portfolio/totals'
 import type { HoldingRow, PortfolioSummary } from '@/lib/portfolio/types'
 
@@ -38,35 +37,18 @@ function summary(overrides: Partial<PortfolioSummary> = {}): PortfolioSummary {
   }
 }
 
-function quote(anchor: number, overrides: Partial<LiveQuote> = {}): LiveQuote {
-  return {
-    anchor,
-    // Deliberately different from the anchor in every fixture: a helper that
-    // reads this instead would produce visibly wrong totals rather than
-    // coincidentally right ones.
-    ltp: anchor + 7,
-    prevClose: 80,
-    provider: 'SIMULATOR',
-    providerTs: null,
-    fetchedAt: new Date('2026-08-22T09:00:00Z'),
-    direction: 'flat',
-    from: anchor,
-    startedAt: 0,
-    flashKey: 0,
-    ...overrides,
-  }
-}
+// The helpers now take flat maps of anchors, so an interpolated value cannot
+// reach them even by mistake — there is no `ltp` field in scope to pass. The
+// selector that builds these maps is what enforces it, and
+// `use-holding-prices.ts` reads `anchor` there.
 
 describe('restating the tiles against live anchors', () => {
-  it('reads the anchor and never the interpolated value', () => {
-    // anchor 120, ltp 127. 10 shares against cost 90.
-    const result = recomputeSummary(summary(), [holding()], { RELIANCE: quote(120) })
+  it('values against the live anchor when one has arrived', () => {
+    const result = recomputeSummary(summary(), [holding()], { RELIANCE: 120 })
 
     expect(result.marketValue).toBe(1200)
     expect(result.portfolioValue).toBe(101_200)
     expect(result.overallPnl).toBe(300)
-    // The interpolated figure would give 1270 / 101270 / 370. It must not.
-    expect(result.marketValue).not.toBe(1270)
   })
 
   it('falls back to the server figure for a symbol that has not ticked', () => {
@@ -91,7 +73,7 @@ describe('restating the tiles against live anchors', () => {
 
   it('measures the day against the previous close, not the average price', () => {
     // anchor 120, prev_close 80, average 90. The day's move is 40 a share.
-    const result = recomputeSummary(summary(), [holding()], { RELIANCE: quote(120) })
+    const result = recomputeSummary(summary(), [holding()], { RELIANCE: 120 }, { RELIANCE: 80 })
     expect(result.dayPnl).toBe(400)
     // Against average_price it would be 300 — that is unrealised P&L, and it is
     // a different question (trading-contract.md §9).
@@ -100,7 +82,7 @@ describe('restating the tiles against live anchors', () => {
 
   it('omits a holding with no previous close from the day figure without zeroing it', () => {
     const rows = [holding({ prevClose: null })]
-    const result = recomputeSummary(summary(), rows, { RELIANCE: quote(120, { prevClose: null }) })
+    const result = recomputeSummary(summary(), rows, { RELIANCE: 120 }, { RELIANCE: null })
 
     expect(result.dayPnl).toBe(0)
     // It is still valued — only the day comparison is unavailable.
@@ -162,7 +144,7 @@ describe('the donut', () => {
       holding({ symbol: 'B', quantity: 1, averagePrice: 1, ltp: 90 }),
     ]
     // B overtakes A on the tick. Ranking must follow the anchor, not the render.
-    const slices = toDonutSlices(rows, { B: quote(500) })
+    const slices = toDonutSlices(rows, { B: 500 })
     expect(slices.map((slice) => slice.name)).toEqual(['B', 'A'])
     expect(slices[0]?.value).toBe(500)
   })

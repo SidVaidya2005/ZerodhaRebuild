@@ -3,6 +3,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
+import { TERMINAL_NAV_LINKS } from '@/components/terminal/nav-links'
 import { TERMINAL_PREFIXES } from '@/lib/auth/routes'
 
 /**
@@ -42,5 +43,19 @@ describe('the terminal route table', () => {
     // page reachable signed-out, and every case above would still pass.
     expect(TERMINAL_PREFIXES).toContain('/dashboard')
     expect(TERMINAL_PREFIXES.length).toBeGreaterThanOrEqual(8)
+  })
+
+  // Both files claimed this was covered and neither covered it: the cases above
+  // iterate TERMINAL_PREFIXES, so a nav link pointing at a path *not* in that
+  // table shipped a 404 with the whole suite green. Found at the Phase 3
+  // checkpoint. The nav is the only way most of these pages are ever reached,
+  // so it is the list most worth checking.
+  it.each(TERMINAL_NAV_LINKS.map((link) => link.href))('nav link %s is guarded', (href) => {
+    expect(TERMINAL_PREFIXES).toContain(href)
+  })
+
+  it.each(TERMINAL_NAV_LINKS.map((link) => link.href))('nav link %s has a page', (href) => {
+    const segment = DYNAMIC_SEGMENTS[href] ?? href.replace(/^\//, '')
+    expect(existsSync(join(TERMINAL_DIR, segment, 'page.tsx'))).toBe(true)
   })
 })

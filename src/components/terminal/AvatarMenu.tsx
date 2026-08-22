@@ -79,15 +79,21 @@ export function AvatarMenu({ name, email, clientId }: AvatarMenuProps) {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem asChild>
-          {/* A form, not an onClick — sign-out must work without JavaScript. */}
-          <form action={signOut}>
+        {/* A form, not an onClick — sign-out must work without JavaScript.
+            `asChild` goes on the *button*, not the form: Radix's menu item
+            handles Enter and Space by calling `currentTarget.click()`, and
+            `HTMLFormElement.click()` has no default action, so with the form as
+            the item a keyboard user could focus "Sign out" and press Enter to
+            no effect. It worked with a mouse only because the full-width button
+            covered the item. Found at the Phase 3 checkpoint. */}
+        <form action={signOut}>
+          <DropdownMenuItem asChild>
             <button type="submit" className="flex w-full items-center gap-2">
               <LogOut aria-hidden="true" />
               Sign out
             </button>
-          </form>
-        </DropdownMenuItem>
+          </DropdownMenuItem>
+        </form>
       </DropdownMenuContent>
     </DropdownMenu>
   )

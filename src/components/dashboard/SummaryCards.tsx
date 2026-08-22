@@ -2,8 +2,10 @@
 
 import { useId } from 'react'
 
-import { badgeSource, SOURCE_COPY } from '@/lib/market/screen-provenance'
-import { useQuoteStore } from '@/lib/stores/quote-store'
+import { worstSource } from '@shared/provenance.ts'
+
+import { SOURCE_COPY, serverProvenance } from '@/lib/market/screen-provenance'
+import { useHoldingPrices } from '@/components/dashboard/use-holding-prices'
 import { recomputeSummary } from '@/lib/portfolio/totals'
 import type { HoldingRow, PortfolioSummary } from '@/lib/portfolio/types'
 import { cn, formatCurrency, formatSignedCurrency } from '@/lib/utils'
@@ -33,9 +35,9 @@ type SummaryCardsProps = {
 }
 
 export function SummaryCards({ summary, holdings }: SummaryCardsProps) {
-  const quotes = useQuoteStore((state) => state.quotes)
+  const { anchors, prevCloses } = useHoldingPrices(holdings)
   const now = useNow()
-  const live = recomputeSummary(summary, holdings, quotes)
+  const live = recomputeSummary(summary, holdings, anchors, prevCloses)
   const provenanceId = useId()
 
   // **No figure on this page is a single-symbol price**, so `PriceWithProvenance`
@@ -46,14 +48,17 @@ export function SummaryCards({ summary, holdings }: SummaryCardsProps) {
   // source among the holdings actually being valued, scoped to those holdings
   // rather than to the whole store, because the watchlist's symbols do not
   // appear in any of these numbers.
-  const held = Object.fromEntries(
-    holdings.filter((row) => quotes[row.symbol]).map((row) => [row.symbol, quotes[row.symbol]!])
-  )
-  const source = badgeSource(held, now)
+  // Derived from the same rows the tiles are valued from, so the disclosure and
+  // the figures cannot disagree. A holding the store has not seen yet falls back
+  // to the provenance of the server row it was rendered from.
+  const provenances = holdings
+    .map((holding) => serverProvenance(holding, now))
+    .filter((value): value is NonNullable<typeof value> => value !== null)
+  const source = provenances.length === 0 ? null : worstSource(provenances.map((p) => p.source))
   const copy = source ? SOURCE_COPY[source] : null
 
   return (
-    <section aria-label="Portfolio summary" aria-describedby={provenanceId}>
+    <section aria-label="Portfolio summary" aria-describedby={copy ? provenanceId : undefined}>
       <dl className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Tile label="Portfolio value" value={formatCurrency(live.portfolioValue)} emphasis />
         <Tile label="Invested" value={formatCurrency(live.invested)} />

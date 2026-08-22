@@ -1,7 +1,13 @@
 import { roundToPaise } from '@/lib/trading/charges'
-import type { LiveQuote } from '@/lib/stores/quote-store'
 
 import type { HoldingRow, PortfolioSummary } from './types'
+
+/**
+ * Symbol to price. Deliberately a map of primitives rather than of `LiveQuote`:
+ * the callers select it with `useShallow`, which only compares one level deep,
+ * so objects here would re-render on every animation frame and change nothing.
+ */
+export type PriceMap = Record<string, number | null>
 
 /**
  * The dashboard tiles, restated against the prices that have arrived since the
@@ -22,24 +28,29 @@ import type { HoldingRow, PortfolioSummary } from './types'
  * F21 corrected. The tiles jump when a tick lands. They do not slide.
  */
 
-/** The anchor for a symbol, or the server's own figure when it has not ticked. */
-function anchorFor(holding: HoldingRow, quotes: Record<string, LiveQuote>): number | null {
-  const quote = quotes[holding.symbol]
-  // `anchor`, deliberately. `quote.ltp` is mid-tween and synthetic.
-  if (quote && Number.isFinite(quote.anchor)) return quote.anchor
+/**
+ * The anchor for a symbol, or the server's own figure when it has not ticked.
+ *
+ * The caller passes anchors, never interpolated values — see this module's
+ * header. There is no `ltp` in scope here at all, which is the point.
+ */
+function anchorFor(holding: HoldingRow, anchors: PriceMap): number | null {
+  const anchor = anchors[holding.symbol]
+  if (anchor !== undefined && anchor !== null && Number.isFinite(anchor)) return anchor
   return holding.ltp
 }
 
-function prevCloseFor(holding: HoldingRow, quotes: Record<string, LiveQuote>): number | null {
-  const quote = quotes[holding.symbol]
-  if (quote && quote.prevClose !== null) return quote.prevClose
+function prevCloseFor(holding: HoldingRow, prevCloses: PriceMap): number | null {
+  const live = prevCloses[holding.symbol]
+  if (live !== undefined && live !== null) return live
   return holding.prevClose
 }
 
 export function recomputeSummary(
   summary: PortfolioSummary,
   holdings: HoldingRow[],
-  quotes: Record<string, LiveQuote>
+  anchors: PriceMap,
+  prevCloses: PriceMap = {}
 ): PortfolioSummary {
   let marketValue = 0
   let dayPnl = 0
@@ -47,7 +58,7 @@ export function recomputeSummary(
   let unpricedCount = 0
 
   for (const holding of holdings) {
-    const price = anchorFor(holding, quotes)
+    const price = anchorFor(holding, anchors)
 
     // No price is not a price of zero. The holding drops out of the valuation
     // and is counted instead, so the tiles can say what they could not value.
@@ -59,7 +70,7 @@ export function recomputeSummary(
     marketValue += holding.quantity * price
     pricedInvested += holding.quantity * holding.averagePrice
 
-    const prevClose = prevCloseFor(holding, quotes)
+    const prevClose = prevCloseFor(holding, prevCloses)
     if (prevClose !== null) dayPnl += holding.quantity * (price - prevClose)
   }
 
@@ -100,12 +111,12 @@ export const DONUT_SLICE_LIMIT = 10
  */
 export function toDonutSlices(
   holdings: HoldingRow[],
-  quotes: Record<string, LiveQuote> = {},
+  anchors: PriceMap = {},
   limit: number = DONUT_SLICE_LIMIT
 ): DonutSlice[] {
   const priced = holdings
     .map((holding) => {
-      const price = anchorFor(holding, quotes)
+      const price = anchorFor(holding, anchors)
       return price === null
         ? null
         : { name: holding.symbol, value: holding.quantity * price, isOthers: false }
