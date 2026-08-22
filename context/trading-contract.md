@@ -122,12 +122,13 @@ hold, so the reservation and the requirement at fill are the same figure.
 | Order | Reserved at placement | Held after fill |
 | ----- | --------------------- | --------------- |
 | CNC buy | `quantity × price + est. charges` | nothing — cash is spent |
-| MIS buy | `quantity × price + est. charges` | nothing — cash is spent |
+| MIS buy | `opening quantity × price + est. charges` — the quantity covering an open short is already collateralised | nothing — cash is spent |
 | CNC sell | nothing; requires `holdings.quantity >= quantity` | — |
 | MIS sell opening a short | `short_collateral(shorting excess, price) + est. charges` — the collateral formula below, evaluated at the reservation price | **moves to `positions.blocked_margin`** and is held until the short is covered |
 
 - For a limit order, "price" in the reservation is `limit_price`. For a market order it is the current `ltp`.
 - **A short reserves its collateral, not its notional**, because those are different numbers here. Collateral is 120% of notional plus closing charges, so reserving 100% would leave every short — not just a gap-up — short by roughly a fifth of the trade at fill. That would make the `MARGIN_RELEASE` in §7 a block, and would let a user place a maximum-size short that its own fill then rejects for want of funds. Reserving the collateral up front makes `delta` zero on a clean fill and leaves the gap-up as the genuine exception it is described as below.
+- **A buy that covers a short reserves only the quantity that opens or adds to a long.** Buying 10 against an open short of 4 covers 4 and opens a long of 6; the 4 being covered are funded by the collateral already held against them, and reserving fresh cash for them would demand the money twice. Without this rule a user who shorted most of their balance **cannot close their own position** — the reservation for the covering buy asks for cash the collateral is already holding, and the order is rejected `INSUFFICIENT_FUNDS`. Estimated charges are still reserved in full.
 - **A sell that crosses zero reserves only the shorting excess.** An MIS sell of 10 against an existing MIS long of 4 closes 4 and opens a short of 6; the closing 4 carry no obligation and need no collateral. The excess is `quantity − max(net_quantity, 0)`, and estimated charges are for the whole order. An MIS sell fully covered by a long reserves nothing, exactly like a CNC sell.
 - **`positions.blocked_margin` is what makes the collateral model representable.** A filled short still has an obligation, so its collateral moves from the order to the position rather than being released. It is recomputed on every change to the position and fully released when the position reaches zero quantity, by user exit or auto square-off.
 **One collateral formula, everywhere.** For any open short position:

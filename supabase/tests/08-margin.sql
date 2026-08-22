@@ -11,7 +11,7 @@
 -- collateral. Both are arithmetic errors that produce a plausible number, and
 -- neither would ever look wrong on screen.
 begin;
-select plan(57);
+select plan(60);
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -529,7 +529,66 @@ select lives_ok(
   'and that write is in fact accepted'
 );
 
--- ── I. Nothing here is reachable from a browser ─────────────────────────────
+-- ── I. A cover is funded by the collateral, not by fresh cash ───────────────
+--
+-- The regression F24 found. Bo shorts 800 at 100.00, which blocks nearly the
+-- whole balance as collateral and leaves very little cash:
+--
+--   short_collateral_requirement(800, 100.00): buffered 120.00
+--     notional 800 × 120.00 = 96000.00
+--     closing charges, MIS BUY 800 @ 120.00 — turnover 96000.00
+--       brokerage min(0.0003 × 96000, 20) = 28.80 → capped at 20.00
+--       exchange  0.0000307 × 96000 = 2.9472   → 2.95
+--       sebi      0.000001  × 96000 = 0.096    → 0.10
+--       stamp     0.00003   × 96000 = 2.88
+--       gst 0.18 × (20.00 + 2.9472 + 0.096) = 4.1478 → 4.15
+--       = 20.00 + 2.95 + 0.10 + 2.88 + 4.15 = 30.08
+--     collateral = 96000.00 + 30.08 = 96030.08
+--
+-- Covering all 800 at 100.00 costs 80000.00 — money the account plainly does
+-- not have in cash, and just as plainly does have in used_margin. Reserving
+-- against cash refuses the cover permanently, because nothing but the cover
+-- releases the collateral.
+
+delete from public.fund_ledger where user_id = '22222222-2222-2222-2222-222222222222' and type <> 'SIGNUP_CREDIT';
+delete from public.orders where user_id = '22222222-2222-2222-2222-222222222222';
+delete from public.positions where user_id = '22222222-2222-2222-2222-222222222222';
+update public.funds set available_cash = 100000.00, used_margin = 0
+ where user_id = '22222222-2222-2222-2222-222222222222';
+
+insert into public.positions
+  (user_id, symbol, product, net_quantity, average_price, entry_reference_price, blocked_margin)
+values ('22222222-2222-2222-2222-222222222222', 'RELIANCE', 'MIS', -800, 99.97, 100.00, 96030.08);
+
+update public.funds set available_cash = 3969.92, used_margin = 96030.08
+ where user_id = '22222222-2222-2222-2222-222222222222';
+
+select is(
+  (select public.reserve_margin(pg_temp.place(
+     '22222222-2222-2222-2222-222222222222'::uuid, 'BUY', 'MIS', 800, 100.00))),
+  true,
+  'a buy that fully covers an open short reserves successfully on 3969.92 of cash'
+);
+
+-- MIS BUY 800 @ 100.00 — turnover 80000.00
+--   brokerage min(24.00, 20) = 20.00, stt 0 (intraday buy)
+--   exchange 0.0000307 × 80000 = 2.456 → 2.46, sebi 0.08
+--   stamp 0.00003 × 80000 = 2.40
+--   gst 0.18 × (20.00 + 2.456 + 0.08) = 4.05648 → 4.06
+--   = 20.00 + 2.46 + 0.08 + 2.40 + 4.06 = 29.00
+select is(pg_temp.used('22222222-2222-2222-2222-222222222222'::uuid), 96059.08::numeric,
+  'and reserves the charges alone — 96030.08 + 29.00 — not 80000.00 of cash it does not have');
+
+update public.positions set net_quantity = -800 where user_id = '22222222-2222-2222-2222-222222222222';
+
+select is(
+  (select public.reserve_margin(pg_temp.place(
+     '22222222-2222-2222-2222-222222222222'::uuid, 'BUY', 'MIS', 1000, 100.00))),
+  false,
+  'a buy covering 800 and opening 200 more still needs cash for the 200, and 3940.92 does not cover 20000'
+);
+
+-- ── J. Nothing here is reachable from a browser ─────────────────────────────
 
 select is(
   (select bool_or(has_function_privilege(r.rolname, p.oid, 'execute'))
