@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/command'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { createClient } from '@/lib/supabase/client'
+import { dayChange } from '@/lib/market/change'
+import { useQuoteStore } from '@/lib/stores/quote-store'
 import { cn } from '@/lib/utils'
 import { searchUniverse } from '@/lib/watchlist/search'
 import type { UniverseEntry, WatchlistRow } from '@/lib/watchlist/schemas'
@@ -90,6 +92,119 @@ function useSymbolDemand(symbols: string[]): void {
       if (error) console.error('[watchlist.touchSymbolDemand]', error)
     })
   }, [key])
+}
+
+type RowProps = {
+  row: WatchlistRow
+  isFirst: boolean
+  isLast: boolean
+  pending: boolean
+  run: (action: () => Promise<{ ok: boolean; error?: { message: string } }>) => void
+}
+
+/**
+ * One watchlist row, and its own subscription to its own symbol.
+ *
+ * Extracted from the panel precisely so the selector is per-symbol: a row
+ * re-renders when *its* price moves and not when any other does. Selecting from
+ * inside the panel would re-render all ten rows on every tick, which is the
+ * re-render storm `library-docs.md` warns about.
+ *
+ * **`live ?? prop` is what avoids a hydration mismatch.** The store is empty
+ * during SSR and on the first client render — it is seeded in an effect — so
+ * both renders use the server's figures and the HTML matches exactly. This is
+ * the same lesson the F17 market-status pill taught with `serverNow`.
+ */
+function WatchlistRowItem({ row, isFirst, isLast, pending, run }: RowProps) {
+  const live = useQuoteStore((state) => state.quotes[row.symbol])
+
+  // The price on screen may be mid-tween and therefore synthetic. That is
+  // allowed here and nowhere that drives a decision: `architecture.md` lists
+  // the watchlist as an ambient surface, and every order and total reads the
+  // anchor instead.
+  const ltp = live?.ltp ?? row.ltp
+
+  // Recomputed rather than taken from the server row, so a ticking price never
+  // sits beside a change frozen at render time. Display only — the SQL view
+  // still owns the authoritative figure.
+  const computed = live ? dayChange(live.ltp, live.prevClose) : null
+  const change = computed?.change ?? row.change
+  const changePct = computed?.changePct ?? row.changePct
+
+  return (
+    <li className="group/row relative flex items-center gap-2 border-b border-hairline px-4 py-2 hover:bg-surface-elevated">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="truncate text-body-sm font-medium text-ink">{row.symbol}</span>
+          <span className="text-caption text-muted">{row.exchange}</span>
+        </div>
+        <span className={cn('block truncate text-caption', changeTone(change))}>
+          {formatChange(change, changePct)}
+        </span>
+      </div>
+
+      {/* Remounted whenever `flashKey` changes, which restarts the CSS
+          animation. `flashKey` only advances when an anchor genuinely moved, so
+          a tick that rewrites the same price does not flash. */}
+      <span
+        key={live?.flashKey ?? 0}
+        className={cn(
+          'shrink-0 rounded-xs px-1 font-numeric text-number-sm text-ink tabular-nums',
+          live?.direction === 'up' && 'tick-flash-up',
+          live?.direction === 'down' && 'tick-flash-down'
+        )}
+      >
+        {formatPrice(ltp)}
+      </span>
+
+      {/* Absolutely positioned, not a flex sibling. `opacity-0` hides these but
+          does not remove them from layout, so as a sibling the four buttons
+          permanently ate ~112px of a 256px row — enough to truncate the symbol
+          and wrap the change onto two lines while nothing was even hovered.
+          Overlaying frees that width back.
+
+          Revealed on hover but never hidden from the keyboard: `focus-within`
+          keeps them reachable by tabbing, which a plain `hidden
+          group-hover:flex` would not. */}
+      <div className="absolute inset-y-0 right-2 flex items-center gap-0 rounded-sm bg-surface-elevated opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          disabled={isFirst || pending}
+          aria-label={`Move ${row.symbol} up`}
+          onClick={() => run(() => reorderWatchlist({ symbol: row.symbol, direction: 'up' }))}
+        >
+          <ChevronUp aria-hidden="true" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          disabled={isLast || pending}
+          aria-label={`Move ${row.symbol} down`}
+          onClick={() => run(() => reorderWatchlist({ symbol: row.symbol, direction: 'down' }))}
+        >
+          <ChevronDown aria-hidden="true" />
+        </Button>
+        {/* Buy and sell are deliberately absent until F25 gives them a
+            destination. The chart link resolves because F17 stubbed the
+            instrument page. */}
+        <Button variant="ghost" size="icon-sm" asChild>
+          <Link href={`/stocks/${row.symbol}`} aria-label={`Open ${row.symbol}`}>
+            <LineChart aria-hidden="true" />
+          </Link>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          disabled={pending}
+          aria-label={`Remove ${row.symbol} from your watchlist`}
+          onClick={() => run(() => removeFromWatchlist({ symbol: row.symbol }))}
+        >
+          <X aria-hidden="true" />
+        </Button>
+      </div>
+    </li>
+  )
 }
 
 function WatchlistPanel({ rows, universe }: PanelProps) {
@@ -170,75 +285,14 @@ function WatchlistPanel({ rows, universe }: PanelProps) {
       ) : (
         <ul className={cn('flex-1 overflow-y-auto', pending && 'opacity-60')}>
           {rows.map((row, index) => (
-            <li
+            <WatchlistRowItem
               key={row.symbol}
-              className="group/row relative flex items-center gap-2 border-b border-hairline px-4 py-2 hover:bg-surface-elevated"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="truncate text-body-sm font-medium text-ink">{row.symbol}</span>
-                  <span className="text-caption text-muted">{row.exchange}</span>
-                </div>
-                <span className={cn('block truncate text-caption', changeTone(row.change))}>
-                  {formatChange(row.change, row.changePct)}
-                </span>
-              </div>
-
-              <span className="shrink-0 font-numeric text-number-sm text-ink tabular-nums">
-                {formatPrice(row.ltp)}
-              </span>
-
-              {/* Absolutely positioned, not a flex sibling. `opacity-0` hides
-                  these but does not remove them from layout, so as a sibling the
-                  four buttons permanently ate ~112px of a 256px row — enough to
-                  truncate the symbol and wrap the change onto two lines while
-                  nothing was even hovered. Overlaying frees that width back.
-
-                  Revealed on hover but never hidden from the keyboard:
-                  `focus-within` keeps them reachable by tabbing, which a plain
-                  `hidden group-hover:flex` would not. */}
-              <div className="absolute inset-y-0 right-2 flex items-center gap-0 rounded-sm bg-surface-elevated opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={index === 0 || pending}
-                  aria-label={`Move ${row.symbol} up`}
-                  onClick={() =>
-                    run(() => reorderWatchlist({ symbol: row.symbol, direction: 'up' }))
-                  }
-                >
-                  <ChevronUp aria-hidden="true" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={index === rows.length - 1 || pending}
-                  aria-label={`Move ${row.symbol} down`}
-                  onClick={() =>
-                    run(() => reorderWatchlist({ symbol: row.symbol, direction: 'down' }))
-                  }
-                >
-                  <ChevronDown aria-hidden="true" />
-                </Button>
-                {/* Buy and sell are deliberately absent until F25 gives them a
-                    destination. The chart link resolves because F17 stubbed the
-                    instrument page. */}
-                <Button variant="ghost" size="icon-sm" asChild>
-                  <Link href={`/stocks/${row.symbol}`} aria-label={`Open ${row.symbol}`}>
-                    <LineChart aria-hidden="true" />
-                  </Link>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={pending}
-                  aria-label={`Remove ${row.symbol} from your watchlist`}
-                  onClick={() => run(() => removeFromWatchlist({ symbol: row.symbol }))}
-                >
-                  <X aria-hidden="true" />
-                </Button>
-              </div>
-            </li>
+              row={row}
+              isFirst={index === 0}
+              isLast={index === rows.length - 1}
+              pending={pending}
+              run={run}
+            />
           ))}
         </ul>
       )}

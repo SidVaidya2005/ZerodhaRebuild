@@ -39,6 +39,15 @@ export type WatchlistRow = {
   ltp: number | null
   change: number | null
   changePct: number | null
+  /**
+   * Carried for F19's store, which seeds its anchors from the server render and
+   * recomputes the change as the price ticks. `provider` and `providerTs` are
+   * the inputs `deriveSource()` needs — freshness is never stored, so F20 will
+   * derive the badge from these on render.
+   */
+  prevClose: number | null
+  provider: 'YAHOO' | 'TWELVE_DATA' | 'SIMULATOR' | null
+  providerTs: string | null
 }
 
 /** One instrument in the search palette. */

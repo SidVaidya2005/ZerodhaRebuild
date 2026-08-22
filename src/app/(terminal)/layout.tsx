@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
 
 import { TopNav } from '@/components/terminal/TopNav'
+import { QuoteChannel } from '@/components/terminal/QuoteChannel'
 import { WatchlistRail } from '@/components/terminal/WatchlistSidebar'
 import { LOGIN_PATH } from '@/lib/auth/routes'
 import { loadHolidays } from '@/lib/market/market-hours'
@@ -42,7 +43,9 @@ export default async function TerminalLayout({ children }: { children: ReactNode
       // security_invoker, which is what the pgTAP suite falsifies.
       supabase
         .from('watchlist_rows')
-        .select('symbol, name, exchange, sort_order, ltp, change, change_pct')
+        .select(
+          'symbol, name, exchange, sort_order, ltp, prev_close, change, change_pct, provider, provider_ts'
+        )
         .order('sort_order'),
       // The whole tradable universe, ~200 rows, for the search palette. Loaded
       // here rather than queried per keystroke: Postgres seq-scans a table this
@@ -75,6 +78,9 @@ export default async function TerminalLayout({ children }: { children: ReactNode
     ltp: row.ltp === null ? null : Number(row.ltp),
     change: row.change === null ? null : Number(row.change),
     changePct: row.change_pct === null ? null : Number(row.change_pct),
+    prevClose: row.prev_close === null ? null : Number(row.prev_close),
+    provider: row.provider,
+    providerTs: row.provider_ts,
   }))
 
   const instruments: UniverseEntry[] = (universe ?? []).map((row) => ({
@@ -95,6 +101,20 @@ export default async function TerminalLayout({ children }: { children: ReactNode
         watchlist={rows}
         universe={instruments}
       />
+      {/* One channel and one animation loop for the whole terminal, mounted
+          here so they survive navigation between pages rather than being torn
+          down and rebuilt by each one. Renders nothing. */}
+      <QuoteChannel
+        symbols={rows.map((row) => row.symbol)}
+        seed={rows.map((row) => ({
+          symbol: row.symbol,
+          ltp: row.ltp,
+          prevClose: row.prevClose,
+          provider: row.provider,
+          providerTs: row.providerTs,
+        }))}
+      />
+
       <div className="flex flex-1">
         <WatchlistRail rows={rows} universe={instruments} />
         <main className="min-w-0 flex-1">{children}</main>

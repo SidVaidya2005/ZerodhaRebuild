@@ -1,5 +1,46 @@
 import { clsx, type ClassValue } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import { extendTailwindMerge } from 'tailwind-merge'
+
+/**
+ * The project's own font-size scale, declared to tailwind-merge.
+ *
+ * **Without this, `cn()` silently deletes type sizes.** tailwind-merge resolves
+ * conflicts by class group, and it cannot tell `text-number-sm` (a size from
+ * `--text-number-sm`) from `text-ink` (a colour) — both are `text-*`, so it
+ * treats them as the same group and the later one wins. `cn('text-number-sm',
+ * 'text-ink')` returned just `text-ink`, and the watchlist price rendered at the
+ * inherited size with nothing in the markup to explain why.
+ *
+ * Nothing errors and nothing warns; the class is simply absent from the output.
+ * It only surfaced because a browser check read a className back and found a
+ * class that was written in the source missing from the DOM.
+ *
+ * Keep in step with the `--text-*` tokens in `globals.css`. A size added there
+ * and not here starts disappearing the moment it meets a colour in one `cn()`.
+ */
+const FONT_SIZES = [
+  'hero',
+  'display-lg',
+  'display',
+  'display-sm',
+  'title-lg',
+  'title',
+  'title-sm',
+  'body',
+  'body-sm',
+  'caption',
+  'number-display',
+  'number',
+  'number-sm',
+] as const
+
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      'font-size': FONT_SIZES.map((size) => `text-${size}`),
+    },
+  },
+})
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs))

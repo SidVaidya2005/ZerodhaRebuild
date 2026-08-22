@@ -29,6 +29,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Build plan sequencing
 
+- **The market-status pill is F17's, and it recomputes on a timer.** F20 turns out to be only the data-source badge — its UI and Logic bullets never mention market status despite its title. Server-rendering the pill once would leave a tab open past 15:30 still reading OPEN, so the server passes the holiday set as a `string[]` and a client component calls the same pure `marketStatusAt` the tick gates on. (F17)
+
+- **The index strip ships as a slot with no values, and index data moves to F21.** NIFTY 50, SENSEX and BANK NIFTY exist nowhere in the data — `instruments` holds 200 NSE equities, so there is no row, no quote and no simulator anchor for any of them, and SENSEX is BSE against an NSE-only scope. Three fabricated numbers in the most prominent chrome on the page is the worst place in the app to invent data. `project-overview.md` already puts an index strip on the Dashboard, so F21 gets it. (F17)
+
 - **The candle prune moves from F16 to F33.** Candles left F15, so retention logic here would run against a table nothing populates and its assertion would pass whether or not the rules were right. F33 builds the pipeline and its retention together. (F16)
 
 - **Candles move out of F15 to F33.** No source covers the 1D and 1W intraday ranges — bhavcopy gives one daily bar, Yahoo's chart endpoint is deferred — and F33 is the first feature that draws a chart. Designing a chart pipeline four features before anything renders one is the thing being avoided. (F15)
@@ -67,6 +71,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **Dependencies are pinned exactly, with no caret ranges.** Every version in `architecture.md` was verified to equal the current registry `latest`, so the table, the lockfile and `package.json` all agree and can only diverge by a deliberate edit. (F01)
 
 ## Auth
+
+- **The `(terminal)` layout checks the session once and pages trust it.** `dashboard/page.tsx` re-checked it itself on the argument that the proxy is only a convenience; with a layout that argument buys nothing, because every page beneath reads through RLS-scoped queries that return nothing without a session. One `getUser()` per navigation instead of one per page, and no future page can forget to check. (F17)
 
 - **No backfill: the orphan account is deleted and re-created.** `auth.users` held one row with no profile, created while verifying F12, and a trigger on `auth.users` fires only on insert. Deleting it keeps signup as the only path that ever creates an account — worth more than sparing the test account. (F13)
 
@@ -168,6 +174,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Theming and design tokens
 
+- **`cn()` silently deletes a custom type size when it meets a colour.** tailwind-merge groups by class prefix and cannot tell `text-number-sm` (a size) from `text-ink` (a colour) — it keeps the later one and drops the other, with no error and no warning. `src/lib/utils.ts` declares the project's `--text-*` scale to `extendTailwindMerge` to fix this; **a size added to `globals.css` and not to that list starts disappearing** the moment it shares a `cn()` with a colour. (F19)
+
 - **`profiles.theme` defaults to `'dark'`, and `architecture.md` was wrong.** It said `light` while `project-overview.md` specifies a dark-default terminal and `theme-provider.tsx` ships `defaultTheme="dark"`. CLAUDE.md's conflict order puts the scope document above `architecture.md`, so the doc is corrected rather than the code bent to it. (F10)
 
 - **Every text token clears WCAG AA against canvas, surface and surface-elevated in both themes, and `theme-tokens.test.ts` computes the ratios rather than trusting the eye.** The muted tones flip in `.light` and invert relative to dark, because on a light ground "more prominent" means darker. Changing any of these values without running `pnpm test` will go red. (fixed 1.00.01)
@@ -192,6 +200,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **`formatPercent` is fixed at 2dp and is wrong for statutory rates** — it renders 0.00307% as "0.00%". `formatRate` (up to 5dp, no trailing zeros) exists for those. The two have genuinely different jobs: day change wants 2dp, a charge rate wants its real precision. (F06)
 
 ## shadcn/ui
+
+- **The watchlist rail lives in the layout beside `<main>`; only the sheet trigger lives in the nav.** Exporting one component that rendered both shells put the 288px `aside` inside the header's 64px flex row, where it was clipped to the nav's height and pushed the brand, index strip and pill until they wrapped. `WatchlistRail` and `WatchlistSheet` are separate exports over one shared `WatchlistPanel`, so F18 fills the panel once and both breakpoints follow. (F17)
+
+- **The sidebar collapses via shadcn `Sheet`.** Already installed and unused, matches DESIGN.md's full-screen sheet under 768px, and F18 needs the sidebar to be a client component for search and reorder regardless. (F17)
 
 - **The shadcn CLI changed shape: `init -b radix -t next -p nova --css-variables -y`.** It now picks between Base UI, Radix and React Aria, and prompts for a style preset that `-y` does not skip. `shadcn` is also a *runtime* dependency shipping `shadcn/tailwind.css`. Resolves the standing TODO in `library-docs.md` → shadcn/ui. (F02)
 

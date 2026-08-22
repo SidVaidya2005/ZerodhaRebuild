@@ -972,28 +972,65 @@ mobile sheet rendering. One list per user: `watchlist_items` is flat, scoped by 
 
 ### 19 Realtime quote store and tick interpolation
 
-
-
-The feature that makes the terminal feel alive.
+The feature that makes the terminal feel alive. F18's rows are deliberately static; this is what
+moves them, with no reload and no polling.
 
 **UI:**
 
-- LTP cells flash green on an up-tick and red on a down-tick, then fade.
+- LTP cells flash green on an up-tick and red on a down-tick, then fade. The flash fires on a
+  **changed** anchor, not on every server write — a tick that rewrites the same price is not an
+  up-tick. Flash classes are written out literally, because interpolated Tailwind class names
+  generate no CSS.
 - Values move smoothly between server refreshes rather than jumping once a minute.
+- **The day change is recomputed on the client from the live price and `prevClose`**, so a ticking
+  price never sits beside a frozen change. Display-only and never persisted — `CLAUDE.md`'s money
+  rule forbids computing a figure in TypeScript *and storing it*, and `library-docs.md`'s `LiveQuote`
+  already carries `prevClose` for exactly this.
 
 **Logic:**
 
-- Zustand quote store per `library-docs.md`.
-- A single Supabase Realtime subscription on `quotes` mounted once in the terminal layout.
-- One `requestAnimationFrame` driver interpolating micro-ticks toward the last server price, bounded so it never drifts beyond a small band.
-- Channel cleanup on unmount.
+- Zustand quote store per `library-docs.md`, holding `anchor`, `ltp`, `prevClose`, `provider`,
+  `providerTs` and `direction`. **`source` is never stored** — `deriveSource()` runs on render,
+  because freshness changes with the clock and a stored value goes wrong with no state change.
+- A single Supabase Realtime subscription on `quotes` mounted once in the terminal layout, filtered
+  `symbol=in.(…)` **server-side** and rebuilt when the visible symbol set changes. Subscribing
+  broadly and filtering in the callback would have every row delivered to and authorised for every
+  subscriber, defeating the demand-driven model the quote pipeline is justified by.
+- One `requestAnimationFrame` driver, mounted once, **easing each price from its previous anchor to
+  its new one over ~800ms**. The loop moves prices *between* server anchors and invents nothing:
+  `architecture.md` → Interpolated values is authoritative here, and an earlier draft of this bullet
+  described bounded jitter around the anchor, which would have put figures on screen that no provider
+  reported and the market never traded at.
+- **The bound is an interval, not a band.** The displayed value always lies on the closed segment
+  between the previous and current anchor. That is strictly stronger than "within X% of the anchor"
+  and is directly testable without a DOM.
+- **Rows read `store ?? prop`, and the store is seeded from the server-rendered props in an effect.**
+  Server and first client render both use the prop, so the HTML matches exactly — the lesson F17's
+  `serverNow` pill taught. A symbol with no `quotes` row keeps its em dash rather than flashing into
+  existence.
+- Channel cleanup on unmount. An unremoved channel leaks across navigations and hits the free-tier
+  concurrent connection cap.
 
 **Verify:**
 
-- Updating a `quotes` row in SQL visibly moves the browser value within two seconds, with no reload.
-- React DevTools shows only the affected row re-rendering on a tick, not the whole sidebar.
-- Navigating between terminal pages ten times leaves exactly one open Realtime channel.
-- Interpolated values never diverge from the last server price by more than the configured band.
+- **A SQL `update` on one `quotes` row visibly moves the browser value within two seconds, with no
+  reload** — performed directly against the database, because nine of the ten seeded symbols have no
+  quote row yet and waiting on the tick would prove nothing.
+- **Only the affected row changes** — a `MutationObserver` over the list asserts mutations land in the
+  updated row's subtree and nowhere else. This checks the visible outcome rather than a React DevTools
+  render count, which cannot be read from an automated session.
+- Navigating between terminal pages ten times leaves exactly one open Realtime channel —
+  `supabase.getChannels().length`.
+- **Interpolated values never leave the anchor interval** — tier 1 over many elapsed values, including
+  a falling pair and an elapsed past the duration, asserting the result stays within
+  `[min(from, to), max(from, to)]`.
+- The flash fires on a change and not on every write — tier 1: the same price applied twice yields
+  `direction: 'flat'`.
+- Price and change agree — tier 1 on the recompute helper against a known anchor and `prevClose`.
+- **No decision surface reads an interpolated value** — confirmed by reading: only the watchlist reads
+  `ltp`, and `architecture.md` lists the surfaces that must read `anchor` instead.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm build` and `pnpm format:check`
+  all exit zero.
 
 ### 20 Data source badge and market status
 

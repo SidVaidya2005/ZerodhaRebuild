@@ -135,8 +135,8 @@ export const STACK: readonly StackEntry[] = [
   {
     layer: 'Client tick state',
     pkg: 'zustand',
-    version: null,
-    status: 'planned',
+    version: '5.0.15',
+    status: 'installed',
     purpose: 'In-memory live quote store and the tick interpolation loop.',
   },
   {

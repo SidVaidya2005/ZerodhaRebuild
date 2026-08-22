@@ -184,3 +184,47 @@
     line-height: 1.5;
   }
 }
+
+/* Tick flash — the green or red wash on a price cell when a new server anchor
+   differs from the previous one.
+
+   Written as two literal class names rather than generated from a direction
+   variable, because Tailwind scans source for complete strings and an
+   interpolated class name produces no CSS at all (F02). These are plain CSS for
+   the same reason: the animation is restarted by remounting the element with a
+   changing key, which needs a stable class, not a utility composed at runtime.
+
+   `prefers-reduced-motion` drops the animation and leaves the colour change
+   instantaneous, so the information survives without the movement. */
+@keyframes tick-flash-up {
+  from {
+    background-color: color-mix(in oklab, var(--color-up) 28%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+@keyframes tick-flash-down {
+  from {
+    background-color: color-mix(in oklab, var(--color-down) 28%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.tick-flash-up {
+  animation: tick-flash-up 700ms ease-out;
+}
+
+.tick-flash-down {
+  animation: tick-flash-down 700ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tick-flash-up,
+  .tick-flash-down {
+    animation-duration: 1ms;
+  }
+}
