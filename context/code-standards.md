@@ -292,7 +292,7 @@ Deno.serve(async (req) => {
 
 ## Testing
 
-Three tiers, because no single runner can prove what this project claims. **Match the claim to the tier
+Four tiers, because no single runner can prove what this project claims. **Match the claim to the tier
 that can actually falsify it** — a test in the wrong tier passes whether or not the bug exists.
 
 | Tier | Runner | Proves | Command |
@@ -300,11 +300,22 @@ that can actually falsify it** — a test in the wrong tier passes whether or no
 | 1 — logic | Vitest, no database | Charge estimates, `isTradingSession`, provider chain and circuit breaker, Zod parsers, tick interpolation | `pnpm test` |
 | 2 — database | pgTAP via `scripts/run-pgtap.mts` | RLS, grants, CHECK constraints, function return values, reconciliation identities | `pnpm test:db` |
 | 3 — concurrency | Vitest driving two `pg` connections | Row-lock contention, double-fill, cancel-while-filling, margin races | `pnpm test:race` |
+| 4 — parity | Vitest with one read-only `pg` connection | That a TypeScript calculator and its Postgres counterpart are the same calculator | `pnpm test:parity` |
 
-**Why three.** pgTAP runs inside a single session and a single transaction, so it structurally cannot
+**Why four.** pgTAP runs inside a single session and a single transaction, so it structurally cannot
 express two transactions racing for a lock — the exact scenario the status guard in `execute_order`
 exists for. Vitest alone cannot reach RLS or a CHECK constraint. Tier 3 exists solely for claims the
 other two cannot reach.
+
+**Tier 4 exists because a claim about *two* languages needs both running at once.** `trading-contract.md`
+§1 lets TypeScript show a labelled estimate and forbids it producing a stored value — which is only
+honest if the estimate the order ticket shows equals the amount actually charged. Proving that needs
+`estimateCharges` and `calculate_charges` in one process: tier 1 has no database, tier 2 cannot call
+TypeScript, and tier 3 is opt-in because it commits. **Tier 4 is read-only** — the functions it calls
+touch no table — so it needs no permission gate and runs inside a plain `pnpm test:all`. It does need
+`TEST_DATABASE_URL`, exactly as tier 2 does, and **fails rather than skips without it**: a skipped
+tier 3 is a deferred risk, but a skipped tier 4 means the only check comparing the two calculators
+silently did not run (F22).
 
 ### Environment
 

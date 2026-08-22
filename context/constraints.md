@@ -257,6 +257,12 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Live prices and interpolation
 
+- **Provenance is announced, not merely hoverable.** The facts render as `sr-only` text tied to the price by `aria-describedby` as well as in a HoverCard, because hover does not exist on touch and never fires for a screen reader — and the guarantee is that *no* price renders without accessible provenance. (F20, evicted from Key Decisions at F22)
+
+- **Only STALE prices are muted, not SIMULATED.** Every price in this build is simulated, so muting them all would render the whole terminal grey and the treatment would stop carrying information. The badge and the per-price disclosure carry that honesty instead, which is what `architecture.md` specifies. (F20, evicted from Key Decisions at F22)
+
+- **Realtime can subscribe successfully and deliver nothing, silently.** It authorises each subscriber against RLS by JWT, and `quotes` is readable by `authenticated` only; the cookie session loads asynchronously, so subscribing before the token exists opens a socket that reports `SUBSCRIBED` and never fires. Await `getSession()` and `realtime.setAuth(token)` before `.subscribe()`, and always pass a status callback so a channel cannot fail in silence. (F19)
+
 - **`touch_symbol_demand` fires twice while the mobile sheet is open.** `WatchlistPanel` is mounted by both `WatchlistRail` (always mounted, hidden at `md`) and `WatchlistSheet` (mounted on open), and each calls `useSymbolDemand`; both also render the full row list at once. Harmless — the RPC is idempotent — but it is a duplicated round trip and a duplicated subscription, and it is why the demand count moves in twos. Worth hoisting the hook when the responsive pass (F37) touches this. (F18, found at the Phase 3 checkpoint)
 
 - **Every surface that renders a price must pass provenance for the *server* row too, not only for the live one.** `PriceWithProvenance` renders an em dash whenever provenance is null — correctly, since a figure with nothing behind it must not be shown — so `provenance={live ? provenanceOf(live, now) : null}` renders every price as an em dash in the SSR HTML and on the first client render, beside a change column showing the server's own figure. Use `serverProvenance(row, now)` as the fallback. **Hydration hides this**: the screen looks right within a second, and only the `fetch()`ed HTML shows it. Applies to F30, F31 and F33, which all add price surfaces. (F20, found and fixed at the Phase 3 checkpoint)

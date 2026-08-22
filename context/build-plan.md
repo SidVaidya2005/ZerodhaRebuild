@@ -1185,24 +1185,88 @@ The terminal looks and feels like a real trading front end with live prices. Con
 
 ### 22 Charge calculator
 
+The Postgres side of the charge model, and the proof that it and the TypeScript estimator are the
+same calculator. **`src/lib/trading/charges.ts` already exists — feature 06 built it** so the pricing
+page could compute its worked example from real code rather than typed-in totals. This feature does
+not create the estimator and does not rewrite it: the TypeScript one stays **display-only**, per
+`trading-contract.md` §1.
 
+**Build the carried-over items first** (below). They pin the TypeScript side to hand-computed
+figures, and until that happens the Postgres side has nothing trustworthy to be equal *to* — building
+against a test that restates the implementation would only copy a possibly-wrong expression into a
+second language.
 
 **Logic:**
 
-- `calculate_charges(side, product, quantity, price)` in Postgres returning the total and the breakdown.
-- **`src/lib/trading/charges.ts` already exists — feature 06 built it** so the pricing page could compute its worked example from real code rather than typed-in totals. This feature adds the Postgres side and makes the two provably equal; it does not create the estimator. The TypeScript one stays **display-only**, per `trading-contract.md` §1.
-- Every rate is read from `constants.ts`, whose Postgres equivalent must carry the same figures and the same dated source (`trading-contract.md` §3).
+- **Re-verify the §3 rate table against <https://zerodha.com/charges/> before writing anything.** §3
+  requires a re-check at the start of each phase that touches money, and Phase 4 is that phase; the
+  exchange transaction rate has already moved once during this project. Any drift is reconciled in
+  `constants.ts`, §3 and the pricing page together, and §13's sweep runs if §3 changes.
+- `charge_rates()` — every rate as one composite row, `IMMUTABLE`, with the dated source in
+  `comment on function`. **One definition, not literals scattered through the calculator.** Postgres
+  inlines immutable SQL functions, so there is no per-call cost when F24 calls this inside
+  `execute_order` under a row lock, and the parity test can read the rates directly rather than only
+  inferring them from results.
+- `calculate_charges(side order_side, product product_type, quantity integer, price numeric)`
+  returning `(total numeric, breakdown jsonb)`. The composite is what F24 wants: `select … into` and
+  insert both columns, with `total` already `numeric` so nothing casts on the money path.
+  - Enums, not `text`. The type system already knows what a side and a product are.
+  - Breakdown keys are `brokerage`, `stt`, `exchange_txn`, `sebi_turnover`, `stamp_duty`,
+    `dp_charge`, `gst` — snake_case, **already pinned by the `trades_breakdown_has_all_components`
+    CHECK constraint**, so this is not a fresh choice.
+  - §2 exactly: GST on the **unrounded** sub-components rounded once, and the total as the sum of the
+    **already-rounded** components — never a rounding of the unrounded sum.
+- Both functions revoked from `public`, `anon` and `authenticated`. `code-standards.md` lists
+  `calculate_charges` as internal-only; it runs inside `execute_order`, never from a browser.
+
+**A fourth test tier, because none of the three can host this.** Proving the two calculators equal
+needs TypeScript *and* a database connection in one process: tier 1 has no database, tier 2 is
+SQL-only, and tier 3 is gated behind `ALLOW_RACE_TESTS` because it commits. `calculate_charges`
+writes nothing, so it needs no commit gate — `pnpm test:parity` runs read-only over one `pg`
+connection and joins `test:all`. Putting it in tier 3 would leave this feature's headline test
+skipped inside a green `test:all`.
 
 **Verify:**
 
-- Unit tests reproduce a published Zerodha brokerage-calculator example for a delivery buy, a delivery sell, an intraday buy, and an intraday sell, each within one paisa.
-- A test asserts the TypeScript estimate and the Postgres result agree for 100 random inputs — including the two rules that are easy to get different on each side: GST is computed on **unrounded** sub-components and rounded once (§2), and `dp_base` is ₹13.00 with its GST inside the single `gst` key (§3).
-- Delivery brokerage is exactly zero; intraday brokerage is capped at ₹20.
+- **The four worked examples match to the paisa** — a delivery buy, a delivery sell, an intraday buy
+  and an intraday sell, in `07-charges.sql`, each expected figure computed by hand in a comment above
+  its assertion. **If Zerodha's published calculator cannot be reached, these are hand-computed from
+  the §3 table and labelled as such** — that proves internal consistency, not external agreement, and
+  which one shipped is recorded rather than blurred.
+- **TypeScript and Postgres agree exactly over ≥100 random inputs** — `pnpm test:parity`, asserting
+  all seven keys *and* the total, seed printed so a failure reproduces. Exact equality, not "within a
+  paisa": measured before committing to it, across 600k random component comparisons and 6,000
+  constructed exact half-paisa midpoints, the epsilon-nudged `roundToPaise` never diverged from exact
+  decimal half-up. Covers all four side/product combinations and straddles the ₹20 brokerage cap.
+- **The parity test can fail** — perturb one rate in `charge_rates()` only, watch `test:parity` go
+  red, revert. A parity test never seen failing proves nothing, which is the lesson Phase 1 recorded
+  and Phase 3 had to relearn.
+- **GST is computed on unrounded sub-components** — a case where rounding first and multiplying after
+  differs by a paisa, asserted on both sides.
+- **`dp_base` is ₹13.00 with its GST inside the single `gst` key** — a CNC sell where `dp_charge` is
+  `13.00` and `gst` carries the ₹2.34, asserted in pgTAP. Treating ₹15.34 as the base over-charges
+  every delivery sell, which an earlier draft of §3 did.
+- Delivery brokerage is exactly zero; intraday brokerage is capped at ₹20 — asserted at the cap
+  boundary and above it, on both sides.
+- **Neither function is callable by a client role** — `throws_ok(…, '42501')` for `anon` and
+  `authenticated`, which is a different failure from a policy filtering rows and must be asserted as
+  such.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and
+  `pnpm format:check` all exit zero.
 
-**Carried over from the Phase 1 checkpoint**, both in `src/lib/trading/charges.test.ts` and `constants.ts`:
+**Carried over from the Phase 1 checkpoint**, both in `src/lib/trading/charges.test.ts` and
+`constants.ts`, and both **falsified by changing a constant and watching them fail** rather than
+merely passing:
 
-- The §2 reconciliation case recomputes `roundToPaise(Object.values(breakdown).reduce(…))` — character-for-character the expression `charges.ts` uses to produce `total`. It does still catch a switch to rounding the *unrounded* sum, so it is not inert, but it proves the property by restating the implementation rather than by independent expectation. Pin it to figures computed by hand, so the Postgres side this feature adds has something to be equal *to*.
-- `DP_CHARGE_INCLUSIVE` is a hand-entered `15.34` with nothing tying it to `DP_CHARGE_BASE * (1 + GST_RATE)`. The file's own comment warns these rates move by circular; change the base and `/pricing` keeps showing ₹15.34 while the worked example updates, with the suite green. Assert the derivation.
+- The §2 reconciliation case recomputes `roundToPaise(Object.values(breakdown).reduce(…))` —
+  character-for-character the expression `charges.ts` uses to produce `total`. It does still catch a
+  switch to rounding the *unrounded* sum, so it is not inert, but it proves the property by
+  restating the implementation rather than by independent expectation. Pin it to figures computed by
+  hand, so the Postgres side this feature adds has something to be equal *to*.
+- `DP_CHARGE_INCLUSIVE` is a hand-entered `15.34` with nothing tying it to
+  `DP_CHARGE_BASE * (1 + GST_RATE)`. The file's own comment warns these rates move by circular;
+  change the base and `/pricing` keeps showing ₹15.34 while the worked example updates, with the
+  suite green. Assert the derivation.
 
 ### 23 Margin reservation and release
 

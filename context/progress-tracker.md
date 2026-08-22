@@ -16,10 +16,10 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Current Status
 
-**Phase:** Phase 3 — Terminal Shell & Live Prices, closed at the checkpoint (Phase 2 remains open on F16 and its own checkpoint, both blocked on a live session)
-**Last completed:** Phase 3 checkpoint — full gate green (lint, typecheck, 250 tier-1 tests, 11 pgTAP files, build, format). The phase review found five real defects and one false guarantee; all six are fixed in `3.00.01`, and the two it found that this checkpoint chose not to fix are filed in `constraints.md`
+**Phase:** Phase 4 — Trading Engine (Phase 2 remains open on F16 and its own checkpoint, both blocked on a live session)
+**Last completed:** 22 Charge calculator — `charge_rates()` and `calculate_charges()` in Postgres, proven byte-equal to F06's TypeScript estimator over 132 inputs by a new read-only **tier 4** (`pnpm test:parity`), falsified by perturbing a rate. Both Phase 1 carried-over items closed and falsified. §3's rates re-verified against zerodha.com/charges, all unchanged
 **In progress:** nothing
-**Next:** 22 Charge calculator — the Postgres side of the charge model, made provably equal to the TypeScript estimator F06 already built. `trading-contract.md` §2 and §3 are authoritative, and F22 carries two items from the Phase 1 checkpoint: pin the reconciliation case to hand-computed figures rather than restating the implementation, and assert `DP_CHARGE_INCLUSIVE` derives from `DP_CHARGE_BASE`
+**Next:** 23 Margin reservation and release — `reserve_margin`, `release_margin` and `transfer_margin_to_position` per `trading-contract.md` §6, including the six-step top-up path and the rule that a collateral move writes **no** ledger row because no cash changes. All three internal-only. The reconciliation identities in §12 are what the tests assert
 
 **Not verified at this checkpoint, and deliberately so:** the build-plan's own Phase 3 criterion is that "ticking works unattended for a full market session". Today is Saturday 2026-08-22 — the market is closed and `pg_cron`'s window is weekdays only, so no unattended session can be observed. The Realtime half *was* verified: a production build, ten client-side navigations across all six terminal pages, exactly one `SUBSCRIBED` and no channel churn, then a live `UPDATE` reaching the browser. The unattended-session half rides along with F16's pending items on Monday
 
@@ -70,7 +70,7 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 
 ### Phase 4 — Trading Engine
 
-- [ ] 22 Charge calculator
+- [x] 22 Charge calculator
 - [ ] 23 Margin reservation and release
 - [ ] 24 Order execution function
 - [ ] 25 Order ticket UI
@@ -103,6 +103,12 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 
 ## Key Decisions
 
+- **The charge parity test gets a fourth, read-only test tier.** Proving the TypeScript estimator and the Postgres calculator equal needs both in one process, and none of the three tiers can host it: tier 1 has no database, tier 2 is SQL-only, and tier 3 is gated behind `ALLOW_RACE_TESTS` because it commits. `calculate_charges` writes nothing, so `pnpm test:parity` runs read-only and joins `test:all` — putting it in tier 3 would leave the feature's headline test skipped inside a green run. (F22)
+
+- **Postgres holds the charge rates in one `IMMUTABLE` `charge_rates()` composite, not in literals or a table.** Postgres inlines immutable SQL functions, so there is no per-call cost when F24 calls the calculator inside `execute_order` under a row lock, and the parity test can read the rates directly rather than only inferring them from results. A table would have made the function `STABLE` and put a lookup inside the locked transaction. (F22)
+
+- **`calculate_charges` returns `(total numeric, breakdown jsonb)`.** F24 does `select … into` and inserts both `trades.charges` and `trades.charge_breakdown` with no cast on the money path. The jsonb keys are snake_case and were already pinned by the `trades_breakdown_has_all_components` CHECK constraint, so they were never this feature's choice to make. (F22)
+
 - **The index strip is a derived composite over our own priced universe, never a named index.** NIFTY 50 and BANK NIFTY have no row, quote or simulator anchor anywhere and Yahoo is deferred to the end of the project, so the strip reports an equal-weighted mean of per-symbol day change % with its **constituent count on screen** — a breadth statistic, labelled as one. Simulating an index level instead would have invented data in the most prominent chrome on the page. (F21)
 
 - **Dashboard money tiles jump on the anchor and never tween.** `architecture.md` contradicted itself: line 517 listed the dashboard summary tiles as an ambient surface that may interpolate, while the invariant says every monetary total renders the server anchor. The invariant wins and line 517 is corrected in the same change — the index strip stays ambient. Tiles still recompute from anchors so they do not sit frozen beside a ticking watchlist, display-only exactly as F19's `dayChange`. (F21)
@@ -116,9 +122,3 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 - **One ticking clock provided from the terminal layout, so the badge and every price read the same instant.** Otherwise a row can render DELAYED under a badge saying STALE — a contradiction the visitor can see. **F17's pill keeps its own timer**, because it deliberately lands *on* the session boundary rather than up to a heartbeat late. (F20)
 
 - **Only symbols currently rendering a price feed the data-source badge.** `worstSource([])` returns STALE by design, so counting the symbols with no quote row would pin the badge to STALE on account of absent data and say nothing about the prices actually visible. A row showing an em dash makes no claim and cannot be dishonest. (F20)
-
-- **Provenance is announced, not merely hoverable.** The facts render as `sr-only` text tied to the price by `aria-describedby` as well as in a HoverCard, because hover does not exist on touch and never fires for a screen reader — and the guarantee is that *no* price renders without accessible provenance. (F20)
-
-- **Only STALE prices are muted, not SIMULATED.** Every price in this build is simulated, so muting them all would render the whole terminal grey and the treatment would stop carrying information. The badge and the per-price disclosure carry that honesty instead, which is what `architecture.md` specifies. (F20)
-
-- **Realtime can subscribe successfully and deliver nothing, silently.** It authorises each subscriber against RLS by JWT, and `quotes` is readable by `authenticated` only; the cookie session loads asynchronously, so subscribing before the token exists opens a socket that reports `SUBSCRIBED` and never fires. Await `getSession()` and `realtime.setAuth(token)` before `.subscribe()`, and always pass a status callback so a channel cannot fail in silence. (F19)

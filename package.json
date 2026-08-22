@@ -11,12 +11,13 @@
     "test": "vitest run",
     "test:db": "node scripts/run-pgtap.mts",
     "test:race": "node scripts/run-race.mts",
-    "test:all": "pnpm test && pnpm test:db && pnpm test:race",
+    "test:all": "pnpm test && pnpm test:db && pnpm test:parity && pnpm test:race",
     "fetch:reference": "node scripts/fetch-reference-data.mts",
     "seed": "node scripts/seed-reference.mts",
     "audit:a11y": "a11y() { CHROME_PATH=\"${CHROME_PATH:-/Applications/Brave Browser.app/Contents/MacOS/Brave Browser}\" lighthouse \"http://localhost:3000${1:-/}\" --only-categories=accessibility --chrome-flags=--headless=new --quiet --output=json --output-path=stdout; }; a11y",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:parity": "node scripts/run-parity.mts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",

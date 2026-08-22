@@ -58,7 +58,8 @@ The `context/` folder is the source of truth for this project. **Read it before 
 - `pnpm test` — tier 1: Vitest logic tests, no database
 - `pnpm test:db` — tier 2: pgTAP suites in `supabase/tests/`, run by `scripts/run-pgtap.mts`. **Not** `supabase test db`, which needs Docker even against a remote database (F09)
 - `pnpm test:race` — tier 3: two-connection concurrency tests. **Commits to the real database**; needs `ALLOW_RACE_TESTS` set
-- `pnpm test:all` — all three tiers
+- `pnpm test:parity` — tier 4: proves the TypeScript charge estimator and the Postgres calculator agree exactly. Read-only, so it is not gated — but it needs `TEST_DATABASE_URL` and **fails rather than skips** without it
+- `pnpm test:all` — all four tiers
 - `pnpm supabase db push` — apply migrations to the linked project
 - `pnpm supabase gen types typescript --linked > src/types/database.ts` — regenerate DB types (run after every migration)
 - `pnpm supabase functions deploy market-tick` — deploy the scheduled job
