@@ -322,6 +322,14 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Charges and the trading contract
 
+- **A fill crossing zero apportions its charges pro-rata by quantity**, closing share rounded and the remainder to the opening leg so the two always sum to `trades.charges`. §8 never covered the case; rejecting it would make F23's shorting-excess reservation and flip-to-long path unreachable. (F24, evicted from Key Decisions at F25)
+
+- **A short reserves its collateral up front, not its notional.** `trading-contract.md` §6 reserved 100% of notional while collateral at fill is 120% plus closing charges, so delta was positive by a fifth of the trade on *every* short — which made §7's short-entry `MARGIN_RELEASE` row a block, falsified §6's own claim that the top-up is the gap-up case, and let a user place a maximum-size short that its own fill then rejected. A short-opening MIS sell now reserves the §6 formula evaluated at the reservation price; buys are unchanged. (F23)
+
+- **`transfer_margin_to_position` runs *before* F24 writes the trade and the position**, taking `(p_order_id, p_fill_price, p_actual_charges)` and returning `(ok, required_collateral, entry_reference_price)`. On a shortfall it releases the whole reservation itself and returns `ok = false`, so nothing needs unwinding — the alternative was a raised exception and a plpgsql subtransaction rollback. It also computes the gross `entry_reference_price`, making the collateral module the only writer of that concept and §12.11 structural. (F23)
+
+- **A fourth function, `recompute_position_collateral`, owns the release side.** Transfer is the block path, recompute is the release path, and both call one `IMMUTABLE` `short_collateral_requirement` — which is what makes §6's "one collateral formula, everywhere" true structurally rather than by care. Without it F23's partial-cover tests would assert against code that does not exist until F24. (F23)
+
 - **An MIS sell crossing zero reserves on the shorting excess only** — `quantity − max(net_quantity, 0)`, with estimated charges for the whole order. The quantity that closes an existing long carries no obligation. The contract covered neither this case nor `delta` on a fill that *adds* to a short, whose §6 step 2 formula double-blocked; both are amended. (F23)
 
 - **A short entry writes three ledger rows, not two.** §6 steps 4 and 6 beat §7's summary table: `MARGIN_RELEASE +|delta|`, `MARGIN_RELEASE +actual_charges`, `CHARGES −actual_charges`. Same net cash, but the paired charge rows make "estimated charges are never paid twice" auditable in the ledger rather than netted away inside the function. (F23)

@@ -1516,26 +1516,81 @@ the two concurrency cases, tier 4 for the two primitives.
 
 ### 25 Order ticket UI
 
+The first Phase 4 feature with a screen. The engine is complete and proven in SQL, so this feature
+adds no money arithmetic that reaches the database — it shows a **labelled estimate** of what the
+engine will do, per `trading-contract.md` §1, and hands the values to a caller.
 
+**The seam with F26 is the `onSubmit` prop.** This feature ships the dialog, the schema, the
+estimates and the in-flight guard, calling an injected handler that returns `ActionResult`; F26
+supplies the real `placeOrder` action and the toasts. That keeps the whole ticket tier-1 testable
+with no database, and the double-submit guard is a UI concern that belongs here either way.
 
 **UI:**
 
-- Modal dialog with the system's trading buttons: `--color-up` for buy, `--color-down` for sell, `--radius-sm`, tight padding. The final confirm action is the brand CTA (`bg-brand text-on-brand`).
-- Quantity, product toggle (CNC/MIS), order type toggle (MARKET/LIMIT), limit price shown only for limit orders.
-- Live margin required, available cash, and the estimated charge breakdown, all updating as inputs change.
+- Modal dialog with the system's trading buttons: `--color-up` for buy, `--color-down` for sell,
+  `--radius-sm`, tight padding. The final confirm action is the brand CTA (`bg-brand text-on-brand`)
+  — `DESIGN.md` reserves the trading colours for explicit price-direction meaning, so they mark the
+  **side selector** and nothing else.
+- Quantity, product toggle (CNC/MIS), order type toggle (MARKET/LIMIT), limit price shown only for
+  limit orders.
+- Live margin required, available cash, and the estimated charge breakdown, all updating as inputs
+  change **and as the price ticks** — a MARKET order estimates against the live `ltp` from F19's
+  store, so the panel moves with the price it will fill at.
 - Inline validation errors and a disabled submit while in flight.
+- **Mounted once, in the terminal layout**, beside `<QuoteChannel/>`. A `useOrderTicket` store holds
+  `{ open, symbol, side }` and any call site imports `openTicket({ symbol, side })` — a button, not a
+  dialog. This is not premature: F18's panel renders **twice** (the `md` rail and the mobile sheet),
+  so a per-row dialog would mount two copies of the same form for the same symbol, and F31's
+  exit-position button then costs three lines.
+- F25 wires one call site: the watchlist rows' B/S buttons, in the existing `focus-within` hover
+  cluster so they are never keyboard-hidden.
 
 **Logic:**
 
-- `react-hook-form` with `zodResolver(placeOrderSchema)`.
+- `react-hook-form` with `zodResolver(placeOrderSchema)`. `architecture.md`'s stack table already
+  pins 7.85.0 / 5.9.1 for this feature and records that the ticket therefore **requires JavaScript** —
+  which is exactly why the support form deliberately does not use this stack.
+- `placeOrderSchema` in `src/lib/trading/schemas.ts`, shared with F26's action so the client and the
+  server validate the same shape.
 - Charge estimate from `src/lib/trading/charges.ts`, labelled as an estimate.
+- **`src/lib/trading/margin.ts` — the TypeScript half of §6's reservation rules**, and the reason
+  this feature has a parity test. Margin required is what `reserve_margin` will actually block: for a
+  buy, `opening quantity × price + charges`; for an MIS sell,
+  `short_collateral_requirement(shorting excess, price) + charges`. A figure that ignores the
+  existing position tells a user covering a 100-share short that they need ₹10,029 when the engine
+  reserves ₹29.
+- **The position is fetched on open**, one RLS-scoped select against `holdings` and `positions` for
+  that symbol. Fresh by construction, one round trip per dialog open rather than per keystroke, and
+  nothing extra loads on pages where the ticket is never opened. The margin panel shows a skeleton
+  while it resolves.
 
 **Verify:**
 
-- Selecting LIMIT reveals the price field; submitting without it shows a field error.
-- Quantity zero or negative is rejected client-side.
-- The displayed margin required matches the engine's computed cost within one paisa for ten sample orders.
-- Double-clicking submit places exactly one order.
+- Test: selecting LIMIT reveals the price field, and MARKET hides it.
+- Test: submitting a LIMIT order without a price shows a field error and does **not** call `onSubmit`.
+- Test: zero, negative and fractional quantities are rejected client-side — asserted over the schema
+  and through the rendered form, because the two can disagree.
+- Test: **double-clicking submit calls the handler exactly once** — two synchronous clicks against a
+  pending promise.
+- **`pnpm test:parity`: the margin shown is the margin the engine reserves, exactly.** Ten hand-picked
+  cases plus seeded-random ones, across buy, short entry, full cover, partial cover and a fill that
+  crosses zero, compared against `short_collateral_requirement` + `calculate_charges`. **Exact
+  equality, not "within one paisa"** — that is the bar the charge estimator already meets, and a
+  looser one here would hide precisely the drift the test exists to catch. Falsified by perturbing
+  `SHORT_MARGIN_BUFFER` in TypeScript only.
+- Test: a cover shows charges-only margin — short of 100 open, covering 100 @ ₹100 shows ₹29.00, not
+  ₹10,029.00.
+- Test: the panel ticks with the price for a MARKET order — seed the quote store, move the anchor,
+  assert the margin figure changes.
+- Read: every money figure in the ticket is labelled an estimate. §1 forbids an unlabelled TypeScript
+  money figure anywhere.
+- Browser: the ticket opens from the watchlist at both breakpoints, and the rail and the sheet open
+  **one** dialog rather than two.
+- Browser: focus moves into the dialog on open and returns to the trigger on close.
+- Read: `--color-up`/`--color-down` appear on the side selector only; the confirm action is
+  `bg-brand text-on-brand`.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and
+  `pnpm format:check` all exit zero.
 
 ### 26 Place order end to end
 

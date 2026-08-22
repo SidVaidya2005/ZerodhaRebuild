@@ -142,9 +142,11 @@ export const STACK: readonly StackEntry[] = [
   {
     layer: 'Forms',
     pkg: 'react-hook-form',
-    version: null,
-    status: 'planned',
-    purpose: 'Order ticket and support form.',
+    version: '7.85.0',
+    status: 'installed',
+    // Not the support form: that uses React 19's form action and
+    // `useActionState`, so it submits and validates without JavaScript (F07B).
+    purpose: 'The order ticket.',
   },
   {
     layer: 'Portfolio charts',
