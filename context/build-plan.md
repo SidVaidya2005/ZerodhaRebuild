@@ -1604,18 +1604,82 @@ with no database, and the double-submit guard is a UI concern that belongs here 
 
 ### 26 Place order end to end
 
+The action behind F25's seam, and the toast layer that reports what it did. No new SQL: `place_order`
+is exactly what F24 proved at tiers 2–4, and this feature is the boundary between it and the screen —
+parsing the input, mapping the row it returns onto `ActionResult`, and revalidating what a fill moved.
 
+**The three outcomes are the whole design.** `place_order` returns `(order_id, status,
+rejection_reason)` with `error` null in all three cases: `REJECTED` with a stable code, `OPEN` for a
+limit order that rests, `COMPLETE` for a market order filled in the same transaction. A *fault* — a
+raised Postgres error or a transport failure — is a fourth thing, and is the only one that is not a
+normal return.
+
+**UI:**
+
+- **`<Toaster/>` mounted in the `(terminal)` layout.** It exists in `src/components/ui/sonner.tsx` and
+  is currently rendered nowhere. The terminal, not the root: the marketing side uses `useActionState`
+  with inline state and needs no toast, and this keeps `sonner` out of the public bundle. It moves up
+  if that ever changes.
+- **Success and failure both toast, and the ticket closes either way.** A rejection is a *recorded
+  outcome* — the row is already filed as `REJECTED` and F27 will list it — so leaving the dialog open
+  would imply it is still editable, and each retry would file another order. F25's inline `failure`
+  state becomes unreachable and is deleted with it.
+- **The success toast names the price**: "Bought 10 TCS at ₹2,999.50" for a fill, "Limit order placed
+  — 10 TCS at ₹2,950.00" for one that rests.
+- Rejection copy is specific and actionable — `MARKET_CLOSED` says when the market opens, `NO_HOLDING`
+  says what is held.
 
 **Logic:**
 
-- `placeOrder` Server Action per the golden pattern, calling `place_order` and revalidating the affected routes.
-- Rejection codes mapped to human copy; success and failure both raise a toast.
+- **`placeOrder` in `src/server/actions/orders.ts`**, the standard shape: parse through
+  `placeOrderSchema`, then the client, then the RPC. A `REJECTED` row returns
+  `{ok:false, error:{code: <reason>, message: ORDER_ERROR_COPY[code]}}` — the user's intent failed, so
+  it lands on the failure branch every caller already has and the toast rule applies with no second
+  branch. The rejected order's id is deliberately not returned; F27's page is where one is inspected.
+- **`src/lib/trading/order-copy.ts`** — pure and tier-1 testable: `REJECTION_CODES`,
+  `ORDER_ERROR_COPY`, `toRejectionCode(error)` for faults, a narrowing for the returned
+  `rejection_reason`, and `orderPlacedMessage`. The five codes are the closed set in
+  `trading-contract.md` §4; anything else becomes `UNKNOWN` with generic copy rather than being
+  rendered. `PlacedOrder` lives in `schemas.ts` beside `PlaceOrderInput`, so the client component
+  imports no `'use server'` module for a type.
+- **The fill is read back, not returned by the function.** After `COMPLETE`, one extra RLS-scoped
+  select on `orders` for `average_price` and `filled_quantity`. Widening `place_order`'s return would
+  have meant a migration against a function already proven at three tiers, for one string.
+- **Revalidation reuses `revalidateTerminal()`**, lifted out of `watchlist.ts` into
+  `src/server/revalidate.ts`. It over-revalidates `/settings`, which no fill touches — deliberately
+  cheaper than a second list that can silently under-list, which is the failure `code-standards.md`
+  warns about.
+- **A transport failure is its own case.** The action never returns, so the ticket cannot know whether
+  the order was filed: it says so — "check Orders before placing it again" — and closes. Retrying
+  blind is the one thing that could double-place.
+- `architecture.md`'s Server Action example is corrected in the same change: it still reads
+  `data as string` and maps rejections off `error`, neither of which has been true since F24.
 
 **Verify:**
 
-- A market buy from the watchlist completes and appears in Holdings without a manual reload.
-- An unaffordable order shows "Insufficient funds" and no order is left in a bad state.
-- The action never throws; forcing a database error returns the standard error shape.
+- Test: every member of `REJECTION_CODES` has copy, and a reason string that is not one of them
+  degrades to `UNKNOWN` — asserted over the map, so a sixth code added in SQL cannot ship unmapped.
+- Test: `orderPlacedMessage` across buy/sell × `COMPLETE`/`OPEN`, four cases.
+- Read: **the action has no `throw` on any path**, and the transport catch wraps the `await` rather
+  than sitting inside the success branch.
+- Read: every `ok:false` message comes from `ORDER_ERROR_COPY`; the raw Postgres error reaches
+  `console.error` and nowhere else.
+- Browser: a CNC sell with no holding is rejected, the toast carries the `NO_HOLDING` copy, and the
+  dialog closes.
+- Browser: a MARKET order is rejected `MARKET_CLOSED` outside a session — free to check on any
+  non-trading day, and the common weekend state.
+- Browser + SQL: a LIMIT order rests as `OPEN`, toasts, and its blocked margin has left
+  `available_cash` — read `orders` and `funds` for that id rather than trusting the screen.
+- Browser: **revalidation reaches the layout with no manual reload** — place the limit order from
+  `/dashboard` and the server-rendered available cash has already moved, with
+  `performance.getEntriesByType('navigation').length` still 1 so it cannot have been a reload. The
+  *row* appearing under a tab is F27's check; `/orders` is still a stub here.
+- **Blocked until a live session: a market buy fills and appears in Holdings without a reload.** Every
+  MARKET order is rejected outside market hours, so this rides along with F16's pending items on the
+  next trading day. The fill itself is already proven at tiers 2–4 by F24; what waits is the action,
+  the revalidation and the toast on a `COMPLETE`.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and
+  `pnpm format:check` all exit zero.
 
 ### 27 Orders page
 

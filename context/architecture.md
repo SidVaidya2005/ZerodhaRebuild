@@ -662,11 +662,9 @@ import { createClient } from '@/lib/supabase/server'
 import { placeOrderSchema } from '@/lib/trading/schemas'
 import type { ActionResult } from '@/types/domain'
 
-export async function placeOrder(input: unknown): Promise<ActionResult<{ orderId: string }>> {
+export async function placeOrder(input: unknown): Promise<ActionResult<PlacedOrder>> {
   const parsed = placeOrderSchema.safeParse(input)
-  if (!parsed.success) {
-    return { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Check the order details.' } }
-  }
+  if (!parsed.success) return fail('VALIDATION_ERROR')
 
   const supabase = await createClient()
   const { data, error } = await supabase.rpc('place_order', {
@@ -675,21 +673,28 @@ export async function placeOrder(input: unknown): Promise<ActionResult<{ orderId
     p_order_type: parsed.data.orderType,
     p_product: parsed.data.product,
     p_quantity: parsed.data.quantity,
-    p_limit_price: parsed.data.limitPrice ?? null,
+    // Omitted, not null: the generated signature is `p_limit_price?: number`.
+    p_limit_price: parsed.data.limitPrice ?? undefined,
   })
 
+  // `error` means a *fault*. It does not mean the order was rejected: a
+  // rejection is a normal return, because it writes a row §4 and the Orders
+  // page both require, and raising would roll that row back.
   if (error) {
     // Log the raw Postgres error; return only a mapped code and safe copy.
     console.error('[orders.placeOrder]', error)
-    const code = toRejectionCode(error)
-    return { ok: false, error: { code, message: ORDER_ERROR_COPY[code] } }
+    return fail(toFaultCode(error))
   }
 
-  // A fill moves cash, margin, holdings, positions and the dashboard totals.
-  for (const path of ['/orders', '/holdings', '/positions', '/funds', '/dashboard', '/reports']) {
-    revalidatePath(path)
-  }
-  return { ok: true, data: { orderId: data as string } }
+  // `returns table (order_id, status, rejection_reason)` arrives as an array.
+  const row = data?.[0]
+  if (!row) return fail('UNKNOWN')
+  if (row.status === 'REJECTED') return fail(toRejectionCode(row.rejection_reason))
+
+  // A fill moves cash, margin, holdings, positions and the dashboard totals —
+  // all of which the terminal chrome renders, so the whole group revalidates.
+  revalidateTerminal()
+  return { ok: true, data: { orderId: row.order_id, status: row.status, ...details } }
 }
 ```
 

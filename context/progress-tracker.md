@@ -17,13 +17,13 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 4 — Trading Engine (Phase 2 remains open on F16 and its own checkpoint, both blocked on a live session)
-**Last completed:** 25 Order ticket UI — the dialog mounted once in the terminal layout, `placeOrderSchema`, `margin.ts` and a live estimate panel, all opened from the watchlist through `openTicket`. Margin proven exactly equal to the engine at tier 4 (36 parity assertions). **Four defects found in the browser, none of which any test tier would have caught**: an untouched limit price reported "Price must be more than zero", closing the ticket dropped focus on `<body>`, validation errors were painted in the reserved `--color-down`, and available cash sat inside the panel labelled *Estimate*
+**Last completed:** 26 Place order end to end — `placeOrder`, the copy module behind it, and the toast layer. Rejections, the resting LIMIT path, revalidation and both toasts verified in the browser; **the filled path waits for a live session**. Found and fixed a harness defect on the way: the first real order ever placed made `pnpm test:db` fail permanently, because `02-bootstrap.sql` empties `instruments` and nine tables reference it
 **In progress:** nothing
-**Next:** 26 Place order end to end — the `placeOrder` Server Action behind F25's injected `onSubmit` seam, plus the toasts. F25 leaves the ticket calling an optional handler and closing when there is none, so the whole wiring is one prop
+**Next:** 27 Orders page — the four status tabs, `cancelOrder`/`modifyOrder`, and a Realtime subscription on `orders`. It has real data to render already: this account holds two REJECTED rows and one OPEN limit order left in place by F26's verification
 
 **Not verified at this checkpoint, and deliberately so:** the build-plan's own Phase 3 criterion is that "ticking works unattended for a full market session". Today is Saturday 2026-08-22 — the market is closed and `pg_cron`'s window is weekdays only, so no unattended session can be observed. The Realtime half *was* verified: a production build, ten client-side navigations across all six terminal pages, exactly one `SUBSCRIBED` and no channel churn, then a live `UPDATE` reaching the browser. The unattended-session half rides along with F16's pending items on Monday
 
-**Blocked until Monday 2026-08-24, first session after 09:15 IST.** F16's last two verify items and the Phase 2 checkpoint's own "prices land on a schedule" both need a live session, and the cron window is weekdays only. Check with one query:
+**Blocked until Monday 2026-08-24, first session after 09:15 IST.** F16's last two verify items, the Phase 2 checkpoint's own "prices land on a schedule", **and F26's filled path** — a market buy that completes and reaches Holdings with no reload — all need a live session, and the cron window is weekdays only. The account has ₹69,964.38 free, so there is room to place one. Check with one query:
 ```sql
 select max(fetched_at) as newest, count(*) filter (where provider_ts is null) as simulator_rows,
        array_agg(distinct provider) as providers from quotes;
@@ -74,7 +74,7 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 - [x] 23 Margin reservation and release
 - [x] 24 Order execution function
 - [x] 25 Order ticket UI
-- [ ] 26 Place order end to end
+- [x] 26 Place order end to end
 - [ ] 27 Orders page
 - [ ] 28 Limit order matching
 - [ ] 29 MIS auto square-off
@@ -103,6 +103,16 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 
 ## Key Decisions
 
+- **A tier-2 suite that empties a reference table must empty its dependants too.** F26 made the app able to write `orders`, and the first real order turned `pnpm test:db` red permanently on `orders_symbol_fkey` — a failing test tier caused by using the product. The deletes roll back, so the fix is cheap; the bug it prevents is a suite whose result depends on what the account holds. (F26)
+
+- **A rejection is `ok:false` with `code` set to the reason; a fault is the only thing that is not a normal return.** `place_order` hands back `REJECTED`, `OPEN` and `COMPLETE` identically, with `error` null in all three. Putting a rejection on the failure branch means every caller uses the one branch it already has and `code-standards.md`'s toast-on-failure rule applies unchanged. The rejected order's id is not returned — F27's page is where one is inspected. (F26)
+
+- **A rejection closes the ticket.** The row is already filed as `REJECTED`; leaving the dialog open would imply it is still editable, and each retry would file another order. F25's inline `failure` state becomes unreachable and goes with it. (F26)
+
+- **The success toast names the fill price, read back rather than returned.** One extra RLS-scoped select on `orders` after a `COMPLETE`. Widening `place_order`'s return would have meant a migration against a function already proven at three tiers, for one string. (F26)
+
+- **F26's filled path is verified on the next trading day, and the feature ships without waiting for it.** Every MARKET order is rejected `MARKET_CLOSED` outside a session, so the rejection paths, the resting LIMIT order, the toasts and the revalidation are all checkable now; only `COMPLETE` waits. The fill itself is already proven at tiers 2–4. (F26)
+
 - **An uncontrolled `type="number"` field has no single "empty" value, so the limit price is a `Controller` that maps empty to `null` at the field.** `''`, `null`, `undefined` and `NaN` all reached the schema depending on whether the user or `setValue` wrote last, and `Number(null)` is 0 — so a user who had typed nothing was told their price must be more than zero. Two tier-1 cases now pin `null` and `undefined` to the absence message and a typed `0` to the price message. **Found by using the form, not by a test**: every arithmetic path was already green. (F25)
 
 - **The order ticket is mounted once in the terminal layout and opened through a `useOrderTicket` store.** Not premature: F18's watchlist panel renders twice — the `md` rail and the mobile sheet — so a per-row dialog would mount two copies of the same form for one symbol. Call sites get a button, not a dialog, which is what makes F31's exit-position flow three lines. (F25)
@@ -112,13 +122,3 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 - **The ticket fetches the symbol's holding and position when it opens**, one RLS-scoped query, rather than server-rendering the whole portfolio into every terminal page. Fresh by construction — it reflects a fill from another tab — and one round trip per open rather than per keystroke. The margin panel shows a skeleton while it resolves. (F25)
 
 - **F25 ends at an injected `onSubmit` prop; F26 supplies the action.** The whole ticket becomes tier-1 testable with no database, and the double-submit guard is a UI concern that belongs in the ticket either way. F25's verify item becomes "double-clicking calls the handler exactly once", which is what it was testing. (F25)
-
-- **Reported P&L and settled cash are different numbers on a short cover.** §7 settled from `average_price`, which is net of entry charges that were already debited at entry — so every cover debited them twice and identity 1 failed. The cash row now uses the gross `entry_reference_price`; `trades.realised_pnl` keeps the net average per §9. §12.11 narrowed to say what it meant: the *reported* P&L never reads the gross average. (F24)
-
-- **A cover is reserved from its collateral, not from cash.** F23's `reserve_margin` asked for `quantity × price` on every buy, so a user who shorted most of their balance could not close their own position — the money was in `used_margin` by construction. Symmetric to the sell rule it already had. Found by F24 reading the cash path, not by a test. (F23, fixed at F24)
-
-- **`now()` ties every row a transaction writes, and three columns ordered by it.** `fund_ledger.created_at`, `trades.traded_at` and `orders.placed_at` are all `clock_timestamp()` now. Not cosmetic: F28's matcher fills every crossed order in one run and F29's square-off closes every position in one, so Reports would order a whole square-off arbitrarily. (F23, F24)
-
-- **`place_order` returns `(order_id, status, rejection_reason)`, not a bare uuid.** A business rejection returns normally per `code-standards.md`, so `error` is null and the Server Action cannot tell a fill from a rejection; raising instead would roll back the REJECTED row §4 and the Orders page both require. `architecture.md`'s example and `toRejectionCode`'s role are corrected in the same change. (F24)
-
-- **Session logic gets a second implementation, in Postgres, and tier 4 proves the two equal.** `market_state(at)` reads `market_holidays` so `place_order` can reject a MARKET order with `MARKET_CLOSED`. A Server Action gate would sit outside the security boundary — `place_order` is granted to `authenticated`, so anyone calling the RPC directly would trade at any hour. `architecture.md`'s "one place decides market time" invariant is amended to name both rather than quietly broken. (F24)

@@ -66,3 +66,22 @@ export const placeOrderSchema = z
   })
 
 export type PlaceOrderInput = z.infer<typeof placeOrderSchema>
+
+/**
+ * What `placeOrder` hands back on an outcome that is not a rejection.
+ *
+ * Lives here rather than beside the action so the ticket — a Client Component —
+ * imports no `'use server'` module for a type. `averagePrice` is present only
+ * on a `COMPLETE`: an `OPEN` limit order has not filled, so there is no fill
+ * price to name, and the toast quotes the limit the user set instead.
+ */
+export type PlacedOrder = {
+  orderId: string
+  status: 'OPEN' | 'COMPLETE'
+  symbol: string
+  side: 'BUY' | 'SELL'
+  /** Filled quantity on a COMPLETE, ordered quantity on an OPEN. */
+  quantity: number
+  /** The fill price on a COMPLETE; the limit on an OPEN. */
+  price: number | null
+}

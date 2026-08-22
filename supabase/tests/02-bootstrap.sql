@@ -36,7 +36,23 @@ select ok(
 -- The universe is emptied first, deliberately. Before F14 it was empty by
 -- accident, which made the FK-safe watchlist path below look proven when it was
 -- only untested. The delete rolls back with the rest of the transaction.
+--
+-- Nine tables reference `instruments.symbol`, so emptying it means emptying
+-- them first. This is not tidiness: from F26 the app can place orders into this
+-- same database, and the first real order made this suite fail permanently with
+-- `orders_symbol_fkey` — a red tier 2 caused by *using the product*. Deleting
+-- the dependants here keeps the suite independent of whatever the account
+-- happens to hold, and every one of these deletes rolls back with the rest.
 
+delete from public.trades;
+delete from public.orders;
+delete from public.positions;
+delete from public.holdings;
+delete from public.watchlist_items;
+delete from public.candles;
+delete from public.candle_sync;
+delete from public.quotes;
+delete from public.symbol_demand;
 delete from public.instruments;
 
 insert into auth.users (id, email, raw_user_meta_data)

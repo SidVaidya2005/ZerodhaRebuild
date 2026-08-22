@@ -6,9 +6,11 @@ import { OrderTicket } from '@/components/terminal/OrderTicket'
 import { QuoteChannel } from '@/components/terminal/QuoteChannel'
 import { TerminalClock } from '@/components/terminal/TerminalClock'
 import { WatchlistRail } from '@/components/terminal/WatchlistSidebar'
+import { Toaster } from '@/components/ui/sonner'
 import { LOGIN_PATH } from '@/lib/auth/routes'
 import { loadHolidays } from '@/lib/market/market-hours'
 import { createClient } from '@/lib/supabase/server'
+import { placeOrder } from '@/server/actions/orders'
 import type { MarketComposite } from '@/lib/portfolio/types'
 import type { ServerQuote } from '@/lib/stores/quote-store'
 import type { UniverseEntry, WatchlistRow } from '@/lib/watchlist/schemas'
@@ -208,8 +210,17 @@ export default async function TerminalLayout({ children }: { children: ReactNode
         {/* One ticket for the whole terminal, opened from anywhere through
             `openTicket`. Mounted beside the channel for the same reason: the
             watchlist panel exists twice at once, so a dialog owned by a call
-            site would exist twice too. F26 gives it its `onSubmit`. */}
-        <OrderTicket availableCash={funds ? Number(funds.available_cash) : null} />
+            site would exist twice too. A Server Action crosses to a Client
+            Component as a prop, so F26's seam closes with no wrapper. */}
+        <OrderTicket
+          availableCash={funds ? Number(funds.available_cash) : null}
+          onSubmit={placeOrder}
+        />
+
+        {/* Terminal-only, not the root layout: the marketing side reports
+            outcomes inline through `useActionState`, so mounting it here keeps
+            `sonner` out of the public bundle. */}
+        <Toaster position="bottom-right" />
 
         <div className="flex flex-1">
           <WatchlistRail rows={rows} universe={instruments} />

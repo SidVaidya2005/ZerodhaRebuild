@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useMemo, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -17,7 +18,8 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { estimateCharges, type OrderProduct } from '@/lib/trading/charges'
 import { NO_EXPOSURE, estimateMargin, type SymbolExposure } from '@/lib/trading/margin'
-import { placeOrderSchema, type PlaceOrderInput } from '@/lib/trading/schemas'
+import { ORDER_ERROR_COPY, orderPlacedMessage } from '@/lib/trading/order-copy'
+import { placeOrderSchema, type PlaceOrderInput, type PlacedOrder } from '@/lib/trading/schemas'
 import type { ActionResult } from '@/types/domain'
 import { cn, formatCurrency, formatQuantity } from '@/lib/utils'
 
@@ -38,8 +40,8 @@ import { cn, formatCurrency, formatQuantity } from '@/lib/utils'
 export type OrderTicketProps = {
   /** From the layout's `funds` read. Null when that read failed. */
   availableCash: number | null
-  /** F26 passes the real `placeOrder` action. */
-  onSubmit?: (values: PlaceOrderInput) => Promise<ActionResult<unknown>>
+  /** F26's `placeOrder`. Typed to its result, because the toast names the fill. */
+  onSubmit?: (values: PlaceOrderInput) => Promise<ActionResult<PlacedOrder>>
   /**
    * Overrides the position fetch. Tests inject a resolved exposure; nothing in
    * the app passes this.
@@ -154,12 +156,11 @@ function TicketForm({
 }: {
   request: OrderTicketRequest
   availableCash: number | null
-  onSubmit?: (values: PlaceOrderInput) => Promise<ActionResult<unknown>>
+  onSubmit?: (values: PlaceOrderInput) => Promise<ActionResult<PlacedOrder>>
   loadExposure?: (symbol: string) => Promise<SymbolExposure>
   closeTicket: () => void
 }) {
   const [exposure, setExposure] = useState<SymbolExposure | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
 
   const symbol = request.symbol
 
@@ -238,22 +239,42 @@ function TicketForm({
 
   const isBuy = side === 'BUY'
 
+  /**
+   * Every outcome closes the ticket and says what happened in a toast.
+   *
+   * A rejection closes too, and that is deliberate: `place_order` has already
+   * filed the order as `REJECTED`, so the row exists and F27 lists it. Leaving
+   * the dialog open would imply it is still editable, and each retry would file
+   * another order rather than amend the first.
+   */
   async function submit(values: PlaceOrderInput) {
-    setFailure(null)
-
     if (!onSubmit) {
-      // F25 ships without an action. Closing is the honest outcome — pretending
-      // an order was placed would be worse than doing nothing visibly.
+      // No action wired. Closing is the honest outcome — pretending an order
+      // was placed would be worse than doing nothing visibly.
       closeTicket()
       return
     }
 
-    const result = await onSubmit(values)
-    if (result.ok) {
+    let result: ActionResult<PlacedOrder>
+    try {
+      result = await onSubmit(values)
+    } catch (error) {
+      // A transport failure, not an answer: the request may or may not have
+      // reached `place_order`. The copy says exactly that, because telling
+      // someone to retry could double-place and telling them it failed could be
+      // a lie.
+      console.error('[OrderTicket.submit]', error)
+      toast.error(ORDER_ERROR_COPY.UNCONFIRMED)
       closeTicket()
       return
     }
-    setFailure(result.error.message)
+
+    if (result.ok) {
+      toast.success(orderPlacedMessage(result.data))
+    } else {
+      toast.error(result.error.message)
+    }
+    closeTicket()
   }
 
   return (
@@ -463,12 +484,6 @@ function TicketForm({
             {availableCash === null ? DASH : formatCurrency(availableCash)}
           </span>
         </div>
-
-        {failure ? (
-          <p role="alert" className="text-body-sm text-body">
-            {failure}
-          </p>
-        ) : null}
 
         {/* The brand CTA, not a trading colour: `DESIGN.md` forbids green and
               red on a general confirm because they carry price-direction

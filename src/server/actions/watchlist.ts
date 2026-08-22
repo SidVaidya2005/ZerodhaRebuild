@@ -1,14 +1,12 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
-
-import { TERMINAL_PREFIXES } from '@/lib/auth/routes'
 import { createClient } from '@/lib/supabase/server'
 import {
   addToWatchlistSchema,
   removeFromWatchlistSchema,
   reorderWatchlistSchema,
 } from '@/lib/watchlist/schemas'
+import { revalidateTerminal } from '@/server/revalidate'
 import type { ActionResult } from '@/types/domain'
 
 /**
@@ -24,25 +22,6 @@ import type { ActionResult } from '@/types/domain'
  * The functions are invoker-rights, so RLS on `watchlist_items` is still the
  * boundary. They add set-based SQL, never privilege.
  */
-
-/**
- * The watchlist rail lives in the `(terminal)` layout, so a change to it changes
- * every terminal route rather than the one the visitor happens to be on.
- *
- * `code-standards.md` says to list the routes explicitly rather than revalidate
- * the layout, so this walks the same table `src/proxy.ts` guards — which is also
- * what keeps the two from drifting. `/stocks` needs its dynamic form: a bare
- * prefix does not match `/stocks/RELIANCE`.
- */
-function revalidateTerminal(): void {
-  for (const prefix of TERMINAL_PREFIXES) {
-    if (prefix === '/stocks') {
-      revalidatePath('/stocks/[symbol]', 'page')
-      continue
-    }
-    revalidatePath(prefix)
-  }
-}
 
 const GENERIC_FAILURE = 'That did not save. Try again.'
 
