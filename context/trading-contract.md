@@ -115,16 +115,20 @@ The simulator only ever knows polled prices. It must never invent a price it did
 
 ## 6. Margin and collateral
 
-No leverage: the requirement is the full value of the trade plus estimated charges.
+No leverage: the requirement is the full value of the trade plus estimated charges. A **short** is the
+one exception, and it is more conservative rather than less — it reserves the collateral it will have to
+hold, so the reservation and the requirement at fill are the same figure.
 
 | Order | Reserved at placement | Held after fill |
 | ----- | --------------------- | --------------- |
 | CNC buy | `quantity × price + est. charges` | nothing — cash is spent |
 | MIS buy | `quantity × price + est. charges` | nothing — cash is spent |
 | CNC sell | nothing; requires `holdings.quantity >= quantity` | — |
-| MIS sell opening a short | `quantity × price + est. charges` | **moves to `positions.blocked_margin`** and is held until the short is covered |
+| MIS sell opening a short | `short_collateral(shorting excess, price) + est. charges` — the collateral formula below, evaluated at the reservation price | **moves to `positions.blocked_margin`** and is held until the short is covered |
 
 - For a limit order, "price" in the reservation is `limit_price`. For a market order it is the current `ltp`.
+- **A short reserves its collateral, not its notional**, because those are different numbers here. Collateral is 120% of notional plus closing charges, so reserving 100% would leave every short — not just a gap-up — short by roughly a fifth of the trade at fill. That would make the `MARGIN_RELEASE` in §7 a block, and would let a user place a maximum-size short that its own fill then rejects for want of funds. Reserving the collateral up front makes `delta` zero on a clean fill and leaves the gap-up as the genuine exception it is described as below.
+- **A sell that crosses zero reserves only the shorting excess.** An MIS sell of 10 against an existing MIS long of 4 closes 4 and opens a short of 6; the closing 4 carry no obligation and need no collateral. The excess is `quantity − max(net_quantity, 0)`, and estimated charges are for the whole order. An MIS sell fully covered by a long reserves nothing, exactly like a CNC sell.
 - **`positions.blocked_margin` is what makes the collateral model representable.** A filled short still has an obligation, so its collateral moves from the order to the position rather than being released. It is recomputed on every change to the position and fully released when the position reaches zero quantity, by user exit or auto square-off.
 **One collateral formula, everywhere.** For any open short position:
 
@@ -155,15 +159,21 @@ proportional-release rounding drift, and identity 3 below stays checkable at any
 depending on the band, and an MIS position cannot survive the session, so a 20% cushion covers the worst
 same-day adverse move for a banded stock. See the residual risk at the end of this section.
 
-- **`transfer_margin_to_position(order_id)`** runs in one statement block:
-  1. Compute `required_collateral` from the formula above using the **post-fill** `average_price`, and `actual_charges` per §3.
-  2. `delta = (required_collateral + actual_charges) − orders.blocked_margin`.
-  3. If `delta > 0` the fill needs more than was reserved. When `available_cash < delta` the order is `REJECTED` with `INSUFFICIENT_FUNDS` and `release_margin` returns the whole reservation. Otherwise write `MARGIN_BLOCK −delta`.
+- **`transfer_margin_to_position(order_id, fill_price, actual_charges)`** runs in one statement block, and runs **before** the caller writes the trade or the position. It returns `(ok, required_collateral, entry_reference_price)`; the caller writes those two figures into the `positions` row it then creates or updates. Passing the fill in rather than reading it back is what makes step 3's rejection cheap — at that point there is no trade row and no position row to unwind. It is also the only writer of the `entry_reference_price` *concept*, which is how §12.11 stops being a rule someone has to remember.
+  1. Compute `required_collateral` from the formula above using the **post-fill** `entry_reference_price` — the gross quantity-weighted average including this fill. Never `average_price`: that is the P&L average and §12.11 forbids it here. `actual_charges` is per §3.
+  2. `delta = (required_collateral + actual_charges) − (orders.blocked_margin + positions.blocked_margin)`. The position's own term is what makes this correct when the fill **adds** to an existing short: that collateral is already held, and subtracting only the order's reservation would block it a second time.
+  3. If `delta > 0` the fill needs more than was reserved. When `available_cash < delta`, release the whole reservation and return `ok = false`; the caller sets `REJECTED` with `INSUFFICIENT_FUNDS` and writes nothing else. Otherwise write `MARGIN_BLOCK −delta`.
   4. If `delta < 0`, write `MARGIN_RELEASE +|delta|`.
-  5. Move `required_collateral` onto `positions.blocked_margin` and zero `orders.blocked_margin`. **No ledger row** — no cash moved.
-  6. Release the charge portion still held (`MARGIN_RELEASE +actual_charges`) and debit the real cost (`CHARGES −actual_charges`), so estimated charges are never paid twice.
+  5. Zero `orders.blocked_margin`; `required_collateral` becomes `positions.blocked_margin`. **No ledger row** — no cash moved, and `used_margin` is unchanged by this step alone.
+  6. Release the charge portion still held (`MARGIN_RELEASE +actual_charges`) and debit the real cost (`CHARGES −actual_charges`), so estimated charges are never paid twice. This is the step that takes the charges back out of `used_margin`; net cash across 5 and 6 is zero.
 
-- **Step 3 is not hypothetical.** A short limit sell reserves against its `limit_price`, but §5 fills at the *observed* crossing price, which for a sell is at or **above** the limit. A short limit at ₹100 filling on a gap-up at ₹110 needs more collateral than it reserved — the only case in the system where a fill is better for the user and simultaneously demands more margin. A limit buy can never do this, because it fills at or below its limit.
+  Across the whole block, `available_cash` moves by exactly `−delta`, `used_margin` by `delta − actual_charges`, and their **sum** by `−actual_charges` — the charges are the only non-recoverable part, and everything else moved rather than vanished. That last figure is the assertion that catches a double-spend.
+
+- **`recompute_position_collateral(user_id, symbol, new_net_quantity)`** is the release side of the same formula, called on any fill that *reduces* a short. It recomputes `required_collateral` over the quantity the position is **about to become** and returns the difference to `available_cash` with a `MARGIN_RELEASE` row — cash genuinely returns here, unlike on entry, which is why this one writes a row and step 5 does not.
+  - **Called before the caller writes the new quantity**, because the two cases that matter cannot be expressed afterwards: a full cover deletes the row (§8), and a flip from short to long cannot carry collateral at all. Passing the target quantity covers partial cover, full cover and flip under one rule.
+  - It refuses to *increase* collateral. An increase means a fill that adds to a short took the release path, and that fill carries a reservation only `transfer_margin_to_position` knows how to retire.
+
+- **Step 3 is not hypothetical.** A short limit sell reserves against its `limit_price`, but §5 fills at the *observed* crossing price, which for a sell is at or **above** the limit. A short limit at ₹100 filling on a gap-up at ₹110 needs more collateral than it reserved — the only case in the system where a fill is better for the user and simultaneously demands more margin. A fill *at* the limit gives `delta = 0` up to the drift between estimated and actual charges, which is what reserving the collateral rather than the notional buys. A limit buy can never do this, because it fills at or below its limit.
 - Reserving estimated charges and then debiting actual ones is why steps 5 and 6 are separate. Moving the *whole* reservation onto the position would hold the charge money as collateral **and** debit it, charging the user twice.
 
 **A short's loss is capped at its collateral. This is a stated simulator rule, not an accident.**
@@ -208,7 +218,7 @@ Exact rows written per event. Every row moves `available_cash`; `balance_after` 
 | Order cancelled or rejected | `MARGIN_RELEASE` `+reservation` |
 | Buy fill (CNC or MIS long) | `MARGIN_RELEASE` `+reservation`, `BUY_DEBIT` `−trade_value`, `CHARGES` `−charges` |
 | Sell fill closing a long | `SELL_CREDIT` `+trade_value`, `CHARGES` `−charges` |
-| Short entry (MIS sell, no existing long) | `MARGIN_RELEASE` `+(reservation − collateral)`, `CHARGES` `−charges`. The collateral moves to `positions.blocked_margin` and writes **no ledger row**, because no cash moves. **No proceeds are credited** — a short's cash settles on cover, not on entry. |
+| Short entry (MIS sell, no existing long) | Three rows, per §6 steps 4 and 6: `MARGIN_RELEASE` `+|delta|`, then `MARGIN_RELEASE` `+charges` and `CHARGES` `−charges`. Net `+(reservation − collateral − charges)`. The paired charge rows are not noise — they are what makes "estimated charges are never paid twice" auditable in the ledger instead of netted away inside the function. The collateral moves to `positions.blocked_margin` and writes **no ledger row**, because no cash moves. **No proceeds are credited** — a short's cash settles on cover, not on entry. |
 | Short cover | `MARGIN_RELEASE` `+position.blocked_margin`, `CHARGES` `−charges`, `REALISED_PNL` `±(average_price − cover_price) × quantity` |
 | Short cover exceeding the account | the rows above with `REALISED_PNL` capped per §6, plus `SIMULATION_ADJUSTMENT` `+uncovered_remainder`. Cash floors at zero; `trades.realised_pnl` still carries the true loss |
 

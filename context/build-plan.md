@@ -1270,34 +1270,133 @@ merely passing:
 
 ### 23 Margin reservation and release
 
+Reservation and release, built and proven before any order can consume them. Five internal-only
+functions own every movement between `funds.available_cash` and `funds.used_margin`, and the
+collateral held against an open short. **Nothing here fills an order or writes a position's
+quantity** — F24 does that and calls these.
 
-Reservation and release, built and proven before any order can consume them.
+**`trading-contract.md` §6 and §7 are amended first, in their own commit.** Four statements in them
+are false as written, and each one changes code:
+
+- **§6 step 1's "using the post-fill `average_price`"** is a typo for `entry_reference_price`. It
+  contradicts the formula printed directly above it, §12.11, §12.12, and this feature's own
+  falsification test.
+- **§6 step 2's delta ignores collateral already held on the position**, so a fill that *adds* to an
+  existing short double-blocks. It becomes
+  `(required_collateral + actual_charges) − (orders.blocked_margin + positions.blocked_margin)`.
+- **§6's table reserved 100% of notional for a short.** Collateral at fill is 120% of notional plus
+  closing charges, so delta was positive by roughly a fifth of the trade on *every* short — which
+  made §7's short-entry `MARGIN_RELEASE` row a block rather than a release, falsified §6's own claim
+  that step 3's top-up is the gap-up case, and let a user place a maximum-size short that its own
+  fill then rejected. A short-opening MIS sell now reserves the §6 collateral formula evaluated at
+  the reservation price. Buys are unchanged at `notional + charges`.
+- **§7's short-entry row shows two ledger rows; §6 steps 4 and 6 write three.** §6 wins and §7 is
+  corrected: `MARGIN_RELEASE +|delta|`, `MARGIN_RELEASE +actual_charges`, `CHARGES −actual_charges`.
+  The paired charge rows are what make "estimated charges are never paid twice" auditable in the
+  ledger rather than netted away inside the function.
+
+§13's sweep runs after those edits and every hit is reconciled.
 
 **Logic:**
 
-- `reserve_margin(order_id)` per `trading-contract.md` §6: computes the requirement (full notional plus estimated charges — no leverage), moves it from `available_cash` into `used_margin`, stamps `orders.blocked_margin`, and writes the `MARGIN_BLOCK` ledger row. Returns false if the user cannot cover it.
-- `release_margin(order_id)` reversing it exactly once and writing `MARGIN_RELEASE`; idempotent, returning immediately when `blocked_margin` is already zero.
-- `transfer_margin_to_position(order_id)` per `trading-contract.md` §6, including the six-step top-up path: collateral is `|net_quantity| × entry_reference_price × (1 + SHORT_MARGIN_BUFFER) + estimated_close_charges`, the delta against the existing reservation is blocked or released as needed, and the collateral move writes **no ledger row** because no cash changes.
-- Collateral is recomputed from that formula on every change to a short position, so partial covers release their share.
-- All three functions revoked from `public`, `anon` and `authenticated`.
-- Both revoked from `public`, `anon` and `authenticated` — internal-only, per the grant policy in `code-standards.md`.
+- `short_margin_buffer()` — `IMMUTABLE`, returning `0.20`, mirroring F22's `charge_rates()`.
+  `SHORT_MARGIN_BUFFER` lands in `src/lib/constants.ts` at the same time because F25's ticket shows
+  the margin a short requires, and **tier 4 parity compares the two** so they cannot drift.
+- `short_collateral_requirement(p_quantity, p_entry_reference_price)` — `IMMUTABLE`, the **single
+  site** where §6's formula is written:
+  `|quantity| × entry_reference_price × (1 + buffer) + calculate_charges('BUY','MIS', |quantity|, entry_reference_price × (1 + buffer))`.
+  Both the block path and the release path call it, which is what makes §6's "one collateral formula,
+  everywhere" structural rather than a matter of care.
+- `reserve_margin(p_order_id)` per §6: computes the requirement, moves it from `available_cash` into
+  `used_margin`, stamps `orders.blocked_margin`, writes `MARGIN_BLOCK`. Returns false and **writes
+  nothing** if the user cannot cover it; `place_order` writes the `REJECTED` row.
+  - A buy reserves `quantity × price + estimated charges`. A short-opening MIS sell reserves
+    `short_collateral_requirement(excess, price) + estimated entry charges`.
+  - **Crossing zero:** an MIS sell of 10 against an existing MIS long of 4 closes 4 and shorts 6. The
+    shorting excess is `quantity − max(net_quantity, 0)` and only that part is reserved; the closing
+    part carries no obligation. A CNC sell, and an MIS sell fully covered by a long, reserve nothing.
+  - "Price" is `limit_price` for a limit order and the current `ltp` for a market order.
+- `release_margin(p_order_id)` reversing it exactly once and writing `MARGIN_RELEASE`; idempotent,
+  returning `0` immediately when `blocked_margin` is already zero.
+- `transfer_margin_to_position(p_order_id, p_fill_price, p_actual_charges)` returning
+  `(ok boolean, required_collateral numeric, entry_reference_price numeric)`, per §6's six steps.
+  - **Called before F24 writes the trade or the position**, while the order is still `OPEN`. On a
+    shortfall it releases the whole reservation itself and returns `ok = false`, so there is no
+    trade and no position row to unwind — F24 stamps `REJECTED`/`INSUFFICIENT_FUNDS` and returns.
+  - It computes the new **gross** quantity-weighted `entry_reference_price` and hands it back for F24
+    to write. Making the collateral module the only writer of that concept is what enforces §12.11
+    structurally.
+  - The collateral move itself writes **no ledger row**, because no cash changes.
+- `recompute_position_collateral(p_user_id, p_symbol, p_new_net_quantity)` — the release side.
+  Recomputes the requirement over the quantity the position is **about to become** and moves the
+  difference to `available_cash` with a `MARGIN_RELEASE` row (§7's short-cover row). Called **before**
+  F24 writes the new quantity: a full cover deletes the row and a flip to long cannot carry collateral,
+  so neither case can be expressed afterwards. Refuses to *increase* collateral — an add carries a
+  reservation only `transfer_margin_to_position` knows how to retire.
+- All five are `security definer` with `set search_path = ''`, fully schema-qualified, lock `orders`
+  then `funds` with `for update` in that order, re-check `status = 'OPEN'` after taking the lock, and
+  are **revoked from `public`, `anon` and `authenticated`** per the grant policy in
+  `code-standards.md`.
 
-**Verify:**
+**Verify:** — tier 2, which rolls back, so even the randomised suite needs no commit gate. Split in
+two: `08-margin.sql` holds the hand-computed cases and `09-margin-identities.sql` the randomised one.
+They catch different things — an arithmetic slip shows up in 08, while a path that forgets one side of
+§12.3 only shows up in 09.
 
-- Test: reserving on a CNC buy lowers `available_cash` and raises `used_margin` by the identical amount; the ledger row's `balance_after` matches.
-- Test: releasing restores both exactly; releasing a second time changes nothing.
-- Test: a reservation larger than `available_cash` returns false and writes nothing.
+- **`fund_ledger.created_at` must be `clock_timestamp()`, not `now()`**, or §12.2 cannot be asserted at
+  all: `now()` is the transaction start time, so the three rows a short entry writes tie, and "the
+  newest row" is decided by the planner.
+
+- Test: reserving on a CNC buy lowers `available_cash` and raises `used_margin` by the identical
+  amount; the ledger row's `balance_after` matches `available_cash`.
+- Test: releasing restores both exactly; releasing a second time returns `0`, writes no row and
+  changes no column.
+- Test: a reservation larger than `available_cash` returns false and writes nothing — `funds`,
+  `orders.blocked_margin` and `fund_ledger` all unchanged.
+- Test: an MIS sell of 10 against an MIS long of 4 reserves against 6, not 10 and not 0; an MIS sell
+  fully covered by a long reserves nothing.
 - Test, **three assertions on one short round trip**, because each catches a different error:
-  1. Pre-placement → completed: `available_cash` falls by exactly `required_collateral + actual_charges`. The collateral sits in `used_margin`, not in free cash.
-  2. Post-reservation → post-transfer: `available_cash` moves by exactly `−delta`, the reservation adjustment and nothing else.
-  3. `available_cash + used_margin` falls by exactly `actual_charges` — the collateral moved rather than vanished, and charges are the only non-recoverable part. This is the assertion that catches a double-spend.
-- Test: `orders.blocked_margin` is zero after transfer and the ledger contains no row for the collateral amount.
-- Test: reserved estimated charges are not also debited — total cash out for a short entry equals the actual charges exactly, never charges twice.
-- **Gap-up test:** a short limit sell at ₹100 that fills at an observed ₹110 requires more collateral than it reserved. With sufficient cash it tops up via `MARGIN_BLOCK` and completes; with insufficient cash it is `REJECTED` with `INSUFFICIENT_FUNDS` and the whole reservation is released. Assert both branches — the top-up is the only case where a better fill price demands more margin.
-- Test: `positions.blocked_margin` equals `|net_quantity| × entry_reference_price × (1 + SHORT_MARGIN_BUFFER) + estimated_close_charges` after entry, after adding to the position, and after a partial cover.
-- Test: collateral computed from `entry_reference_price` covers a full 20% adverse move **including closing charges**. Recompute it from `average_price` instead and confirm the assertion fails — that substitution under-collateralises by a small, easily-missed amount.
-- Test: covering half a short releases exactly half the collateral, not zero and not all of it.
-- Test: the margin identity in `trading-contract.md` §12.3 holds after a randomised sequence of 500 reserve/release/fill/cancel operations.
+  1. Pre-placement → completed: `available_cash` falls by exactly `required_collateral + actual_charges`.
+     The collateral sits in `used_margin`, not in free cash.
+  2. Post-reservation → post-transfer: `available_cash` moves by exactly `−delta`, the reservation
+     adjustment and nothing else.
+  3. `available_cash + used_margin` falls by exactly `actual_charges` — the collateral moved rather
+     than vanished, and charges are the only non-recoverable part. This is the assertion that catches
+     a double-spend.
+- Test: **a clean fill needs no top-up.** A short limit sell at ₹100 filling at ₹100 produces
+  `delta = 0`. This is the assertion that proves the amended reservation basis; under the old 100%
+  reservation it fails by a fifth of the notional.
+- Test: `orders.blocked_margin` is zero after transfer and the ledger contains **no row** for the
+  collateral amount; the three rows §6 writes are present and sum to `reservation − collateral − charges`.
+- Test: reserved estimated charges are not also debited — total cash out for a short entry equals the
+  actual charges exactly, never charges twice.
+- **Gap-up test:** a short limit sell at ₹100 that fills at an observed ₹110 requires more collateral
+  than it reserved. With sufficient cash it tops up via `MARGIN_BLOCK` and returns `ok = true`; with
+  insufficient cash it returns `ok = false`, releases the whole reservation, and leaves
+  `blocked_margin = 0` so F24's `REJECTED` write is legal under `orders_no_margin_unless_open`.
+  Assert both branches — with the reservation basis corrected, a gap-up fill is now the **only** case
+  where a better fill price demands more margin.
+- Test: `positions.blocked_margin` equals
+  `|net_quantity| × entry_reference_price × (1 + SHORT_MARGIN_BUFFER) + estimated_close_charges`
+  after entry, after adding to the position, and after a partial cover — each expected figure
+  computed by hand in a fixture comment, never restated as the expression the function uses.
+- Test: collateral computed from `entry_reference_price` covers a full 20% adverse move **including
+  closing charges**. Recompute it from `average_price` instead and confirm the assertion fails — that
+  substitution under-collateralises by a small, easily-missed amount.
+- Test: covering half a short releases exactly half the collateral, not zero and not all of it; a full cover releases all of it and a flip to long releases all of it.
+- Test: the margin identity in §12.3 holds after a randomised sequence of 500
+  reserve/release/fill/cancel operations on a **pinned seed**, alongside identities 1, 2, 4, 8 and 12.
+  The suite asserts the churn actually happened first — a loop that quietly did nothing would
+  otherwise satisfy every identity.
+- **Falsification, twice:** perturb `short_margin_buffer()` and watch `08-margin.sql` and
+  `test:parity` go red; remove the `positions.blocked_margin` term from §6 step 2's delta and watch
+  `08-margin.sql` fail on cash and `09-margin-identities.sql` fail identity 3 independently. Revert
+  both. A collateral test never seen failing proves nothing.
+- Test: none of the five is callable by a client role — `throws_ok(…, '42501')` for `anon` and
+  `authenticated`, which is a different failure from a policy filtering rows.
+- `pnpm test:parity` compares `short_margin_buffer()` against `SHORT_MARGIN_BUFFER`.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and
+  `pnpm format:check` all exit zero.
 
 ### 24 Order execution function
 
@@ -1310,7 +1409,8 @@ The heart of the project. Built and tested entirely in SQL before any UI touches
 - `place_order(...)` inserting the order, reserving margin, then calling `execute_order` for market orders.
 - `execute_order(order_id)` per the golden pattern: lock the order row, **return unless it is still `OPEN`**, lock the funds row, price it, compute charges, check margin against `available_cash + blocked_margin`, release the reservation, insert the trade, upsert the holding or position, update funds, append the ledger, complete the order.
 - Business rejections set `status = REJECTED` with a stable `rejection_reason`.
-- On completion the function retires the reservation the right way: `release_margin` for buys, long closes, cancellations and rejections; `transfer_margin_to_position` for a fill that opens a short.
+- On completion the function retires the reservation the right way, **before writing the trade and the position**: `release_margin` for buys, long closes, cancellations and rejections; `transfer_margin_to_position(order_id, fill_price, actual_charges)` for a fill that opens a short. That one returns `(ok, required_collateral, entry_reference_price)` — on `ok = false` the reservation is already released and this function only has to set `REJECTED`/`INSUFFICIENT_FUNDS`; otherwise its two returned figures are written into the `positions` row.
+- A fill that **reduces** a short calls `recompute_position_collateral(user_id, symbol, new_net_quantity)` **before** writing the new quantity, which releases that fill's share of the collateral and handles full cover and flip-to-long uniformly. F23 owns both; F24 only sequences them.
 - `average_price` computed with the direction-correct formula from `trading-contract.md` §8 — charges added for a long, subtracted for a short.
 - `cancel_order(order_id)` for open orders only.
 - `reset_account()` wiping orders, trades, holdings and positions and restoring the opening balance in one transaction.
@@ -1424,7 +1524,7 @@ The heart of the project. Built and tested entirely in SQL before any UI touches
 **Verify:**
 
 - Test with an injected clock: a position open at 15:19 survives; after the first run at or past 15:20 it is flat with a closing trade and realised P&L recorded.
-- Test: square-off releases `positions.blocked_margin` in full and deletes the row.
+- Test: square-off releases `positions.blocked_margin` in full through `recompute_position_collateral` and deletes the row.
 - Test: a symbol whose only quote is simulator-sourced still squares off, and the closing trade records that provenance rather than passing as a real close.
 - **Loss-cap test:** a short whose adverse move exceeds collateral plus available cash still squares off. `available_cash` lands at exactly zero, a `SIMULATION_ADJUSTMENT` row carries the uncovered remainder, `trades.realised_pnl` records the **true** uncapped loss, and identity 9 still balances.
 - Test, **two concurrent sessions**: `square_off_mis()` invoked simultaneously after 15:20 exits each position exactly once.

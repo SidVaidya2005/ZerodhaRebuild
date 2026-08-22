@@ -202,7 +202,9 @@ Order ticket (Client Component)
         └─ rpc('place_order', {...})            ── Postgres, one transaction ──
               ├─ insert orders row (status OPEN)
               ├─ reserve_margin(order_id)  → moves the requirement from
-              │        available_cash into used_margin, stamps orders.blocked_margin
+              │        available_cash into used_margin, stamps orders.blocked_margin.
+              │        A buy reserves notional + charges; a short reserves its
+              │        collateral (§6), so a clean fill needs no top-up
               ├─ if MARKET → execute_order(order_id)
               │     ├─ SELECT ... FOR UPDATE on orders row
               │     ├─ status still 'OPEN'? if not, return — a concurrent run got here first
@@ -210,12 +212,20 @@ Order ticket (Client Component)
               │     ├─ compute charges (numeric)
               │     ├─ margin check against (available_cash + blocked_margin)
               │     │     └─ insufficient → REJECTED + release_margin(), return
-              │     ├─ retire the reservation, exactly once:
-              │     │     ├─ fill opens a short → transfer_margin_to_position()
+              │     ├─ retire the reservation, exactly once, BEFORE writing
+              │     │  the trade or the position:
+              │     │     ├─ fill opens a short →
+              │     │     │    transfer_margin_to_position(id, price, charges)
+              │     │     │      └─ ok=false → REJECTED, nothing else written
               │     │     └─ otherwise         → release_margin()
               │     ├─ insert trades row
               │     ├─ upsert holdings (CNC) or positions (MIS),
-              │     │    averaging charges up for a long, down for a short
+              │     │    averaging charges up for a long, down for a short;
+              │     │    a short writes back the collateral and
+              │     │    entry_reference_price the transfer returned
+              │     ├─ a fill that reduces a short →
+              │     │    recompute_position_collateral(user, symbol, new_qty),
+              │     │    BEFORE the new quantity is written
               │     ├─ update funds (available_cash, used_margin)
               │     ├─ insert fund_ledger rows
               │     └─ update orders → COMPLETE (average_price, filled_quantity)
@@ -783,9 +793,9 @@ indistinguishable from a broken upstream (F15).
 - `execute_order` re-reads and re-checks `status = 'OPEN'` after taking the order row lock, and returns without writing if it is not — the lock alone does not prevent a double fill.
 - `funds.used_margin` always equals `Σ orders.blocked_margin` over that user's `OPEN` orders plus `Σ positions.blocked_margin`; any code path that changes one changes the other in the same transaction.
 - Every `orders` row not in status `OPEN` has `blocked_margin = 0`. Exactly two functions zero it — `release_margin` and `transfer_margin_to_position` — and no other code path may write that column.
-- Margin is reserved once at placement and retired exactly once. Cancellations, rejections and cash-consuming fills retire it through `release_margin(order_id)`; a fill that opens a short retires it through `transfer_margin_to_position(order_id)`, which moves the collateral to the position and releases only the remainder.
+- Margin is reserved once at placement and retired exactly once. Cancellations, rejections and cash-consuming fills retire it through `release_margin(order_id)`; a fill that opens a short retires it through `transfer_margin_to_position(order_id, fill_price, actual_charges)`, which moves the collateral to the position and releases only the remainder. The transfer runs **before** the trade and position rows are written, so its `ok = false` shortfall path has nothing to unwind.
 - A short's collateral never becomes spendable while the position is open: `transfer_margin_to_position` writes no ledger row for the collateral portion, because `available_cash` does not change.
-- For every open short, `positions.blocked_margin` equals `|net_quantity| × entry_reference_price × (1 + SHORT_MARGIN_BUFFER) + estimated_close_charges`, recomputed on every change to the position.
+- For every open short, `positions.blocked_margin` equals `|net_quantity| × entry_reference_price × (1 + SHORT_MARGIN_BUFFER) + estimated_close_charges`, recomputed on every change to the position. The formula is written once, in `short_collateral_requirement()`; `transfer_margin_to_position` is the only path that increases it and `recompute_position_collateral` the only path that decreases it.
 - `entry_reference_price` never appears in a P&L calculation and `average_price` never appears in a collateral calculation. The two averages exist because they answer different questions; crossing them silently under- or over-collateralises.
 - A cover or square-off always completes. When the loss exceeds collateral plus available cash, the cash debit is capped, `available_cash` floors at zero, and the remainder is recorded as a `SIMULATION_ADJUSTMENT` ledger row — `CHECK (available_cash >= 0)` is never relaxed and no position is ever stranded.
 - `average_price` capitalises charges upward for a long and downward for a short. One formula for both is an arithmetic error — see `trading-contract.md` §8.
