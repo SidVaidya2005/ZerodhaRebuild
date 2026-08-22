@@ -18,6 +18,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { createClient } from '@/lib/supabase/client'
 import { dayChange } from '@/lib/market/change'
 import { provenanceOf, serverProvenance } from '@/lib/market/screen-provenance'
+import { openTicket } from '@/lib/stores/order-ticket-store'
 import { useQuoteStore } from '@/lib/stores/quote-store'
 import { cn } from '@/lib/utils'
 
@@ -194,9 +195,31 @@ function WatchlistRowItem({ row, isFirst, isLast, pending, run }: RowProps) {
         >
           <ChevronDown aria-hidden="true" />
         </Button>
-        {/* Buy and sell are deliberately absent until F25 gives them a
-            destination. The chart link resolves because F17 stubbed the
-            instrument page. */}
+        {/* Buy and sell open the one ticket mounted in the terminal layout,
+            rather than a dialog per row. This panel is mounted TWICE — the `md`
+            rail and the mobile sheet, both always in the tree — so a per-row
+            dialog would put two copies of the same form on the page for one
+            symbol. `openTicket` is a plain call rather than a hook, so a row
+            that only opens the ticket does not re-render when it opens on some
+            other symbol. */}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="font-medium text-up"
+          aria-label={`Buy ${row.symbol}`}
+          onClick={() => openTicket({ symbol: row.symbol, side: 'BUY' })}
+        >
+          B
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="font-medium text-down"
+          aria-label={`Sell ${row.symbol}`}
+          onClick={() => openTicket({ symbol: row.symbol, side: 'SELL' })}
+        >
+          S
+        </Button>
         <Button variant="ghost" size="icon-sm" asChild>
           <Link href={`/stocks/${row.symbol}`} aria-label={`Open ${row.symbol}`}>
             <LineChart aria-hidden="true" />

@@ -1566,22 +1566,30 @@ with no database, and the double-submit guard is a UI concern that belongs here 
 
 **Verify:**
 
-- Test: selecting LIMIT reveals the price field, and MARKET hides it.
-- Test: submitting a LIMIT order without a price shows a field error and does **not** call `onSubmit`.
-- Test: zero, negative and fractional quantities are rejected client-side — asserted over the schema
-  and through the rendered form, because the two can disagree.
-- Test: **double-clicking submit calls the handler exactly once** — two synchronous clicks against a
-  pending promise.
+- **Tier 1 covers the pure logic; the interactions are proven in the browser.** `constraints.md`
+  records F01's decision that tier 1 runs with no jsdom and no Testing Library, neither being an
+  approved dependency — so component behaviour is driven in Chrome here exactly as it was for
+  F17–F21. The arithmetic that can silently go wrong lives in the schema and the estimator, and both
+  are covered automatically.
+- Test: zero, negative and fractional quantities are rejected — asserted over `placeOrderSchema`,
+  which is the same object the rendered form validates against and the same one F26's action parses.
+- Test: a limit order without a price, and a market order carrying one, are both rejected —
+  `orders_limit_price_iff_limit` is an equivalence, so both directions must fail.
+- Browser: selecting LIMIT reveals the price field, and MARKET hides it again.
+- Browser: submitting a LIMIT order with the price empty shows a field error and no order is
+  attempted.
+- Browser: **double-clicking submit places exactly one order** — `formState.isSubmitting` disables
+  the button for the whole await, and the second click lands on a disabled control.
 - **`pnpm test:parity`: the margin shown is the margin the engine reserves, exactly.** Ten hand-picked
   cases plus seeded-random ones, across buy, short entry, full cover, partial cover and a fill that
   crosses zero, compared against `short_collateral_requirement` + `calculate_charges`. **Exact
   equality, not "within one paisa"** — that is the bar the charge estimator already meets, and a
   looser one here would hide precisely the drift the test exists to catch. Falsified by perturbing
   `SHORT_MARGIN_BUFFER` in TypeScript only.
-- Test: a cover shows charges-only margin — short of 100 open, covering 100 @ ₹100 shows ₹29.00, not
-  ₹10,029.00.
-- Test: the panel ticks with the price for a MARKET order — seed the quote store, move the anchor,
-  assert the margin figure changes.
+- Test: a cover shows charges-only margin — short of 100 open, covering 100 @ ₹100 reserves the
+  charges alone, not ₹10,029.00. Asserted at tier 1 against `estimateMargin`, and again against the
+  engine at tier 4.
+- Browser: the panel ticks with the price for a MARKET order, and holds still on a LIMIT one.
 - Read: every money figure in the ticket is labelled an estimate. §1 forbids an unlabelled TypeScript
   money figure anywhere.
 - Browser: the ticket opens from the watchlist at both breakpoints, and the rail and the sheet open

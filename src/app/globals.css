@@ -27,6 +27,11 @@
   /* ── Trading semantics ── fixed meaning everywhere, never decorative */
   --color-up: #0ecb81;
   --color-down: #f6465d;
+  /* Text on a filled up/down button. Theme-invariant like --color-on-brand:
+     both fills are the same colour in either theme, so their foreground must be
+     too — `--color-ink` would flip to near-black on light and fail against
+     green. DESIGN.md names this `on-dark`. (F25) */
+  --color-on-dark: #ffffff;
 
   /* ── Surfaces (dark = default) ── */
   --color-canvas: #0b0e11; /* page floor; near-black, never pure black */

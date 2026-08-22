@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
 
 import { TopNav } from '@/components/terminal/TopNav'
+import { OrderTicket } from '@/components/terminal/OrderTicket'
 import { QuoteChannel } from '@/components/terminal/QuoteChannel'
 import { TerminalClock } from '@/components/terminal/TerminalClock'
 import { WatchlistRail } from '@/components/terminal/WatchlistSidebar'
@@ -203,6 +204,12 @@ export default async function TerminalLayout({ children }: { children: ReactNode
           here so they survive navigation between pages rather than being torn
           down and rebuilt by each one. Renders nothing. */}
         <QuoteChannel symbols={livePrices.map((row) => row.symbol)} seed={livePrices} />
+
+        {/* One ticket for the whole terminal, opened from anywhere through
+            `openTicket`. Mounted beside the channel for the same reason: the
+            watchlist panel exists twice at once, so a dialog owned by a call
+            site would exist twice too. F26 gives it its `onSubmit`. */}
+        <OrderTicket availableCash={funds ? Number(funds.available_cash) : null} />
 
         <div className="flex flex-1">
           <WatchlistRail rows={rows} universe={instruments} />
