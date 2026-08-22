@@ -134,6 +134,8 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Verification routine
 
+- **A backgrounded tab dispatches no focus events and runs no animation frames.** `element.focus()` sets `document.activeElement` and fires nothing — not even native listeners attached directly. Three features have now lost time to this family: F17's frozen exit animation, F19's frozen `requestAnimationFrame`, F20's focus handlers. Check `document.visibilityState` **first** whenever an automated browser check says an interaction does nothing. (F20, evicted from Key Decisions at F23)
+
 - **A backgrounded tab freezes animations and dispatches no focus events.** `element.focus()` sets `document.activeElement` and fires nothing, not even native listeners bound directly to the element; CSS animations never reach `animationend`; `requestAnimationFrame` never fires. An automated browser check will therefore report that a working interaction does nothing. **Read `document.visibilityState` before believing it.** Also note hover coordinates are in screenshot space, not CSS pixels — at `innerWidth` 1640 against a 1456-wide capture they differ by ~12%, enough to hover the wrong element. (F17, F19, F20)
 
 - **Kill `next start` by PID from `lsof -nP -iTCP:3000 -sTCP:LISTEN` before trusting any post-rebuild check.** `pkill` does not reliably stop it, and the surviving process keeps port 3000 and serves the *previous* build — which has silently invalidated a verification pass twice. (F03, F04)
@@ -257,6 +259,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 
 ## Live prices and interpolation
 
+- **Only symbols currently rendering a price feed the data-source badge.** `worstSource([])` returns STALE by design, so counting the symbols with no quote row would pin the badge to STALE on account of absent data and say nothing about the prices actually visible. A row showing an em dash makes no claim and cannot be dishonest. (F20, evicted from Key Decisions at F23)
+
+- **One ticking clock provided from the terminal layout, so the badge and every price read the same instant.** Otherwise a row can render DELAYED under a badge saying STALE — a contradiction the visitor can see. **F17's pill keeps its own timer**, because it deliberately lands *on* the session boundary rather than up to a heartbeat late. (F20, evicted from Key Decisions at F23)
+
 - **Provenance is announced, not merely hoverable.** The facts render as `sr-only` text tied to the price by `aria-describedby` as well as in a HoverCard, because hover does not exist on touch and never fires for a screen reader — and the guarantee is that *no* price renders without accessible provenance. (F20, evicted from Key Decisions at F22)
 
 - **Only STALE prices are muted, not SIMULATED.** Every price in this build is simulated, so muting them all would render the whole terminal grey and the treatment would stop carrying information. The badge and the per-price disclosure carry that honesty instead, which is what `architecture.md` specifies. (F20, evicted from Key Decisions at F22)
@@ -313,6 +319,10 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **Yahoo throttles bursts at the IP level and the block outlasts any in-process backoff.** ~16 requests/second across 200 symbols got every one back as 429 — and the first version of the probe reported that as "200 symbols do not resolve", condemning a good universe. Never treat 429 as a verdict on a symbol: only 404 means the symbol is unknown. `curl` succeeding while `node fetch` gets 429 is a recovery-window artefact, not a client difference — both are blocked together once tripped. Probe sequentially (~1.5s apart) and cache results so a throttled run resumes instead of restarting. (F14)
 
 ## Charges and the trading contract
+
+- **The dashboard aggregates holdings only; MIS positions stay on `/positions`.** Portfolio value is `available_cash + Σ(quantity × ltp)`, invested is `Σ(quantity × average_price)` with charges already capitalised per §8, and overall P&L is unrealised only. Kite's own split, and it keeps the intraday sign handling out of a donut that would have to draw a negative slice. (F21, evicted from Key Decisions at F23)
+
+- **Day's P&L is `Σ quantity × (ltp − prev_close)` over holdings**, recorded in `trading-contract.md` §9, which defined realised and unrealised P&L but never this one. It is the same basis as the watchlist's change column, so the two cannot disagree on screen, and it needs no read of `trades` — which matters because no trading engine exists to write them yet. (F21, evicted from Key Decisions at F23)
 
 - **The watchlist's change is computed in Postgres, in a `security_invoker` view.** `CLAUDE.md` puts money arithmetic in Postgres and leaves TypeScript formatting it; the view also makes the panel one round trip and gives F30's holdings day change and F33's header the same shape to read. (F18)
 

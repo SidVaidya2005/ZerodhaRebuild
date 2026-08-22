@@ -17,9 +17,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 4 — Trading Engine (Phase 2 remains open on F16 and its own checkpoint, both blocked on a live session)
-**Last completed:** 22 Charge calculator — `charge_rates()` and `calculate_charges()` in Postgres, proven byte-equal to F06's TypeScript estimator over 132 inputs by a new read-only **tier 4** (`pnpm test:parity`), falsified by perturbing a rate. Both Phase 1 carried-over items closed and falsified. §3's rates re-verified against zerodha.com/charges, all unchanged
+**Last completed:** 23 Margin reservation and release — six internal-only functions (`short_margin_buffer`, `short_collateral_requirement`, `reserve_margin`, `release_margin`, `transfer_margin_to_position`, `recompute_position_collateral`), 66 tier-2 assertions across two suites including 500 randomised operations, falsified twice. `trading-contract.md` §6/§7 were wrong in four places and were amended first
 **In progress:** nothing
-**Next:** 23 Margin reservation and release — `reserve_margin`, `release_margin` and `transfer_margin_to_position` per `trading-contract.md` §6, including the six-step top-up path and the rule that a collateral move writes **no** ledger row because no cash changes. All three internal-only. The reconciliation identities in §12 are what the tests assert
+**Next:** 24 Order execution function — `place_order`, `execute_order`, `cancel_order`, `reset_account`. F23's functions are what it sequences: retire the reservation **before** writing the trade and position rows, call `transfer_margin_to_position(id, fill_price, charges)` for a fill that opens a short and write back the two figures it returns, and call `recompute_position_collateral(user, symbol, new_qty)` **before** writing a reduced quantity
 
 **Not verified at this checkpoint, and deliberately so:** the build-plan's own Phase 3 criterion is that "ticking works unattended for a full market session". Today is Saturday 2026-08-22 — the market is closed and `pg_cron`'s window is weekdays only, so no unattended session can be observed. The Realtime half *was* verified: a production build, ten client-side navigations across all six terminal pages, exactly one `SUBSCRIBED` and no channel churn, then a live `UPDATE` reaching the browser. The unattended-session half rides along with F16's pending items on Monday
 
@@ -71,7 +71,7 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 ### Phase 4 — Trading Engine
 
 - [x] 22 Charge calculator
-- [ ] 23 Margin reservation and release
+- [x] 23 Margin reservation and release
 - [ ] 24 Order execution function
 - [ ] 25 Order ticket UI
 - [ ] 26 Place order end to end
@@ -103,6 +103,16 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 
 ## Key Decisions
 
+- **A short reserves its collateral up front, not its notional.** `trading-contract.md` §6 reserved 100% of notional while collateral at fill is 120% plus closing charges, so delta was positive by a fifth of the trade on *every* short — which made §7's short-entry `MARGIN_RELEASE` row a block, falsified §6's own claim that the top-up is the gap-up case, and let a user place a maximum-size short that its own fill then rejected. A short-opening MIS sell now reserves the §6 formula evaluated at the reservation price; buys are unchanged. (F23)
+
+- **`transfer_margin_to_position` runs *before* F24 writes the trade and the position**, taking `(p_order_id, p_fill_price, p_actual_charges)` and returning `(ok, required_collateral, entry_reference_price)`. On a shortfall it releases the whole reservation itself and returns `ok = false`, so nothing needs unwinding — the alternative was a raised exception and a plpgsql subtransaction rollback. It also computes the gross `entry_reference_price`, making the collateral module the only writer of that concept and §12.11 structural. (F23)
+
+- **A fourth function, `recompute_position_collateral`, owns the release side.** Transfer is the block path, recompute is the release path, and both call one `IMMUTABLE` `short_collateral_requirement` — which is what makes §6's "one collateral formula, everywhere" true structurally rather than by care. Without it F23's partial-cover tests would assert against code that does not exist until F24. (F23)
+
+- **An MIS sell crossing zero reserves on the shorting excess only** — `quantity − max(net_quantity, 0)`, with estimated charges for the whole order. The quantity that closes an existing long carries no obligation. The contract covered neither this case nor `delta` on a fill that *adds* to a short, whose §6 step 2 formula double-blocked; both are amended. (F23)
+
+- **A short entry writes three ledger rows, not two.** §6 steps 4 and 6 beat §7's summary table: `MARGIN_RELEASE +|delta|`, `MARGIN_RELEASE +actual_charges`, `CHARGES −actual_charges`. Same net cash, but the paired charge rows make "estimated charges are never paid twice" auditable in the ledger rather than netted away inside the function. (F23)
+
 - **The charge parity test gets a fourth, read-only test tier.** Proving the TypeScript estimator and the Postgres calculator equal needs both in one process, and none of the three tiers can host it: tier 1 has no database, tier 2 is SQL-only, and tier 3 is gated behind `ALLOW_RACE_TESTS` because it commits. `calculate_charges` writes nothing, so `pnpm test:parity` runs read-only and joins `test:all` — putting it in tier 3 would leave the feature's headline test skipped inside a green run. (F22)
 
 - **Postgres holds the charge rates in one `IMMUTABLE` `charge_rates()` composite, not in literals or a table.** Postgres inlines immutable SQL functions, so there is no per-call cost when F24 calls the calculator inside `execute_order` under a row lock, and the parity test can read the rates directly rather than only inferring them from results. A table would have made the function `STABLE` and put a lookup inside the locked transaction. (F22)
@@ -112,13 +122,3 @@ Expect `fetched_at` advancing every minute across the 10 demanded symbols, every
 - **The index strip is a derived composite over our own priced universe, never a named index.** NIFTY 50 and BANK NIFTY have no row, quote or simulator anchor anywhere and Yahoo is deferred to the end of the project, so the strip reports an equal-weighted mean of per-symbol day change % with its **constituent count on screen** — a breadth statistic, labelled as one. Simulating an index level instead would have invented data in the most prominent chrome on the page. (F21)
 
 - **Dashboard money tiles jump on the anchor and never tween.** `architecture.md` contradicted itself: line 517 listed the dashboard summary tiles as an ambient surface that may interpolate, while the invariant says every monetary total renders the server anchor. The invariant wins and line 517 is corrected in the same change — the index strip stays ambient. Tiles still recompute from anchors so they do not sit frozen beside a ticking watchlist, display-only exactly as F19's `dayChange`. (F21)
-
-- **Day's P&L is `Σ quantity × (ltp − prev_close)` over holdings**, recorded in `trading-contract.md` §9, which defined realised and unrealised P&L but never this one. It is the same basis as the watchlist's change column, so the two cannot disagree on screen, and it needs no read of `trades` — which matters because no trading engine exists to write them yet. (F21)
-
-- **The dashboard aggregates holdings only; MIS positions stay on `/positions`.** Portfolio value is `available_cash + Σ(quantity × ltp)`, invested is `Σ(quantity × average_price)` with charges already capitalised per §8, and overall P&L is unrealised only. Kite's own split, and it keeps the intraday sign handling out of a donut that would have to draw a negative slice. (F21)
-
-- **A backgrounded tab dispatches no focus events and runs no animation frames.** `element.focus()` sets `document.activeElement` and fires nothing — not even native listeners attached directly. Three features have now lost time to this family: F17's frozen exit animation, F19's frozen `requestAnimationFrame`, F20's focus handlers. Check `document.visibilityState` **first** whenever an automated browser check says an interaction does nothing. (F20)
-
-- **One ticking clock provided from the terminal layout, so the badge and every price read the same instant.** Otherwise a row can render DELAYED under a badge saying STALE — a contradiction the visitor can see. **F17's pill keeps its own timer**, because it deliberately lands *on* the session boundary rather than up to a heartbeat late. (F20)
-
-- **Only symbols currently rendering a price feed the data-source badge.** `worstSource([])` returns STALE by design, so counting the symbols with no quote row would pin the badge to STALE on account of absent data and say nothing about the prices actually visible. A row showing an em dash makes no claim and cannot be dishonest. (F20)
