@@ -6,6 +6,7 @@ import {
   getMarketStatus,
   isTradingDay,
   isTradingSession,
+  istDayStart,
   isTradingSessionAt,
   loadHolidays,
   marketStatusAt,
@@ -233,5 +234,39 @@ describe('the database-backed wrappers', () => {
       'MARKET_CALENDAR_UNAVAILABLE'
     )
     await expect(loadHolidays(fakeClient({}))).rejects.toThrow('MARKET_CALENDAR_UNAVAILABLE')
+  })
+})
+
+describe('istDayStart', () => {
+  /**
+   * The Orders page filters "today" against a `timestamptz`, and today on a
+   * terminal for an Indian exchange is an IST calendar day. A UTC boundary would
+   * roll the page over at 05:30 IST — mid-morning, an hour before the pre-open —
+   * which is why these three cases are boundaries rather than a spot check.
+   */
+  it('returns the IST midnight at the start of the given instant', () => {
+    expect(istDayStart(ist('2026-09-03', '18:19:20')).toISOString()).toBe(
+      ist('2026-09-03', '00:00:00').toISOString()
+    )
+  })
+
+  it('is idempotent exactly at IST midnight', () => {
+    const midnight = ist('2026-09-03', '00:00:00')
+    expect(istDayStart(midnight).toISOString()).toBe(midnight.toISOString())
+  })
+
+  it('keeps the previous IST day one minute before midnight', () => {
+    expect(istDayStart(ist('2026-09-03', '23:59:59')).toISOString()).toBe(
+      ist('2026-09-03', '00:00:00').toISOString()
+    )
+  })
+
+  it('follows the IST date, not the UTC one, when the two differ', () => {
+    // 21:00 UTC on the 2nd is 02:30 IST on the 3rd. A UTC-based implementation
+    // would answer with the 2nd here and quietly hide every order placed between
+    // IST midnight and 05:30.
+    const instant = new Date('2026-09-02T21:00:00Z')
+    expect(instant.toISOString().slice(0, 10)).toBe('2026-09-02')
+    expect(istDayStart(instant).toISOString()).toBe(ist('2026-09-03', '00:00:00').toISOString())
   })
 })

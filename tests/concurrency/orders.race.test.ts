@@ -176,3 +176,96 @@ test('two concurrent execute_order calls on one order produce exactly one fill',
   )
   expect(identity.rows[0]?.matches).toBe(true)
 })
+
+/**
+ * A cancel arriving at the moment the matcher fills.
+ *
+ * The two writers reach the same order from opposite directions and both take
+ * `select … for update` on it. Whichever loses the lock is handed the freshly
+ * committed row at READ COMMITTED and must notice the status has moved — which
+ * is the whole reason both functions re-read it *after* the lock rather than
+ * before.
+ *
+ * Without that re-read the loser proceeds on the row it thought it had: a cancel
+ * after a fill releases margin the fill has already retired, driving
+ * `used_margin` negative and breaking §12.3, and a fill after a cancel writes a
+ * trade against a reservation that no longer exists.
+ *
+ * The two calls have to be genuinely simultaneous, for the same reason the test
+ * above does: run them in sequence and the second one simply selects a row that
+ * is no longer OPEN, which passes whether or not the guard is there.
+ */
+test('cancelling as the order fills yields exactly one outcome', async () => {
+  const [a, b] = await connectPair()
+  clients = [a, b]
+
+  await seedRaceInstrument(a, 100)
+  const trader = await seedTrader(a, 50000)
+
+  await a.query(`select set_config('request.jwt.claim.sub', $1, false)`, [trader])
+  const placed = await a.query<{ order_id: string }>(
+    `select order_id from public.place_order($1, 'BUY', 'LIMIT', 'CNC', 100, 120.00)`,
+    [RACE_SYMBOL]
+  )
+  const orderId = placed.rows[0]!.order_id
+
+  // `cancel_order` reads auth.uid(), so the claim has to be set on b's session
+  // too — it is a different backend and shares none of a's configuration.
+  await b.query(`select set_config('request.jwt.claim.sub', $1, false)`, [trader])
+
+  const fill = a.query(`select public.execute_order($1)`, [orderId]).then(
+    () => 'filled' as const,
+    (error: Error) => error.message
+  )
+  const cancel = b
+    .query<{ cancel_order: boolean }>(`select public.cancel_order($1)`, [orderId])
+    .then(
+      (result) => result.rows[0]!.cancel_order,
+      (error: Error) => error.message
+    )
+
+  const [fillResult, cancelResult] = await Promise.all([fill, cancel])
+
+  // Neither raises. The loser returns quietly — a concurrent transition is an
+  // ordinary outcome, not a fault.
+  expect(fillResult).toBe('filled')
+  expect(typeof cancelResult).toBe('boolean')
+
+  const state = await a.query<{
+    status: string
+    blocked: string
+    trades: string
+    used: string
+  }>(
+    `select o.status,
+            o.blocked_margin::text as blocked,
+            (select count(*)::text from public.trades where order_id = o.id) as trades,
+            (select f.used_margin::text from public.funds f where f.user_id = o.user_id) as used
+       from public.orders o where o.id = $1`,
+    [orderId]
+  )
+  const row = state.rows[0]!
+
+  // Exactly one outcome, and the trade count follows from it. A cancelled order
+  // with a trade, or a completed order with none, is the double-transition this
+  // test exists to catch.
+  expect(['COMPLETE', 'CANCELLED']).toContain(row.status)
+  expect(row.trades).toBe(row.status === 'COMPLETE' ? '1' : '0')
+
+  // §12.8: whichever way it went, the order is out of OPEN and holds no margin.
+  expect(Number(row.blocked)).toBe(0)
+
+  // §12.3, and the assertion that catches a double release: this order is the
+  // account's only one and holds nothing, so used_margin must be exactly zero.
+  // A second release would drive it negative.
+  expect(Number(row.used)).toBe(0)
+
+  const identity = await a.query<{ matches: boolean }>(
+    `select f.available_cash = (
+              select coalesce(sum(l.amount), 0) from public.fund_ledger l where l.user_id = f.user_id
+            ) as matches
+       from public.funds f where f.user_id = $1`,
+    [trader]
+  )
+  expect(identity.rows[0]?.matches).toBe(true)
+})

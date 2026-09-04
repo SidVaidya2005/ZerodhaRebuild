@@ -85,3 +85,37 @@ export type PlacedOrder = {
   /** The fill price on a COMPLETE; the limit on an OPEN. */
   price: number | null
 }
+
+/**
+ * The two order-mutation inputs.
+ *
+ * Both carry only an id and, for a modify, the terms — never a user id. The
+ * functions behind them derive the caller from `auth.uid()`, which is what makes
+ * their grant to `authenticated` safe, so a user id in this shape would be a
+ * field the database is obliged to ignore.
+ */
+export const cancelOrderSchema = z.object({
+  orderId: z.uuid('That is not an order.'),
+})
+
+export type CancelOrderInput = z.infer<typeof cancelOrderSchema>
+
+/**
+ * Only `quantity` and `limitPrice` are modifiable — `trading-contract.md` §4.
+ * Changing side, product, type or symbol is a different order with a different
+ * pre-flight and a different reservation, and cancel-and-replace says so
+ * honestly.
+ *
+ * The `limitPrice` refinement cannot be written here as it is on
+ * `placeOrderSchema`, because this shape does not carry the order type: whether
+ * a price belongs is a fact about the stored row, so `modify_order` decides it
+ * under the row lock and returns `NOT_MODIFIABLE`. What is checked here is the
+ * shape of the value itself.
+ */
+export const modifyOrderSchema = z.object({
+  orderId: z.uuid('That is not an order.'),
+  quantity,
+  limitPrice: price.nullable().optional(),
+})
+
+export type ModifyOrderInput = z.infer<typeof modifyOrderSchema>

@@ -14,6 +14,7 @@
 
 export {
   getMarketStatus,
+  istDayStart,
   isTradingDay,
   isTradingSession,
   isTradingSessionAt,

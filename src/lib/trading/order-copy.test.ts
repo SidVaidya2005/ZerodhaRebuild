@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  MODIFY_ERROR_COPY,
+  MODIFY_REASONS,
   ORDER_ERROR_COPY,
   REJECTION_CODES,
   orderPlacedMessage,
   toFaultCode,
+  toModifyCode,
   toRejectionCode,
 } from '@/lib/trading/order-copy'
 import type { PlacedOrder } from '@/lib/trading/schemas'
@@ -101,5 +104,37 @@ describe('orderPlacedMessage', () => {
 
   it('groups a large quantity the Indian way', () => {
     expect(orderPlacedMessage({ ...base, quantity: 100000 })).toContain('1,00,000 TCS')
+  })
+})
+
+describe('modify copy', () => {
+  /**
+   * Asserted over the map rather than case by case, exactly as the rejection
+   * codes are: a sixth reason added in SQL and forgotten here would otherwise
+   * reach the screen as a bare identifier, and no per-case test would notice
+   * because no per-case test would exist for it.
+   */
+  it('has copy for every reason modify_order can return', () => {
+    for (const reason of MODIFY_REASONS) {
+      expect(MODIFY_ERROR_COPY[reason]).toBeTruthy()
+    }
+  })
+
+  it('degrades an unknown reason to UNKNOWN rather than rendering it', () => {
+    expect(toModifyCode('SOMETHING_NEW')).toBe('UNKNOWN')
+    expect(toModifyCode(null)).toBe('UNKNOWN')
+  })
+
+  it('passes through every reason it does know', () => {
+    for (const reason of MODIFY_REASONS) {
+      expect(toModifyCode(reason)).toBe(reason)
+    }
+  })
+
+  // The whole point of the subtransaction in `modify_order` is that a failed
+  // modify changes nothing. If the copy did not say so, the user's only safe
+  // assumption would be that their order is now in an unknown state.
+  it('tells the user the order is untouched when the new terms are unaffordable', () => {
+    expect(MODIFY_ERROR_COPY.INSUFFICIENT_FUNDS).toContain('unchanged')
   })
 })

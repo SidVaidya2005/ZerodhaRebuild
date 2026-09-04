@@ -92,7 +92,8 @@ Rules:
         remainder released)           back to cash)
 ```
 
-- `OPEN` is the only status from which any transition is legal. `execute_order` and `cancel_order` both re-check it **after** taking the row lock and return without writing if it has changed.
+- `OPEN` is the only status from which any transition is legal. `execute_order`, `cancel_order` and `modify_order` all re-check it **after** taking the row lock and return without writing if it has changed.
+- **A modify is not a transition.** `modify_order(order_id, quantity, limit_price)` changes the terms of an order that stays `OPEN`, so it retires nothing: it *re-reserves*, by releasing the existing reservation, writing the new terms, and calling `reserve_margin` again. Only `quantity` and `limit_price` are modifiable — every other field would be a different order with a different pre-flight. If the new terms cannot be covered the whole attempt is rolled back and the order keeps its original terms **and** its original reservation; the modify never leaves an order resting with less margin than its terms require.
 - Every terminal transition retires the order's reservation **exactly once**, but not always the same way:
   - `REJECTED`, `CANCELLED`, and any `COMPLETE` that consumes cash (a buy, or a sell closing a long) → `release_margin(order_id)`, returning the whole reservation to `available_cash`.
   - A `COMPLETE` that **opens a short** → `transfer_margin_to_position(order_id)`. The obligation survives the fill, so the collateral must not become spendable.
@@ -217,6 +218,7 @@ Exact rows written per event. Every row moves `available_cash`; `balance_after` 
 | Signup / reset | `SIGNUP_CREDIT` `+100000.00` |
 | Order placed (buy, or short sell) | `MARGIN_BLOCK` `−reservation` |
 | Order cancelled or rejected | `MARGIN_RELEASE` `+reservation` |
+| Order modified | `MARGIN_RELEASE` `+old reservation`, then `MARGIN_BLOCK` `−new reservation`. Two rows, not one netted row, because both are real movements of `available_cash` and the pair is what makes the re-reservation auditable — the same reasoning as the paired charge rows on a short entry. A modify that cannot be covered writes **nothing**: the attempt is rolled back whole |
 | Buy fill (CNC or MIS long) | `MARGIN_RELEASE` `+reservation`, `BUY_DEBIT` `−trade_value`, `CHARGES` `−charges` |
 | Sell fill closing a long | `SELL_CREDIT` `+trade_value`, `CHARGES` `−charges` |
 | Short entry (MIS sell, no existing long) | Three rows, per §6 steps 4 and 6: `MARGIN_RELEASE` `+|delta|`, then `MARGIN_RELEASE` `+charges` and `CHARGES` `−charges`. Net `+(reservation − collateral − charges)`. The paired charge rows are not noise — they are what makes "estimated charges are never paid twice" auditable in the ledger instead of netted away inside the function. The collateral moves to `positions.blocked_margin` and writes **no ledger row**, because no cash moves. **No proceeds are credited** — a short's cash settles on cover, not on entry. |

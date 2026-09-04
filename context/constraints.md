@@ -383,3 +383,11 @@ The chronological record of how the build got here lives in `build-journal.md`; 
 - **Moving or renaming a route file leaves a stale `.next/types/validator.ts`** that fails `pnpm typecheck` *and* `pnpm build` on a module that no longer exists. `rm -rf .next` clears it. Every feature that moves a route will hit this. (F03)
 
 - **Next treats leading-underscore directories as private and does not route them.** A `__boom/` test page builds clean and simply does not exist — an absence that reads as a routing bug. (F08)
+
+## Order entry
+
+- **Margin shown in the ticket is position-aware, and proven exactly equal to the engine at tier 4.** `src/lib/trading/margin.ts` implements §6's reservation rules over the user's actual holding and MIS position; the naive notional figure would tell a user covering a 100-share short that they need ₹10,029 where the engine reserves ₹29. The build-plan's "within one paisa" is corrected to exact — the looser bar hides the drift the test exists to catch. (F25)
+
+- **The ticket fetches the symbol's holding and position when it opens**, one RLS-scoped query, rather than server-rendering the whole portfolio into every terminal page. Fresh by construction — it reflects a fill from another tab — and one round trip per open rather than per keystroke. The margin panel shows a skeleton while it resolves. (F25)
+
+- **F25 ends at an injected `onSubmit` prop; F26 supplies the action.** The whole ticket becomes tier-1 testable with no database, and the double-submit guard is a UI concern that belongs in the ticket either way. F25's verify item becomes "double-clicking calls the handler exactly once", which is what it was testing. (F25)

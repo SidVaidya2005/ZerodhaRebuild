@@ -2,12 +2,20 @@
 
 import { createClient } from '@/lib/supabase/server'
 import {
+  CANCEL_FAILED_COPY,
+  MODIFY_ERROR_COPY,
   ORDER_ERROR_COPY,
   toFaultCode,
+  toModifyCode,
   toRejectionCode,
   type OrderErrorCode,
 } from '@/lib/trading/order-copy'
-import { placeOrderSchema, type PlacedOrder } from '@/lib/trading/schemas'
+import {
+  cancelOrderSchema,
+  modifyOrderSchema,
+  placeOrderSchema,
+  type PlacedOrder,
+} from '@/lib/trading/schemas'
 import { revalidateTerminal } from '@/server/revalidate'
 import type { ActionResult } from '@/types/domain'
 
@@ -121,4 +129,92 @@ export async function placeOrder(input: unknown): Promise<ActionResult<PlacedOrd
       price: filled?.average_price ?? null,
     },
   }
+}
+
+/**
+ * Cancels an open order.
+ *
+ * `cancel_order` shipped in F24 and is unchanged: it locks the row, re-checks
+ * `status = 'OPEN'`, releases the reservation before the status moves — the
+ * ordering `orders_no_margin_unless_open` forces — and returns a bare boolean.
+ *
+ * That boolean is genuinely one answer covering three states: already filled,
+ * already cancelled, and not the caller's. Telling them apart here would mean
+ * reading the row back to find out, and the third case must not be
+ * distinguishable anyway — it would confirm that another user's id is real.
+ */
+export async function cancelOrder(input: unknown): Promise<ActionResult<{ orderId: string }>> {
+  const parsed = cancelOrderSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: { code: 'VALIDATION_ERROR', message: 'That is not an order.' } }
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('cancel_order', { p_order_id: parsed.data.orderId })
+
+  if (error) {
+    console.error('[orders.cancelOrder]', error)
+    return { ok: false, error: { code: 'UNKNOWN', message: MODIFY_ERROR_COPY.UNKNOWN } }
+  }
+
+  if (data !== true) {
+    return { ok: false, error: { code: 'NOT_OPEN', message: CANCEL_FAILED_COPY } }
+  }
+
+  // A release moves available_cash and used_margin, which the terminal chrome
+  // renders on every page — not only the row that disappeared from this one.
+  revalidateTerminal()
+  return { ok: true, data: { orderId: parsed.data.orderId } }
+}
+
+/**
+ * Changes the quantity and limit price of an order still open.
+ *
+ * The whole outcome is decided in `modify_order`: it re-reserves through
+ * `release_margin` + `reserve_margin` inside a subtransaction, so a modify that
+ * cannot be covered rolls back whole and the order keeps both its original terms
+ * and its original reservation. This action parses, calls, and maps — it never
+ * computes a requirement, because §6 is written in exactly one place.
+ *
+ * `error` here means a fault. Every business outcome, including
+ * `INSUFFICIENT_FUNDS`, comes back as a normal `(ok, reason)` row.
+ */
+export async function modifyOrder(input: unknown): Promise<ActionResult<{ orderId: string }>> {
+  const parsed = modifyOrderSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: { code: 'VALIDATION_ERROR', message: MODIFY_ERROR_COPY.VALIDATION_ERROR },
+    }
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('modify_order', {
+    p_order_id: parsed.data.orderId,
+    p_quantity: parsed.data.quantity,
+    // Omitted rather than null, matching the SQL default and `placeOrder` above.
+    // `modify_order` refuses a price that does not match the stored order type,
+    // because only the locked row knows what that type is.
+    p_limit_price: parsed.data.limitPrice ?? undefined,
+  })
+
+  if (error) {
+    console.error('[orders.modifyOrder]', error)
+    return { ok: false, error: { code: 'UNKNOWN', message: MODIFY_ERROR_COPY.UNKNOWN } }
+  }
+
+  const row = data?.[0]
+  if (!row) {
+    console.error('[orders.modifyOrder] modify_order returned no row', { data })
+    return { ok: false, error: { code: 'UNKNOWN', message: MODIFY_ERROR_COPY.UNKNOWN } }
+  }
+
+  if (row.ok !== true) {
+    const code = toModifyCode(row.reason)
+    return { ok: false, error: { code, message: MODIFY_ERROR_COPY[code] } }
+  }
+
+  // The re-reservation moved cash and margin in both directions.
+  revalidateTerminal()
+  return { ok: true, data: { orderId: parsed.data.orderId } }
 }

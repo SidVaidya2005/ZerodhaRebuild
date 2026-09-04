@@ -99,3 +99,58 @@ export function orderPlacedMessage(order: PlacedOrder): string {
     ? `${action} placed — ${shares}, waiting to fill.`
     : `${action} placed — ${shares} at ${formatCurrency(order.price)}, waiting to fill.`
 }
+
+/**
+ * `modify_order`'s reasons — `trading-contract.md` §4, and a closed set for the
+ * same reason `REJECTION_CODES` is one. A modify declines in four distinct ways
+ * and only one of them is about money, so collapsing them into a bare `false`
+ * would leave the user guessing which.
+ */
+export const MODIFY_REASONS = [
+  'NOT_FOUND',
+  'NOT_OPEN',
+  'NOT_MODIFIABLE',
+  'INVALID_QUANTITY',
+  'INSUFFICIENT_FUNDS',
+] as const
+
+export type ModifyReason = (typeof MODIFY_REASONS)[number]
+
+/** Every code the two order-mutation actions can report. */
+export type OrderMutationCode = ModifyReason | 'VALIDATION_ERROR' | 'UNKNOWN'
+
+/**
+ * `NOT_FOUND` covers three states deliberately — the order does not exist, it is
+ * not the caller's, or it was deleted by a reset — because distinguishing them
+ * would confirm to a caller that some other user's id is real. The copy names
+ * the only recovery the user has.
+ *
+ * `INSUFFICIENT_FUNDS` says the order is untouched, because that is the fact the
+ * user most needs and the one they cannot see: the modify rolled back whole, so
+ * the original order is still working at its original terms.
+ */
+export const MODIFY_ERROR_COPY: Readonly<Record<OrderMutationCode, string>> = {
+  NOT_FOUND: 'That order is no longer available. Refresh to see its current state.',
+  NOT_OPEN: 'That order has already been filled or cancelled, so it can no longer be changed.',
+  NOT_MODIFIABLE: 'Only the quantity and limit price of an open limit order can be changed.',
+  INVALID_QUANTITY: 'That quantity is not a whole number of shares.',
+  INSUFFICIENT_FUNDS:
+    'Not enough funds for the new terms. The order is unchanged and still working at its original ones.',
+  VALIDATION_ERROR: 'Check the new order details.',
+  UNKNOWN: 'That change did not go through. Try again.',
+}
+
+/**
+ * `cancel_order` returns a bare boolean, so a `false` is genuinely one answer
+ * covering already-filled, already-cancelled, and not-yours. The copy says what
+ * all three have in common rather than guessing which.
+ */
+export const CANCEL_FAILED_COPY =
+  'That order could not be cancelled — it may have already been filled. Refresh to see its current state.'
+
+/** Narrows `modify_order`'s `reason` onto the set that has copy. */
+export function toModifyCode(reason: string | null): OrderMutationCode {
+  return (MODIFY_REASONS as readonly string[]).includes(reason ?? '')
+    ? (reason as ModifyReason)
+    : 'UNKNOWN'
+}

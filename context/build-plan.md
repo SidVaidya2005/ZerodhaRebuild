@@ -1683,27 +1683,98 @@ normal return.
 
 ### 27 Orders page
 
+The page that makes an order inspectable after it is placed, and the two write paths that act on one
+still open. Most of the engine beneath it is already proven: `cancel_order` shipped in F24, locks the
+row and re-checks `status = 'OPEN'`, and `orders` is already in the `supabase_realtime` publication.
+What this feature owns is `modify_order` — which `code-standards.md`'s grant list names and F24
+deliberately left unbuilt — and the surface over both.
 
+**Scope is today's orders plus every `OPEN` order, whatever its age.** An open order has to escape the
+date filter or a Friday limit order vanishes from the terminal on Monday while still holding margin.
+F34 covers completed *trades*, not orders, so a strict today-only page would leave a cancelled order
+with no surface at all; the open-order exemption is what makes the today filter safe.
 
 **UI:**
 
-- Tabs: Open, Executed, Cancelled, Rejected, with counts.
-- Columns: time, symbol, side, product, type, quantity, price, average price, status.
-- Cancel and modify actions on open orders; rejection reason shown inline.
-- Empty state per tab.
+- Tabs — Open, Executed, Cancelled, Rejected — with counts, over the shadcn `tabs` primitive.
+  `COMPLETE` is the Executed tab: this build fills all-or-nothing, so there is no partial state.
+- Columns: time, symbol, side, product, type, quantity, price, average price, status. Rejection
+  reason inline on a rejected row, mapped through `ORDER_ERROR_COPY` — never the bare code.
+- **No LTP column.** The live price would drag in `PriceWithProvenance` and the `serverProvenance`
+  server-render fallback the Phase 3 checkpoint filed, for a figure the build plan never asked for.
+- Cancel is a one-click button with a toast; Modify is a dialog, because it has fields to collect.
+  Both render only on an `OPEN` row.
+- Empty state per tab, and it distinguishes "nothing today" from "nothing ever" — the date filter
+  makes those different states, and one message for both would read as a broken query.
+- **No `loading.tsx` or `error.tsx`.** No terminal segment has them yet; F36 owns that pass, and one
+  route having them would be the inconsistency.
 
 **Logic:**
 
-- `cancelOrder` and `modifyOrder` Server Actions; modify is limited to quantity and limit price on open orders.
-- Realtime subscription on `orders` so a background fill moves the row between tabs live.
+- **`modify_order(p_order_id, p_quantity, p_limit_price)` returning `(ok, reason)`** — `security
+  definer`, `set search_path = ''`, deriving the user from `auth.uid()` and taking no user id.
+  Locks the order, then: not found or not the caller's → `(false,'NOT_FOUND')`, the same answer
+  either way so it declines to confirm an id exists, as `cancel_order` already does; `status <>
+  'OPEN'` → `(false,'NOT_OPEN')`; a limit price against a MARKET order → `(false,'NOT_MODIFIABLE')`.
+  Granted to `authenticated`, revoked from `public, anon`.
+- **The re-reservation reuses `reserve_margin` rather than recomputing the requirement.**
+  `release_margin` → write the new terms → `reserve_margin`, wrapped in a plpgsql block with an
+  `EXCEPTION` clause. A failed re-reservation raises inside that block, rolling back only that block,
+  and the function returns `(false,'INSUFFICIENT_FUNDS')` normally — the order keeps its original
+  terms *and* its original reservation. Computing the requirement here instead would put a second
+  copy of §6 in the codebase, which `constraints.md` rules out. The release must come first:
+  `reserve_margin` returns early when `blocked_margin <> 0`.
+- **No third writer of `blocked_margin`.** `architecture.md`'s invariant names `release_margin` and
+  `transfer_margin_to_position` as the only functions that zero it and forbids any other path writing
+  the column; a delta-adjust inside `modify_order` would be exactly that.
+- **Modify never executes inline.** `place_order` does not execute a resting LIMIT order either —
+  F28's matcher owns crossing, and a modified limit that already crosses fills on the next tick.
+- `istDayStart(at)` exported from `_shared/market-hours.ts`, built on the `toIst`/`fromIst` pair
+  already proven exact against `Intl` across the year, and re-exported by `src/lib/market/market-hours.ts`.
+  The page query is one call: `.or('status.eq.OPEN,placed_at.gte.<istDayStart>')`.
+- `cancelOrder` and `modifyOrder` Server Actions in the standard shape — parse, client, RPC — both
+  calling `revalidateTerminal()` on success. `cancel_order`'s bare `false` becomes `{ok:false}` with
+  copy: already filled, already cancelled and not yours are one answer to the user.
+- **Realtime on `orders` calls `router.refresh()`; it does not patch client state.** Orders are server
+  state and never enter Zustand, per `library-docs.md`, and a refresh also picks up the cash and
+  margin the same fill moved. The channel filters `user_id=eq.<uuid>` server-side — RLS scopes
+  delivery already, but an unfiltered subscription still has every row delivered to and authorised
+  for every subscriber. `event: '*'`, so a new order from another tab arrives as well as a fill.
 
 **Verify:**
 
-- A limit order appears under Open immediately after placement.
-- Cancelling moves it to Cancelled and releases the blocked margin, restoring `available_cash` to the paisa.
-- Cancelling an order at the same moment the matcher fills it yields exactly one outcome, not a cancelled-and-filled order.
-- Modifying an executed order is refused.
-- A fill triggered by the cron job moves the row from Open to Executed with no reload.
+- Test (tier 2, `12-modify-order.sql`): raising the quantity blocks more margin and lowers
+  `available_cash` by exactly the difference; lowering it returns exactly the difference. Identities
+  1, 3 and 8 hold after each.
+- Test (tier 2): a modify beyond the balance returns `(false,'INSUFFICIENT_FUNDS')` and leaves
+  `orders.quantity`, `orders.blocked_margin`, `available_cash` and `used_margin` byte-identical. The
+  subtransaction is the whole point of the feature, so this is the case that falsifies it.
+- Test (tier 2): a modify on a `COMPLETE` order is refused, and another user's order id returns
+  `(false,'NOT_FOUND')`.
+- Test (tier 1): every modify reason has copy, asserted over the map rather than case by case, so a
+  fifth reason added in SQL cannot ship unmapped.
+- Test (tier 1): `istDayStart` across an instant just after IST midnight, one just before, and one
+  where the UTC date and the IST date differ.
+- **Test (tier 3): cancelling at the moment the matcher fills.** Session A holds the order lock
+  through `execute_order` and commits while session B's `cancel_order` blocks on it — exactly one
+  outcome, a `COMPLETE` with one trade or a `CANCELLED` with none, never both. **Falsifiability: re-run
+  against a build with `cancel_order`'s post-lock status guard removed and confirm it fails.**
+- Browser: a limit order appears under Open immediately after placement, with its blocked margin
+  already gone from the header's available cash.
+- Browser + SQL: cancelling moves it to Cancelled and restores `available_cash` to the paisa — read
+  `funds` for that id rather than trusting the screen.
+- Browser: modifying an executed order is refused — the action is absent on a non-open row, and the
+  RPC refuses it directly.
+- Browser: a fill moves the row from Open to Executed with no reload —
+  `performance.getEntriesByType('navigation').length` stays 1. **Read `document.visibilityState`
+  first**: a backgrounded tab is why three features have lost time to a working interaction that
+  reported as dead.
+- DOM at 375px: the scroll region carries `tabIndex` and a label, the table a `<caption>` and `scope`
+  on every header. Lighthouse cannot audit a terminal page — it follows the redirect and scores the
+  login page.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and
+  `pnpm format:check` all exit zero.
+
 
 ### 28 Limit order matching
 

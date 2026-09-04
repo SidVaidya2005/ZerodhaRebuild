@@ -69,6 +69,21 @@ function isWeekend(date: string): boolean {
   return day === 0 || day === 6
 }
 
+/**
+ * The instant IST midnight last occurred, at or before `at`.
+ *
+ * The Orders page needs it to mean "today" in a query against a `timestamptz`
+ * column, and "today" on a terminal for an Indian exchange is an IST calendar
+ * day — a UTC day boundary would roll the page over at 05:30 IST, mid-morning.
+ *
+ * Built on the same `toIst`/`fromIst` pair the session logic uses rather than on
+ * `Intl` or a timezone library, so there is one notion of IST in the codebase and
+ * `market-hours.test.ts` already proves the offset exact across the year.
+ */
+export function istDayStart(at: Date): Date {
+  return fromIst(toIst(at).date, 0)
+}
+
 /** A day NSE trades: a weekday that is not in the published calendar. */
 export function isTradingDay(date: string, holidays: HolidaySet): boolean {
   return !isWeekend(date) && !holidays.has(date)
