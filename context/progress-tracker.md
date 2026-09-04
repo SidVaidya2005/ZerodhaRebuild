@@ -2,7 +2,8 @@
 
 > **Role:** Live build status — what's done, in progress, and next.
 > **Read at the start of every session**; **update after every completed feature.**
-> **Relates to:** mirrors `build-plan.md` exactly; evicts old decisions to `constraints.md`.
+> **Relates to:** mirrors the phase files under `build-plan/` exactly; evicts old decisions to `constraints.md`.
+> **Read first every session** — it names the current feature, which is what decides the rest of what gets read.
 
 Any AI agent reading this should immediately know what is done, what is in progress, and what is next.
 
@@ -16,18 +17,10 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Current Status
 
-**Phase:** Phase 4 — Trading Engine (Phase 2 remains open on F16 and its own checkpoint; see the note below — the live session they were waiting on has since happened)
-**Last completed:** 26 Place order end to end — `placeOrder`, the copy module behind it, and the toast layer. Rejections, the resting LIMIT path, revalidation and both toasts verified in the browser; **the filled path waits for a live session**. Found and fixed a harness defect on the way: the first real order ever placed made `pnpm test:db` fail permanently, because `02-bootstrap.sql` empties `instruments` and nine tables reference it
-**In progress:** 27 Orders page — **built, and green on every check that does not need a browser.** `modify_order` is applied to the linked project, `database.ts` regenerated. `lint`, `typecheck`, `build`, `format:check`, tier 1 (312), tier 2 (17 files / 447 assertions, including the new 29-assertion `12-modify-order.sql`), tier 3 (7) and tier 4 (36) all exit zero. Both falsifiability checks ran and behaved: the subtransaction-less `modify_order` fails exactly the four state assertions in section D, and `cancel_order` without its post-lock status guard fails the new race test 3 runs out of 3. **What remains is the five browser items only** — see Next
-**Next:** finish F27's browser pass, which needs **an open market** — three of the five items begin by placing an order, and `place_order` returns `MARKET_CLOSED` outside 09:15–15:30 IST. Earliest window is **Monday 2026-09-07**. It also needs the Claude browser extension connected in Brave, which it was not on 2026-09-04. The five: a limit order under Open with its margin already out of the header's cash; cancel restoring `available_cash` to the paisa, read from `funds` rather than the screen; modify absent and refused on an executed row; a fill moving Open→Executed with `performance.getEntriesByType('navigation').length` still 1 (**read `document.visibilityState` first**); and the 375px DOM check. F26's filled path is the same errand on the same account, so do both in one session
-
-**Three verify items are still open, and the date they were blocked on has passed.** F16's last two, the Phase 2 checkpoint's "prices land on a schedule", and F26's filled path were all parked on "Monday 2026-08-24, first session after 09:15 IST". That was ten days ago and roughly seven sessions have run since, so the first two are now answerable from history rather than by waiting — only F26's fill still needs an open session. The account has ₹69,964.38 free, so there is room to place one. Check with one query:
-```sql
-select max(fetched_at) as newest, count(*) filter (where provider_ts is null) as simulator_rows,
-       array_agg(distinct provider) as providers from quotes;
-select status, return_message, start_time from cron.job_run_details order by start_time desc limit 10;
-```
-Expect `fetched_at` advancing every minute across the 10 demanded symbols, every row `SIMULATOR` with a null `provider_ts`, and runs a minute apart with no 401s. Then replace the `PENDING` line in F16's journal entry, tick F16, compact the journal and close the phase
+**Phase:** Phase 4 — Trading Engine. **F16 and the Phase 2 checkpoint stay open by decision — F16 is being finished at the very end of the project, so do not tick it.** Two of its verify items are nonetheless now evidenced (2026-09-04): 300 consecutive one-minute ticks refreshing 10 symbols, the gate flipping to `MARKET_CLOSED` exactly at 15:30 IST, 4,803 cron runs since 2026-08-21 all `succeeded` with no 401s, and zero provenance violations in `quotes` — recorded in the journal so the evidence is not gathered twice
+**Last completed:** 26 Place order end to end, plus a context-docs restructure (`4.00.02`): `context/` is now read in tiers, cutting session start from >100k tokens to ~36k. `pnpm context:cost` guards the always-read budget and the tracker/constraints split
+**In progress:** 27 Orders page — **green on every check that does not need a browser.** `modify_order` applied, `database.ts` regenerated, all four test tiers and every gate exit zero, and both falsifiability checks behaved. **Five browser items remain**
+**Next:** F27's browser pass needs **an open market** — three of the five start by placing an order, and `place_order` returns `MARKET_CLOSED` outside 09:15–15:30 IST. Earliest **Monday 2026-09-07**, with the Claude browser extension connected in Brave. The five: a limit order under Open with its margin already out of the header's cash; cancel restoring `available_cash` to the paisa, read from `funds` rather than the screen; modify absent and refused on an executed row; a fill moving Open→Executed with `performance.getEntriesByType('navigation').length` still 1 (**read `document.visibilityState` first**); and the 375px DOM check. **F26's filled path is the same errand on the same account — do both in one session**
 
 ---
 
