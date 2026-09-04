@@ -6,34 +6,56 @@ Google-authenticated users trade ~200 stocks with ₹1,00,000 of simulated cash.
 
 ## Project context lives in `context/`
 
-The `context/` folder is the source of truth for this project. **Read it before writing any code**, and keep it current as you work. Read in this order:
+The `context/` folder is the source of truth for this project. It is **not** read whole at session
+start — reading all of it costs well over 100k tokens, most of it about work already shipped or
+libraries this session will not touch. Read the always list, then pull what the session's work
+actually triggers.
 
-1. **`context/project-overview.md`** — what the product is, who it's for, what's in and out of scope.
-2. **`context/architecture.md`** — stack, folder structure, system boundaries, data model, and the **invariants you must never violate**.
-3. **`context/trading-contract.md`** — how money, orders, positions and charges behave. **Authoritative for anything involving money.**
-4. **`context/code-standards.md`** — the rules every change must follow.
-5. **`context/library-docs.md`** — project-specific usage patterns for each library (read the relevant section before using one).
-   **`context/DESIGN.md`** — the visual system the tokens derive from. Read it before building any UI; the tokens themselves and the three project deviations live in `library-docs.md` → Tailwind.
-6. **`context/build-plan.md`** — the ordered phases and features to build.
-7. **`context/progress-tracker.md`** — what's done, in progress, and next.
+**Always, in this order** — start with the tracker, because what it names resolves every trigger below:
+
+1. **`context/progress-tracker.md`** — what's done, in progress, and next. **The session's brief.**
+2. **`context/constraints.md`** — what still binds from past work. Read before any decision that might conflict with it.
+3. **`context/project-overview.md`** — what the product is, who it's for, what's in and out of scope.
+4. **`context/architecture.md`** — stack, system boundaries, quote provenance, auth, and the **invariants you must never violate**. The data model and the golden patterns are in `architecture/`, on demand.
+5. **`context/code-standards.md`** — the rules every change must follow. The worked boundary patterns and the testing tiers are in `code-standards/`, on demand.
+6. **`context/trading-contract.md`** — how money, orders, positions and charges behave. **Authoritative for anything involving money**, and most features in Phases 4 and 5 are.
+
+**On demand — read when the work triggers it, not before:**
+
+| Trigger | Read |
+| ------- | ---- |
+| Starting or continuing a numbered feature | **That feature's section only**, from `context/build-plan/phase-<n>.md`. Not the whole file, and never a phase you are not in |
+| Touching the schema, writing a migration, or adding a file | `context/architecture/data-model.md` — every table, view and column, and the folder structure |
+| Writing a Server Action, a Postgres function, a Supabase client, a subscription, or the Edge Function | `context/architecture/patterns.md` (the golden patterns and the data-flow diagrams) and `context/code-standards/boundary-patterns.md` (the rules those patterns obey) |
+| Writing or debugging a test in any tier | `context/code-standards/testing.md` |
+| Using any third-party library | The one relevant section of `context/library-docs.md` — after Context7, per the authority order below |
+| Building or restyling any UI | `context/DESIGN.md`. The tokens that actually ship are in `library-docs.md` → Tailwind, and they win where the two disagree |
+| Reconstructing why one past feature went the way it did | That feature's entry in `context/build-journal.md`. **Never read this file at session start** |
+
+Every one of those files states its own rules; none of them restates an invariant. Where a reference
+file and `architecture.md`'s invariants disagree, **the invariants win** — and fix the loser in the
+same change.
+
+To read one feature without loading its whole phase:
+`grep -n '^### ' context/build-plan/phase-4.md` for the line numbers, then `sed -n '<start>,<end>p'`.
 
 **When two documents disagree**, resolve in this order — higher wins, and fix the loser in the same change rather than leaving the contradiction:
-`trading-contract.md` (money only) → `project-overview.md` scope → `architecture.md` invariants → `code-standards.md` → the current feature in `build-plan.md` → `library-docs.md` → any code example. If the conflict is not resolvable this way, stop and ask.
+`trading-contract.md` (money only) → `project-overview.md` scope → `architecture.md` invariants → `code-standards.md` → the current feature in `build-plan/phase-<n>.md` → `library-docs.md` → any code example. If the conflict is not resolvable this way, stop and ask.
 
 ## Standing rules
 
-- **Read `context/` first.** Never assume — verify against `project-overview.md` and `architecture.md`.
+- **Read the always list first**, then follow the triggers above. Never assume — verify against `project-overview.md` and `architecture.md`. Reading a document the work does not touch is a cost with no benefit; so is guessing at a rule that one of them states.
 - **Obey the invariants** in `architecture.md`. They are non-negotiable.
 - **Follow `code-standards.md`** on every change.
 - **For libraries**, follow the authority order: **Context7** (`resolve-library-id` → `query-docs`) → skills (per the project instruction file, `CLAUDE.md`/`AGENTS.md`) → `context/library-docs.md` → official docs via web search. Never write an API shape from training-data memory — if none of those answers it, ask.
-- **Stay in scope.** Build only what the current feature in `build-plan.md` requires.
+- **Stay in scope.** Build only what the current feature — in `build-plan/phase-<n>.md`, named by `progress-tracker.md` — requires.
 - **Use logical commits.** Keep each commit focused, easy to review, and in a working state whenever possible.
-- **Number every commit subject `<phase>.<feature>.<n>`**, followed by a plain lowercase imperative summary — `2.05.03 wire profile form submit`. `<phase>` and `<feature>` are the current phase and feature numbers from `build-plan.md`, feature zero-padded to two digits. `<n>` is a **counter that restarts at `01` for every feature**: read the most recent commit (`git log -1 --format=%s`) — if it carries the same `<phase>.<feature>`, add one to its `<n>`; otherwise start again at `01`. Pad `<n>` to two digits.
+- **Number every commit subject `<phase>.<feature>.<n>`**, followed by a plain lowercase imperative summary — `2.05.03 wire profile form submit`. `<phase>` and `<feature>` are the current phase and feature numbers from `progress-tracker.md`, feature zero-padded to two digits. `<n>` is a **counter that restarts at `01` for every feature**: read the most recent commit (`git log -1 --format=%s`) — if it carries the same `<phase>.<feature>`, add one to its `<n>`; otherwise start again at `01`. Pad `<n>` to two digits.
 - **Reserve feature `00` for work that isn't a numbered feature.** Phase checkpoints, chores, and fixes outside a feature use `<phase>.00.<n>` (`2.00.01 phase 2 checkpoint`); anything before Phase 1 begins uses `0.00.<n>` (`0.00.01 init repo + context docs`). Feature `00` has its own per-phase counter, restarting at `01` in each phase.
 - **Ask before committing.** Never create a commit without explicit user approval, and never add coauthors unless the user explicitly requests them.
 - **Checkpoint every phase.** Before moving to the next phase, run the relevant verification commands, inspect the phase diff, check for obvious bugs/regressions, confirm code consistency, update `progress-tracker.md`, compact `build-journal.md` (see below), and record any follow-up work.
 - **Update `progress-tracker.md`** after every completed feature — tick the box, **overwrite** Current Status (never append to it; it holds only the latest state), and add the single most important decision to the top of "Key Decisions". That section holds the 10 most recent decisions, newest first — when adding an 11th, file the oldest under its topic in `context/constraints.md`.
-- **Read `context/constraints.md`** before any decision that might conflict with past work. It is grouped by topic and holds only what still binds, so it stays short and cheap to read.
+- **Keep `context/constraints.md` short.** It is read every session, so every line costs on every session — one or two sentences per bullet, stating the rule and the reason it exists. Worked examples, transcripts and the story of how it was found belong in `build-journal.md`.
 - **Append to `context/build-journal.md`** after each completed feature — a dated entry with the decisions made, gotchas hit, and verification results. **Never read this file at session start**; it grows for the life of the project. Open it only to reconstruct one specific feature's history.
 - **Compact `build-journal.md` at phase checkpoints**, never continuously — that file's own `How this file is maintained` section carries the procedure. Never remove a constraint that still binds.
 
@@ -67,7 +89,7 @@ The `context/` folder is the source of truth for this project. **Read it before 
 ## Environment notes
 
 - **This machine has Brave, not Google Chrome.** `chrome-launcher` finds no install, so `pnpm audit:a11y` points `CHROME_PATH` at Brave's binary with a `${CHROME_PATH:-…}` override. Brave is Chromium, so Lighthouse drives it unchanged.
-- **No Docker on this machine** — and `supabase test db` needs it **even with `--db-url`**: it connects to the remote database first, then dies with `LegacyDockerRunError`. Tier 2 therefore runs through `scripts/run-pgtap.mts`. Everything runs against the **one hosted project** (`zerodha-rebuild-dev`, `kefggygenlprjzhiocai`, ap-south-1). There is deliberately no separate test project. **Tier 3 commits into that database**, so `pnpm test:race` is gated behind `ALLOW_RACE_TESTS` — see `code-standards.md` → Testing. Free projects pause after a week idle.
+- **No Docker on this machine** — and `supabase test db` needs it **even with `--db-url`**: it connects to the remote database first, then dies with `LegacyDockerRunError`. Tier 2 therefore runs through `scripts/run-pgtap.mts`. Everything runs against the **one hosted project** (`zerodha-rebuild-dev`, `kefggygenlprjzhiocai`, ap-south-1). There is deliberately no separate test project. **Tier 3 commits into that database**, so `pnpm test:race` is gated behind `ALLOW_RACE_TESTS` — see `code-standards/testing.md`. Free projects pause after a week idle.
 - **A blank white page on `localhost:3000` is HTTP 431, not a render bug.** Cookies ignore port, so other Supabase projects run on `localhost` leave `sb-<ref>-auth-token` chunks that push the request header past Node's 16 KB limit; the request dies before Next.js sees it, with no log line. Check `document.cookie.length` first. (F12)
 - **Render free tier has no cron jobs and no background workers**, and spins down after 15 minutes idle. All scheduled work lives in Supabase `pg_cron` (1-minute minimum) calling the `market-tick` Edge Function.
 - **Next.js 16 renamed `middleware.ts` to `proxy.ts`** with a named `proxy` export, running on the Node.js runtime only.

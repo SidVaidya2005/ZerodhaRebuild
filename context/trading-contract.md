@@ -371,17 +371,22 @@ finished:
 ```bash
 # Margin, cash and P&L rules.
 grep -rn "release_margin\|transfer_margin_to_position\|blocked_margin\|available_cash\|used_margin\|MARGIN_\|average_price\|realised_pnl" \
-  context/architecture.md context/code-standards.md context/build-plan.md CLAUDE.md
+  context/architecture.md context/architecture/ context/code-standards.md context/code-standards/ \
+  context/build-plan.md context/build-plan/ CLAUDE.md
 
 # Charge rules and rates. The grep above matches margin and P&L identifiers only, so it
 # structurally cannot detect drift caused by editing a *rate* in §3 — which is exactly the
 # edit feature 06 made. Sources are restated in code, so this one sweeps src/ as well.
 # `stamp duty` not `stamp` — the latter matches every `timestamptz` in the schema.
 grep -rn "charge_breakdown\|dp_charge\|dp_base\|STT\|stamp duty\|stamp_duty\|SEBI\|GST\|brokerage\|charges\.ts\|0\.00307\|15\.34" \
-  context/architecture.md context/code-standards.md context/build-plan.md context/project-overview.md \
+  context/architecture.md context/architecture/ context/code-standards.md context/code-standards/ \
+  context/build-plan.md context/build-plan/ context/project-overview.md \
   CLAUDE.md src/lib/constants.ts src/lib/trading src/components/marketing
 ```
 
 Every hit either agrees with this document or is wrong. There is no third category. The files that
-restate money rules are `architecture.md` (invariants, data model, flows), `code-standards.md`
-(the Postgres-function boundary rules and grant list), and `build-plan.md` (features 22–32).
+restate money rules are `architecture.md` and `architecture/` (invariants, data model, flows),
+`code-standards.md` and `code-standards/` (the Postgres-function boundary rules and grant list),
+and the phase files under `build-plan/`
+(features 22–32, i.e. `phase-4.md` and `phase-5.md`). The sweep passes the whole directory, so a
+phase file added later is covered without editing this section.

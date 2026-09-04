@@ -2,7 +2,7 @@
 
 > **Role:** Product source of truth — what this product is, who it's for, what's in and out of scope.
 > **Read first**, before any other context file.
-> **Relates to:** scope drives `build-plan.md`; progress tracked in `progress-tracker.md`.
+> **Relates to:** scope drives the phase files under `build-plan/`; progress tracked in `progress-tracker.md`.
 
 ## About the Project
 

@@ -57,7 +57,7 @@ export function createAdminClient() {
 ```
 
 The RSC/Server-Action client and the proxy client are the golden patterns in
-`architecture.md` → Key Patterns. Copy them verbatim; do not re-derive the cookie handling.
+`architecture/patterns.md` → Key Patterns. Copy them verbatim; do not re-derive the cookie handling.
 
 ### Google OAuth sign-in
 
@@ -270,7 +270,7 @@ npx @next/codemod@canary middleware-to-proxy .
 ```
 
 The file is `src/proxy.ts`, the export is `proxy`, and the full implementation is the golden pattern in
-`architecture.md` → Key Patterns.
+`architecture/patterns.md` → Key Patterns.
 
 **Rules:**
 

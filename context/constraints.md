@@ -1,7 +1,3 @@
-<!-- TEMPLATE (setup-context) — created EMPTY; do NOT fill at initialization.
-The agent files constraints here as they arise, deleting this banner before the first entry.
-KEEP the > **Role:** blockquote AND the "How this file is maintained" section — both are permanent documentation, not scaffolding. -->
-
 # Standing Constraints
 
 > **Role:** What still binds — the decisions and non-obvious facts that constrain future work, grouped by topic.
@@ -10,384 +6,227 @@ KEEP the > **Role:** blockquote AND the "How this file is maintained" section �
 
 ## How this file is maintained
 
-Keep this file **small**. It is the one record read on demand during ordinary work, so every line costs on every session that opens it.
-The chronological record of how the build got here lives in `build-journal.md`; this file holds only what is still true.
+This file is read **every session**, so every line costs on every session. It is the one place where
+brevity is a hard rule rather than a preference.
 
-- **Grouped by topic** (auth, data, payments…), never by date. Add a `##` topic heading when a new one is needed.
-- **Holds only what still binds:** decisions that constrain future work, and notes explaining why something non-obvious is the way it is. Never a narrative of what happened — that is the journal's job.
-- **Two things feed it,** and both are moves, never copies: the oldest bullet of `progress-tracker.md` → Key Decisions when that section would exceed 10, and each phase's still-binding decisions promoted out of `build-journal.md` at the phase checkpoint.
+- **One or two sentences per bullet:** the rule, and the reason it exists. Worked examples, measured transcripts, and the story of how something was found belong in `build-journal.md`. Git history holds anything trimmed from here.
+- **Grouped by topic** (auth, testing, theming…), never by date. Add a `##` heading when a new topic is needed.
+- **Holds only what still binds.** Never a narrative of what happened — that is the journal's job.
+- **Two things feed it,** both moves and never copies: the oldest bullet of `progress-tracker.md` → Key Decisions when that section would exceed 10, and each phase's still-binding decisions promoted out of `build-journal.md` at the phase checkpoint.
 - **Cite the feature each bullet came from,** e.g. `(F02)`.
-- **Deduped on write.** If a new constraint supersedes one already here, replace that bullet in place rather than adding a second bullet on the same topic.
-- **Never pruned by age.** Remove a constraint only when it is verifiably dead — reversed by a later decision, or the thing it describes no longer exists. `git` history holds anything removed.
-
-<!-- Filed by topic, newest bullet first within each topic:
-
-## {{TOPIC}}
-- {{CONSTRAINT}} ({{FEATURE_REF}})
-
--->
+- **Deduped on write.** A new constraint that supersedes one already here replaces that bullet in place.
+- **Removed only when verifiably dead** — reversed by a later decision, or the thing it describes no longer exists. A sequencing decision that has since been carried out is dead; a rule the code still depends on is not.
+- **Don't restate `trading-contract.md`.** It is authoritative and always read. Where a bullet exists only to explain why the contract says what it says, keep the reason and point at the section.
 
 ## Build plan sequencing
 
-- **B and S are not built in F18.** Order entry is F25/F26 and has no destination yet, so shipping the buttons would mean two dead controls — the same call F17 made for the index strip. The chart action links to `/stocks/[symbol]`, which F17 stubbed. (F18)
-
-- **Watchlist search filters a preloaded universe in `cmdk`; no trigram index, no migration, no round trip per keystroke.** 200 rows of symbol/name/exchange is ~12KB and Postgres seq-scans a table that small whatever index sits on it, so the index the build plan called for would never have been used. (F18)
-
-- **The market-status pill is F17's, and it recomputes on a timer.** F20 turns out to be only the data-source badge — its UI and Logic bullets never mention market status despite its title. Server-rendering the pill once would leave a tab open past 15:30 still reading OPEN, so the server passes the holiday set as a `string[]` and a client component calls the same pure `marketStatusAt` the tick gates on. (F17)
-
-- **The candle prune moves from F16 to F33.** Candles left F15, so retention logic here would run against a table nothing populates and its assertion would pass whether or not the rules were right. F33 builds the pipeline and its retention together. (F16)
-
-- **Candles move out of F15 to F33.** No source covers the 1D and 1W intraday ranges — bhavcopy gives one daily bar, Yahoo's chart endpoint is deferred — and F33 is the first feature that draws a chart. Designing a chart pipeline four features before anything renders one is the thing being avoided. (F15)
-
-- **`isTradingSession()` coverage moves from F14 to F15**, which is where the function and its unit tests already live. F14 proves the seeded data instead: the published dates are present, correctly dated in `Asia/Kolkata`, and described. Same precedent F13 set when its watchlist check moved here. (F14)
-
-- **F10 creates only the two enums its own tables reference** — `quote_provider` and `candle_interval`. The five that only F11's tables use are created there. Each migration then reviews against the tables it creates, and nobody reading the schema in between finds five types with no referents. (F10)
-
-- **F07 moves behind F09.** Its verify is a tier-2 pgTAP check and `support_messages` accepts anonymous writes, so it should not ship behind a one-off manual check. Phase 1 closes as 01–06 plus 08; F07 is built once the harness exists. (F08)
-
-- **Every link the public shell points at is stubbed in F03**, including `/auth/login`, so the shell's own verify can pass and F04's "every CTA routes to `/auth/login`" has a destination. Each stub is a heading plus one line of copy, replaced wholesale by F05–F08 and F12. `src/app/page.tsx` moves into `(marketing)/` in the same change — two files claiming `/` would fail the build. (F03)
-
-- **`pnpm db:push:test` does not exist and must not be reintroduced.** One database means one push command, and `pnpm supabase db push` already is it. A second script reaching the same place by a different mechanism, named for a test project that no longer exists, is a trap. (F09)
-
-- **F07 shipped as two slices under one number.** Slice A (help content) had no database dependencies; Slice B (form, migration, RLS) waited for F09. Renumbering would have invalidated every journal and commit reference already written — the precedent to follow if another feature turns out to straddle a phase boundary. (F07)
-
-- **Supabase provisioning is deferred out of F01 to Phase 2.** The free plan caps active projects at two per org and both slots already hold unrelated projects (`NextBnb` active, `SpotifyAgain` paused). F10 already calls for creating and linking the project, so F01 and F10 were duplicating the step. (F01)
-
-- **F07 (Support form) is deferred to Phase 2, after F09.** It needs a `support_messages` migration, and its verify ("signed out, a select returns zero rows") is a tier-2 pgTAP check that F09's harness makes runnable. `support_messages` accepts anonymous writes, so it is the last table that should ship behind a one-off manual check. (F01, resolved F08)
-- **There is exactly one Supabase project and it is the real one:** `zerodha-rebuild-dev` / `kefggygenlprjzhiocai` / ap-south-1, in a **separate Supabase account** (`wolfgunblood214@gmail.com's Org`) that the workspace MCP cannot see — the CLI is authenticated by personal access token instead. A second test project was created and deliberately deleted: one project is simpler to operate and cannot silently pause while the other stays warm. (F08, revised 1.00.03)
-- **Because of that, tier 3 commits into the production database.** It cannot be avoided — proving two connections cannot both fill an order requires the first to commit. Three guards are mandatory and none is optional: `ALLOW_RACE_TESTS` must be set or `pnpm test:race` exits, seeded rows carry a recognisable prefix, and `afterEach` cleanup runs on failure too. A crashed process can still strand rows; that is the accepted residual risk. (1.00.03)
-- **`TEST_DATABASE_URL` must use the session-mode pooler, port 5432.** Tier 3 holds a transaction open across statements; the transaction-mode pooler on 6543 structurally cannot express that. The port is load-bearing. (1.00.03)
+- **Candles and their retention both belong to F33**, not F15 or F16. No source covers the 1D/1W intraday ranges, and F33 is the first feature that draws a chart — retention logic before then would run against a table nothing populates. (F15, F16)
+- **F07 shipped as two slices under one number**, A in Phase 1 and B after F09. Renumbering would have invalidated every journal and commit reference already written — the precedent to follow if another feature straddles a phase boundary. (F07, F08)
+- **The market-status pill belongs to F17 and recomputes on a client timer.** Server-rendering it once would leave a tab open past 15:30 still reading OPEN, so the server passes the holiday set as a `string[]` and a client component calls the same pure `marketStatusAt` the tick gates on. (F17)
+- **Watchlist search filters a preloaded universe in `cmdk`** — no trigram index, no migration, no round trip per keystroke. 200 rows is ~12KB and Postgres seq-scans a table that small whatever index sits on it. (F18)
 
 ## Environment and secrets
 
-- **The seed authenticates as the service role, not through a test connection string.** `instruments` and `market_holidays` grant `select` only, and seeding reference data is the administrative act that key exists for — `TEST_DATABASE_URL` is named for tests and should not become load-bearing for ops. (F14)
-
-- **Environment validation is split across two modules**, deviating from `code-standards.md`'s single `env.ts`, which was updated to match. `env.ts` holds the `NEXT_PUBLIC_*` variables and is safe anywhere; `env.server.ts` carries `import 'server-only'` so a client-side import of the service-role key fails the build instead of throwing at runtime. Validation is forced at boot by `register()` in `src/instrumentation.ts`, which Next.js skips during `next build` — so `build` stays green without secrets while `dev` and `start` fail by name. (F01)
+- **There is exactly one Supabase project and it is the real one:** `zerodha-rebuild-dev` / `kefggygenlprjzhiocai` / ap-south-1, in a separate Supabase account (`wolfgunblood214@gmail.com's Org`) the workspace MCP cannot see — the CLI authenticates by personal access token instead. A second test project was created and deliberately deleted: one project cannot silently pause while the other stays warm. (F08, revised 1.00.03)
+- **`pnpm db:push:test` does not exist and must not be reintroduced.** One database means one push command, and `pnpm supabase db push` already is it. (F09)
+- **`TEST_DATABASE_URL` must use the session-mode pooler, port 5432.** Tier 3 holds a transaction open across statements, which transaction-mode pooling on 6543 structurally cannot express. The port is load-bearing. (1.00.03)
+- **The seed authenticates as the service role**, not through a test connection string. `instruments` and `market_holidays` grant `select` only, and seeding reference data is the administrative act that key exists for. (F14)
+- **Environment validation is split across two modules.** `env.ts` holds the `NEXT_PUBLIC_*` variables and is safe anywhere; `env.server.ts` carries `import 'server-only'` so a client-side import of the service-role key fails the build rather than throwing at runtime. `register()` in `src/instrumentation.ts` forces validation at boot, and Next skips it during `next build` — so `build` stays green without secrets while `dev` and `start` fail by name. (F01)
 
 ## Dependencies
 
-- **`lighthouse` added as a pinned dev dependency with `pnpm audit:a11y`.** F04's verify commits to a score above 90 and nothing could measure it; F38 needs the tooling regardless, so landing it in Phase 1 means every public page is audited as it ships rather than all at once at the end. (F04)
-
-- **TypeScript is pinned to 6.0.3 and ESLint to 9.39.5, both below their available latest.** `typescript-eslint` refuses to load against the TS 7 API, and `eslint-plugin-react` 7.37.5 crashes on ESLint 10's rule-context API — each breaks `pnpm lint` outright. Re-test both when those upstreams ship support; `architecture.md`'s version table carries the reason. (F01)
-
-- **Dependencies are pinned exactly, with no caret ranges.** Every version in `architecture.md` was verified to equal the current registry `latest`, so the table, the lockfile and `package.json` all agree and can only diverge by a deliberate edit. (F01)
+- **TypeScript is pinned to 6.0.3 and ESLint to 9.39.5**, both below latest: `typescript-eslint` refuses to load against the TS 7 API, and `eslint-plugin-react` 7.37.5 crashes on ESLint 10's rule-context API. Each breaks `pnpm lint` outright; re-test when those upstreams ship support. (F01)
+- **Dependencies are pinned exactly, with no caret ranges**, so `architecture.md`'s table, the lockfile and `package.json` can only diverge by a deliberate edit. (F01)
+- **`lighthouse` is a pinned dev dependency** behind `pnpm audit:a11y`, landed in Phase 1 so every public page is audited as it ships rather than all at once at F38. (F04)
 
 ## Auth
 
-- **The `(terminal)` layout checks the session once and pages trust it.** `dashboard/page.tsx` re-checked it itself on the argument that the proxy is only a convenience; with a layout that argument buys nothing, because every page beneath reads through RLS-scoped queries that return nothing without a session. One `getUser()` per navigation instead of one per page, and no future page can forget to check. (F17)
-
-- **No backfill: the orphan account is deleted and re-created.** `auth.users` held one row with no profile, created while verifying F12, and a trigger on `auth.users` fires only on insert. Deleting it keeps signup as the only path that ever creates an account — worth more than sparing the test account. (F13)
-
-- **Sign-in is initiated server-side, not from a browser client.** A `<form>` posts to a Server Action that calls `signInWithOAuth` and `redirect()`s to Google, so sign-in works with JavaScript disabled — the standard F07B set for the support form — and `/auth/login` stays a Server Component. The PKCE verifier is written by the same client that reads it back in the callback. `library-docs.md`'s client-side snippet is corrected in the same change. (F12)
-
-- **The signed-in identity and sign-out control live on the `/dashboard` stub, not the public header.** F12's UI bullet said "in the header", but the only header that exists is the marketing one, and reading a session there would force dynamic rendering on every public page and break `architecture.md`'s session-free `(marketing)` boundary. F17 owns the terminal avatar menu. (F12)
-
-- **The intended destination survives sign-in, guarded by a pure `safeNext()`.** The proxy redirects to `/auth/login?next=<path>`; the callback honours `next` only when it starts with a single `/`, else `/dashboard`. `src/proxy.ts` is unreachable from tier 1, so path matching and next-validation move into `src/lib/auth/routes.ts` where an open redirect and an unguarded route are both testable. (F12)
-
-- **All four Supabase clients ship in F12**, `admin.ts` included, even though nothing in this feature calls it. Its `import 'server-only'` guard is therefore observed failing a build rather than assumed — an unused module holding the RLS-bypassing key is exactly the thing that must not be trusted on sight. (F12)
+- **The `(terminal)` layout checks the session once and pages trust it.** Every page beneath reads through RLS-scoped queries that return nothing without a session, so a per-page re-check buys nothing — and no future page can forget it. (F17)
+- **Sign-in is initiated server-side, not from a browser client.** A `<form>` posts to a Server Action that calls `signInWithOAuth` and `redirect()`s, so sign-in works with JavaScript disabled and the PKCE verifier is written by the same client that reads it back. (F12)
+- **The intended destination survives sign-in, guarded by a pure `safeNext()`** in `src/lib/auth/routes.ts` — it honours `next` only when it starts with a single `/`. The logic lives there rather than in `src/proxy.ts` because the proxy is unreachable from tier 1 and an open redirect must be testable. (F12)
+- **The signed-in identity and sign-out control live in the terminal, never the public header.** Reading a session in the marketing header would force dynamic rendering on every public page and break the session-free `(marketing)` boundary. (F12)
+- **All four Supabase clients ship together, `admin.ts` included**, so its `import 'server-only'` guard is observed failing a build rather than assumed. (F12)
+- **Signup is the only path that ever creates an account.** The trigger on `auth.users` fires only on insert, so an orphaned user is deleted and re-created rather than backfilled. (F13)
 
 ## Security and RLS
 
-- **The watchlist view was filtering twice, and the untested filter was the one that mattered.** It carried both a hand-written `where user_id = auth.uid()` and `security_invoker`; falsification showed the predicate alone was holding the line, leaving the invoker setting free to be dropped with every test still green. The predicate is application code doing RLS's job, so it was removed — `security_invoker` is now load-bearing and falsifiable. (F18)
-
-- **Supabase's `verify_jwt` accepts any valid project key, including the publishable one that ships in the browser bundle.** Measured in F16 against the deployed `market-tick`: no `Authorization` header is rejected by the gateway with `UNAUTHORIZED_NO_AUTH_HEADER`, but both `sb_secret_…` and `sb_publishable_…` return 200. Any Edge Function that writes data therefore needs a second layer — a Vault-held secret compared in the handler, in constant time, before it touches the database — and must refuse rather than fall open when that secret is unset. This also answers the standing question about the newer non-JWT secret keys: they do satisfy the gateway. (F16)
-
-- **The default watchlist seeds by `INSERT…SELECT` against `instruments`.** F14 populates that table and runs *after* F13, so a plain insert would violate `watchlist_items`' foreign key today. Intersecting a fixed symbol list against whatever is seeded is FK-safe by construction, idempotent, and needs no change when F14 lands. The "populated watchlist" half of F13's original verify moves to F14, which is where it becomes checkable. (F13)
-
-- **`OPENING_BALANCE` is a literal in SQL, pinned from both sides.** The trigger cannot import `src/lib/constants.ts`, so the migration writes `100000.00` citing `trading-contract.md` §11, pgTAP asserts a bootstrapped account holds exactly that, and a tier-1 test pins the TypeScript constant. Both anchor to the contract rather than to each other, so drift fails a test instead of going unnoticed. (F13)
-
-- **Client-ID generation is its own function so exhaustion is testable.** `generate_client_id()` is separate from `handle_new_user()` because the only way to prove the 10-attempt bound is to stub it, and a pgTAP transaction can `create or replace` it and roll back. Exhaustion fails the signup loudly: a user admitted without a `funds` row would break every money function that follows. (F13)
-
-- **The money tables grant `select` and nothing else.** No client role gets insert, update or delete on `funds`, `fund_ledger`, `orders`, `trades`, `holdings` or `positions`, and no write policy exists — every write arrives through a `security definer` function. `code-standards.md` already forbade a Server Action writing them directly, so a write grant would have existed only to be unused, and F10 established that an unused grant is a hole waiting for a mistaken policy. `architecture.md`'s "policies restricting all commands" is reworded to describe what is built. (F11)
-
-- **Three of `trading-contract.md` §12's identities become CHECK constraints, not test assertions.** Identity 8 (a non-`OPEN` order holds no margin), identity 12 (longs hold no collateral and no reference price, shorts carry both) and identity 6 (`charge_breakdown` sums exactly to `charges`) are all row-level, so a violating row becomes unstorable rather than merely detectable later. The same treatment covers all-or-nothing fills, `limit_price` presence, and the zero-quantity rules. (F11)
-
-- **`revoke execute … from public` does not revoke a function from `anon` or `authenticated`.** Postgres grants EXECUTE to PUBLIC, but Supabase *additionally* sets default privileges granting it directly to `anon`, `authenticated` and `service_role`, and a revoke from PUBLIC leaves those untouched — `handle_new_user`, a `security definer` function, stayed callable by any signed-in user. Name all three roles in the revoke, and assert `has_function_privilege(...)` is false rather than assuming. Same shape as F07B's table-grant finding. (F13)
-
-- **That choice constrains F23 and F24, and `code-standards.md`'s `execute_order` example is corrected for it.** A CHECK is not deferrable and fires per statement, so setting `status = 'REJECTED'` and *then* calling `release_margin` — exactly what that example does — now fails on the first statement. The margin must be released first, or both columns written together. Making the invariant structural forces the ordering the contract already implied. (F11)
-
-- **Foreign keys cascade from `orders` and from `profiles`.** A trade without its order is meaningless and a ledger row without its order is unauditable, so an orphan is never the right outcome. `reset_account` still deletes each table explicitly per §11 — the cascade is a backstop against a future path that forgets one, not the mechanism. (F11)
-
-- **No `anon` grant on any reference table.** Every surface showing an instrument or a price is under `(terminal)`, and F04 already decided the marketing site quotes no prices. The publishable key ships in the browser bundle, so granting `anon` select would publish the entire Nifty 200 universe to anyone who reads the JavaScript. (F10)
-
-- **A table's write path ships with the feature that uses it, not with the table.** `symbol_demand` lands in F10 with RLS on and no way for a client to write it; `touch_symbol_demand`, its grant and its test all arrive together in F18. A granted, callable, untested function with no caller for eight features is the thing being avoided. (F10)
-
-- **A CHECK constraint passes when its expression evaluates to NULL, not only when it is true.** Any operand that can be NULL turns the constraint into a suggestion. Proven on `trades`: a missing `charge_breakdown` key made the identity-6 sum NULL and a trade with `charges = 999.99` against a one-key breakdown was accepted. Wrap anything nullable — `coalesce(jsonb_typeof(...), '')` — and evaluate the expression in a plain `SELECT` against malformed input before trusting it. (F11)
-
-- **The money tables grant `select` and nothing else**, with no write policy for any command. `funds`, `fund_ledger`, `orders`, `trades`, `holdings` and `positions` are written only by `security definer` functions. (F11)
-
-- **Retire an order's margin before its status leaves `OPEN`.** `orders_no_margin_unless_open` enforces §12.8 as a non-deferrable CHECK, so a statement that moves an order out of `OPEN` while `blocked_margin` is non-zero fails with 23514. Release first, or write both columns in one `UPDATE`. (F11)
-
-- **Supabase grants `anon` and `authenticated` ALL privileges on new public tables by default** — verified on `support_messages`: SELECT, UPDATE, DELETE and TRUNCATE were all present, leaving RLS as the single layer. Revoke and grant back only what a role needs. It is defence in depth, and it turns a silent "affects zero rows" into a hard `42501` that a test can actually assert. (F07B)
-- **`support_messages` carries CHECK length bounds and a honeypot, and volume abuse is deliberately unmitigated.** The publishable key ships in the browser bundle, so anyone can write to that table: bounds cap the damage per request, the honeypot stops drive-by bots, and real rate limiting is out of scope for a portfolio contact form. (F07B)
-- **On a public-write table, prefer a missing grant to a filtering policy.** If a permissive policy is ever added by mistake, the absent grant still refuses. (F07B)
-
-## Documentation upkeep
-
-- **Nothing sweeps the non-money documents, so the phase checkpoint is where they get reconciled.** `trading-contract.md` §13 has a sweep because money rules are restated in four files; the same restatement problem exists outside money with no equivalent guard. The 1.00.06 checkpoint found four statements describing a model already replaced — `supabase test db` named as the tier-2 runner in two files, and the support form still shown as react-hook-form in `architecture.md`'s stack table and data-flow diagram. Re-read the non-money docs against the code at every checkpoint. (1.00.06)
-
-## Local development environment
-
-- **A blank white page on `localhost:3000` is usually HTTP 431, not a rendering bug.** Cookies are scoped by host, ignoring port and project, so every Supabase app ever run on `localhost` piles its `sb-<ref>-auth-token` chunks into one jar. Three foreign projects left 14.8 KB there; adding this project's own 4.5 KB session crossed Node's default 16 KB `--max-http-header-size` and every request died with a zero-byte 431 **before Next.js saw it** — no error page, no log line, nothing in the server output. The same limit silently kills Server Action POSTs, so a form appears to do nothing when clicked. Diagnose with `document.cookie.length` in the browser, not by reading application code; clear the foreign `sb-*` cookies, or raise the limit with `NODE_OPTIONS=--max-http-header-size=32768`. (F12)
-
-## Verification routine
-
-- **A backgrounded tab dispatches no focus events and runs no animation frames.** `element.focus()` sets `document.activeElement` and fires nothing — not even native listeners attached directly. Three features have now lost time to this family: F17's frozen exit animation, F19's frozen `requestAnimationFrame`, F20's focus handlers. Check `document.visibilityState` **first** whenever an automated browser check says an interaction does nothing. (F20, evicted from Key Decisions at F23)
-
-- **A backgrounded tab freezes animations and dispatches no focus events.** `element.focus()` sets `document.activeElement` and fires nothing, not even native listeners bound directly to the element; CSS animations never reach `animationend`; `requestAnimationFrame` never fires. An automated browser check will therefore report that a working interaction does nothing. **Read `document.visibilityState` before believing it.** Also note hover coordinates are in screenshot space, not CSS pixels — at `innerWidth` 1640 against a 1456-wide capture they differ by ~12%, enough to hover the wrong element. (F17, F19, F20)
-
-- **Kill `next start` by PID from `lsof -nP -iTCP:3000 -sTCP:LISTEN` before trusting any post-rebuild check.** `pkill` does not reliably stop it, and the surviving process keeps port 3000 and serves the *previous* build — which has silently invalidated a verification pass twice. (F03, F04)
-
-- **`resize_window` does not change `window.innerWidth`** when the browser is in macOS fullscreen; it reports success and does nothing. Two working alternatives: measure inside a 375×760 `<iframe>`, or drive headless Brave through the `puppeteer-core` that ships under `lighthouse` and set the viewport directly. (F03, 1.00.06)
-
-- **pnpm appends extra script arguments rather than substituting `$1`.** `"audit:a11y": "lighthouse …${1:-/}"` silently audits `/` while the real path is tacked on as a stray argument — and returns a plausible score, so it looks like it worked. The script is wrapped in a shell function so appended args land in `$1`; confirm the target by reading `finalDisplayedUrl` out of the report, not by trusting the score. (F05)
-
-## Supabase CLI
-
-- **`src/types/database.ts` is in `.prettierignore`, and must stay there.** `supabase gen types` emits double quotes where the project's Prettier config wants single, so formatting the file makes `format:check` fail after every regeneration until someone remembers a manual pass — on a file CLAUDE.md says is never hand-edited. Same treatment as `next-env.d.ts`. (F10)
-
-- **`supabase migration new` can hang past a 120s timeout having already written the file.** Check before assuming it failed and re-running it. (F09)
-
-- **There are two Supabase CLIs on this machine** — Homebrew 2.111.0 and the project's pinned 2.115.0 dev dependency — and authenticating one does not authenticate the other. The CLI also stores its token where `~/.supabase/` shows nothing, so an absent file proves nothing; `supabase projects list` failing is the only reliable check. (1.00.03)
-
-## Testing
-
-- **A tier-2 suite that empties a reference table must empty its dependants too.** One database serves the app and the tests, so from F26 the product can write `orders` into it — and the first real order made `02-bootstrap.sql` fail permanently on `orders_symbol_fkey`, a red tier 2 caused by *using the product*. Nine tables reference `instruments.symbol`. The deletes all roll back, so the cost is a few lines; the alternative is a suite whose result depends on what the account happens to hold. (F26)
-
-- **The market-hours core is shared, not duplicated, so the planned drift test was never written.** An Edge Function cannot import from `src/` — but nothing stops the dependency running the other way. The pure logic moved into `supabase/functions/_shared/`, Deno reads it relatively and the app through a new `@shared/*` alias, leaving one copy that tier 1 already covers. A drift test earns its place when duplication is forced, as with the F05 stack table; here removing the duplication removes the failure instead of policing it. **`loadHolidays` and the session wrappers moved too**, once the tick was found carrying its own untested copy: they take a structurally-typed client so `_shared/` still imports nothing, and a compile-time assertion in the tier-1 suite proves a real `SupabaseClient` satisfies that shape, since nothing calls them from the app until F20. (F16)
-
-- **Market-time logic takes its calendar as an argument so tier 1 can falsify it.** `marketStatusAt(at, holidays)` and `isTradingSessionAt(at, holidays)` are pure; the database-backed wrappers load the calendar and delegate. Keeping the arithmetic separable from the read is what lets the suite drive it across boundaries, timezones and holidays with no database — and it is why F17's status pill can call the same function client-side that the tick gates on. (F15, evicted from Key Decisions at F17)
-
-- **`fetch-reference-data.mts` treats any probe failure as "this symbol does not exist".** Its own comment argues that conflating "upstream refused us" with a 404 is the bug it was rewritten to fix, but the return path files 5xx and network errors into `broken` alongside genuine 404s, and `main` then refuses to write the seed. One transient Yahoo 5xx therefore kills a ~5-minute 200-symbol run. Only 404 should be a verdict; 5xx and socket errors should retry or abort as "upstream unavailable". Found by the Phase 2 review; not fixed, because the script is manual, rare, and re-runnable. (F14)
-
-
-- **A pgTAP assertion that runs as the owning role is not filtered by RLS, so an unscoped query sees every real row in the database.** `02-constraints-money`'s cascade check ran `select user_id from public.funds` with no `where` and passed only while no account had ever been created; the first live signup broke it. Scope owner-role assertions to their fixture. Assertions under `set local role authenticated` are safe, because RLS does the scoping. (F13)
-
-- **When the function under test is deliberately unscoped, the fixture must clear the world instead** — the F13 rule above cannot be applied, because there is no `where` to add. `select_demanded_symbols` asks what the *whole system* wants refreshed, so `04-market-tick`'s deletes now empty `watchlist_items`, `symbol_demand`, `holdings`, `positions` and `orders` outright rather than for its two fixture users. Scoped deletes passed only while the one real account held an empty watchlist; backfilling it put eight extra symbols into a `bag_eq` naming two. Global deletes are safe here only because the suite always rolls back — verified by re-reading the real rows afterwards. (F16)
-
-- **`supabase test db` requires Docker even with `--db-url`.** It connects to the remote database, *then* shells out to `pg_prove` in a container and dies with `LegacyDockerRunError`. Tier 2 runs through `scripts/run-pgtap.mts` instead: pgTAP's functions return their TAP output as text rows, so executing a suite through `pg` and reading the rows *is* the TAP stream. (F09)
-- **pgTAP is enabled by a tracked migration, never created ad hoc by the runner.** With one project that installs a test-only extension into production, which is the lesser problem: an untracked extension the tests silently depend on means a fresh database looks healthy right up until the suite runs, and the migration history stops describing the database. (F09)
-- **The tier-2 runner must fail on a plan mismatch, not only on `not ok`.** A suite declaring `plan(2)` that runs one assertion has a bug, and grepping only for `not ok` calls that a pass. All three failure modes — failed assertion, plan mismatch, SQL error — were observed failing before the runner was trusted. (F09)
-- **The tier-2 runner is a standalone TypeScript script with no new runner dependency.** Node 26 strips types natively, so `node scripts/run-pgtap.mts` runs directly; `tsx` would be a dependency for one file. Keeping it out of Vitest also means nothing about tier 2 can be picked up by `pnpm test`. (F09)
-- **Tier 3 is gated by `scripts/run-race.mts`, which decides before Vitest starts**, so an un-permitted run never imports `pg` at all. Proven with both controls: guard off, the module never loads; guard on, it does. (F09)
-- **Prove a negative with a positive control.** A first attempt at that proof used `console.log` and saw nothing in *either* case, because Vitest suppresses it — an absence that looked like evidence and was not. A filesystem marker gave both halves. (F09)
-
-- **Tier 1 tests run in Vitest's node environment with no jsdom and no Testing Library.** Neither is an approved dependency, and `code-standards.md` scopes tier 1 to pure logic. Component behaviour is proven in the browser, not in a simulated DOM. (F01)
-
-- **`server-only` cannot be imported by Vitest**, which does not resolve React's `react-server` condition. It is aliased to the package's own `empty.js` in `vitest.config.mts`. This does not weaken the guard — `next build` still resolves the throwing entry for client bundles, which is what the falsifiability check exercises. (F01)
-
-## Accessibility
-
-- **A dialog opened from a store restores focus itself; Radix cannot.** Radix returns focus to its `DialogTrigger`, and a dialog mounted once and opened imperatively has none — closing the order ticket dropped focus on `<body>`. The store captures `document.activeElement` at the click and `onCloseAutoFocus` puts it back, guarding `isConnected` for a trigger whose row has since gone. Applies to every call site F31 and later add. (F25)
-
-- **Lighthouse cannot audit any `(terminal)` page.** It carries no session, follows the redirect, and reports a perfect score for `/auth/login?next=…` — a 1.00 that says nothing whatever about the page requested. `pnpm audit:a11y /dashboard` is therefore not evidence for the dashboard. Signed-in pages need either an authenticated Lighthouse run or a DOM-level check (heading order, table captions and scopes, labelled regions, every `aria-describedby` resolving). Applies to the whole of Phase 5 and to F38. (Phase 3 checkpoint)
-
-- **A Radix `DropdownMenuItem asChild` must wrap the interactive element, never a `<form>`.** The menu item handles Enter and Space by calling `event.currentTarget.click()`, and `HTMLFormElement.click()` has no default action — so a form-as-menu-item is operable by mouse (the full-width button covers it) and dead to the keyboard. Put the form outside and `asChild` on the button, which keeps the no-JavaScript submit intact. (F17, fixed at the Phase 3 checkpoint)
-
-- **Recharts stamps `role="application"` on its SVG**, which tells a screen reader to hand the chart every keystroke and breaks browse mode on a graphic with no interaction to offer. Pair every chart with a table carrying the same numbers and mark the chart `aria-hidden`. (F21)
-
-- **Reorder ships as move-up / move-down, not drag.** Drag alone is unreachable by keyboard and the project has no drag-and-drop dependency; buttons are accessible by construction and write the same `sort_order`. Drag becomes a later enhancement over the same Server Action, and F38 inherits a passing surface rather than a filed gap. (F18)
-
-- **A horizontally scrollable region needs `tabIndex={0}` and a labelled `role="region"`,** or keyboard users cannot reach the overflowing columns. At 375px that is most of the table. **Lighthouse does not audit this; axe does** — the score alone is not evidence. Applies to every table in Phase 5. (F05)
-
-- **A Lighthouse 100 is not evidence about tap targets.** Target size is not in its audit set: `/support` scored 100 while every `<summary>` was 20px tall, under WCAG 2.2's 24px minimum. Measure `getBoundingClientRect()` at 375px instead. (F07)
-
-## Theming and design tokens
-
-- **Validation errors are `text-body`, not `text-down`.** `--color-down` means "price fell" everywhere in the app, and `library-docs.md` forbids spending it on a non-price meaning — F07B's support form already renders field errors in ordinary body text. The red signal on an invalid field comes from the shadcn bridge instead: `Input` carries `aria-invalid:border-destructive`, and `--color-destructive` maps onto `--color-down` inside the bridge, which is where that mapping belongs. (F25)
-
-- **The `--color-chart-*` categorical ramp is measured, not chosen, and `chart-ramp.test.ts` holds it that way.** The original ten were invented in `library-docs.md` behind a TODO and failed when finally checked: `#3b82f6` and `#8b5cf6` scored **0.8 apart under a deuteranopia simulation**, i.e. identical to a deuteranope. Three rules bind any future edit — (1) **hue alone cannot separate ten categories** for a deuteranope, whose discriminable axis is roughly blue↔yellow, so the ramp steps *lightness* too and holds two blues and two magentas at different depths on purpose; (2) the contrast target is **`--color-surface`, not `--color-canvas`** — WCAG 1.4.11's 3:1 covers graphics required to understand content, and every chart here ships beside a table carrying the same numbers, so the real requirement is only that no arc dissolves into its card; demanding 3:1 against both a white and a near-black canvas squeezes every colour into one luminance band and produced a palette of five near-identical oranges; (3) **no green and no red at all**, not merely the two trading tokens — any green reads as "up" and any red as "down" on a trading screen. (F21)
-
-- **An aggregated slice such as `Others` must not take a ramp colour.** It is drawn last, so a naive `index % 10` hands it chart-1 once ten named slices precede it, and the legend then shows two identical swatches on different rows. It takes the neutral, which also signals correctly that it is not a position. (F21)
-
-- **`cn()` silently deletes a custom type size when it meets a colour.** tailwind-merge groups by class prefix and cannot tell `text-number-sm` (a size) from `text-ink` (a colour) — it keeps the later one and drops the other, with no error and no warning. `src/lib/utils.ts` declares the project's `--text-*` scale to `extendTailwindMerge` to fix this; **a size added to `globals.css` and not to that list starts disappearing** the moment it shares a `cn()` with a colour. (F19)
-
-- **`profiles.theme` defaults to `'dark'`, and `architecture.md` was wrong.** It said `light` while `project-overview.md` specifies a dark-default terminal and `theme-provider.tsx` ships `defaultTheme="dark"`. CLAUDE.md's conflict order puts the scope document above `architecture.md`, so the doc is corrected rather than the code bent to it. (F10)
-
-- **Every text token clears WCAG AA against canvas, surface and surface-elevated in both themes, and `theme-tokens.test.ts` computes the ratios rather than trusting the eye.** The muted tones flip in `.light` and invert relative to dark, because on a light ground "more prominent" means darker. Changing any of these values without running `pnpm test` will go red. (fixed 1.00.01)
-- **Measure a theme by loading it, not by toggling the class from script.** Elements with `transition-colors` return stale computed colours after a scripted class change, which fabricates failures that do not exist. Set the stored theme, reload, then measure. (1.00.01)
-- **`text-brand` is only legible on dark surfaces, and this is the one contrast failure still open.** Brand yellow is 11–13.5:1 as text on dark and 1.37–1.43:1 on light, because F02's invariant deliberately keeps `--color-brand` byte-identical across themes. Use `text-ink` for figures and headings; reserve brand for CTA *backgrounds* (`bg-brand text-on-brand`), which pass in both. The wordmark and inline prose links still use it — filed against F38 as a design decision. (F06, still open after 1.00.01)
-- **Lighthouse cannot audit the 404**: it returns `ERRORED_DOCUMENT_REQUEST` for any non-200 document. That page is verified structurally and by measured contrast instead. (F08)
-- **`pnpm audit:a11y` only ever sees the dark theme.** A clean Lighthouse score is not evidence the light theme is accessible; the contrast assertions in `theme-tokens.test.ts` are what cover it. (F06)
-- **The marketing footer is `bg-surface`, not DESIGN.md's always-light `#fafafa`.** `--color-surface` already *is* `#fafafa` in the light theme, so the source system's value is reached through the token rather than hardcoded, and in dark it reads as the elevation step the flat-colour-block philosophy calls for. An always-light token pair would exist only to break the theme contract. (F03)
-
-- **Mobile nav is the shadcn `sheet` primitive, and the theme toggle moves into the public header.** Sheet is Radix Dialog — already installed, no new dependency — and brings focus trap, Escape handling and scroll lock rather than leaving all three to F38. `ThemeToggle` is promoted from `app/dev/styleguide/` to `src/components/ThemeToggle.tsx` as app-level chrome; DESIGN.md's `top-nav-dark` lists it in the right-side cluster. (F03)
-
-- **`--color-muted` is for links, captions and column headers — never for running paragraph copy**, which uses `--color-body`. DESIGN.md scopes it that way, and the misuse also fails WCAG AA: muted is 3.64:1 on the dark surface and 4.34:1 on white. `--color-muted-strong` does not fix it (lighter, so it helps dark and hurts light at 2.84:1); a real fix needs `.light` overrides for both muted tokens and belongs to F38. (F04)
-- **Inline links inside a text block carry a persistent underline**, deviating from DESIGN.md's `text-link` ("no underline by default"). WCAG 1.4.1 forbids identifying a link by colour alone, and Lighthouse's `link-in-text-block` catches it. Nav and footer-column links are not in a text block and keep the hover-only underline. (F04)
-- **Every `dark:` utility is stripped from added components.** Tailwind v4's built-in `dark:` variant is bound to `prefers-color-scheme`, so a leftover `dark:` class responds to the visitor's OS rather than this project's theme class — a live bug, not inert code. A grep guard enforces it. (F02)
-
-- **Interpolated class names generate no CSS.** Tailwind scans source for complete strings, so `bg-chart-${n}` produces nothing. Write every variant out literally. (F02)
-
-## Formatting and display
-
-- **Two money formatters, not one with flags.** `formatCurrency` always renders ₹ and 2dp; `formatSignedCurrency` renders an explicit +/− where the sign carries meaning. `Intl.NumberFormat('en-IN')` produces Indian digit grouping natively, so nothing is hand-rolled. (F02)
-
-- **`formatPercent` is fixed at 2dp and is wrong for statutory rates** — it renders 0.00307% as "0.00%". `formatRate` (up to 5dp, no trailing zeros) exists for those. The two have genuinely different jobs: day change wants 2dp, a charge rate wants its real precision. (F06)
-
-## shadcn/ui
-
-- **The watchlist rail lives in the layout beside `<main>`; only the sheet trigger lives in the nav.** Exporting one component that rendered both shells put the 288px `aside` inside the header's 64px flex row, where it was clipped to the nav's height and pushed the brand, index strip and pill until they wrapped. `WatchlistRail` and `WatchlistSheet` are separate exports over one shared `WatchlistPanel`, so F18 fills the panel once and both breakpoints follow. (F17)
-
-- **The sidebar collapses via shadcn `Sheet`.** Already installed and unused, matches DESIGN.md's full-screen sheet under 768px, and F18 needs the sidebar to be a client component for search and reorder regardless. (F17)
-
-- **The shadcn CLI changed shape: `init -b radix -t next -p nova --css-variables -y`.** It now picks between Base UI, Radix and React Aria, and prompts for a style preset that `-y` does not skip. `shadcn` is also a *runtime* dependency shipping `shadcn/tailwind.css`. Resolves the standing TODO in `library-docs.md` → shadcn/ui. (F02)
-
-- **shadcn's token vocabulary is bridged onto this project's, never merged.** A `@theme inline` block maps shadcn's names onto our palette so `shadcn add` keeps working, while project code keeps using `bg-canvas` / `text-muted` / `border-hairline`. `--color-muted` is the one real collision — shadcn means a *surface* by it, this project means the *text* grey — and it is resolved in this project's favour, with `--color-muted-foreground` defined to the same value and `bg-muted` hand-fixed on add. (F02)
-
-- **Overriding a variant-prefixed utility needs the same prefix.** `SheetContent` sizes itself with `data-[side=right]:w-3/4`; a plain `w-full` loses on specificity, and `tailwind-merge` keeps both because it treats them as different keys — so the class list looks right while the width is wrong. Only measuring exposes it. (F03)
-
-- **`components/ui/table.tsx` is a Client Component.** Importing it puts a hydrated client boundary on the page, which a static marketing page must not have. Marketing tables use a plain semantic `<table>`; the terminal is where the primitive earns its cost. (F05)
-
-## Marketing site
-
-- **The support form uses React 19's form action and `useActionState`, not react-hook-form.** It submits and validates without JavaScript, matching the page it sits on, and needs no new dependency. `code-standards.md` carries the exception to its own Server Action shape rule; F25's order ticket is where react-hook-form earns its place. (F07B)
-
-- **FAQ disclosure is native `<details>`/`<summary>`.** Zero JavaScript, works before hydration and with JS off, and keyboard operation, focus handling and screen-reader semantics come from the browser instead of being hand-written and then audited at F38. (F07)
-
-- **Slice A ships no contact form at all**, pointing unanswered questions at the repository's issue tracker. A dead "coming soon" form is worse than none, and this way Slice B adds the form rather than replacing a placeholder. (F07)
-
-- **The three honesty sections divide by purpose, not by subject.** Home carries price provenance only; About carries the Real / Simulated inventory; `/legal` carries the consequences and the divergences from a real broker, because a notice has to stand alone. About links to Legal rather than restating it. (F05)
-
-- **The About page's stack table renders from a typed `src/lib/stack.ts` guarded by a bidirectional drift test.** Every `installed` row's version must equal `package.json`'s, and every `planned` row's package must be absent from it — so upgrading a dependency without touching the page fails the suite, and so does installing a planned package without flipping its row. (F05)
-
-- **Packages `architecture.md` commits to but later phases install render as "planned"**, neither omitted nor given an invented version. A third of the stack lands in Phases 2–5, and faking those versions would be the same overclaim the provenance badge exists to prevent. (F05)
-
-- **All external links go through a shared `ExternalLink`** carrying `target="_blank" rel="noreferrer"` and an sr-only "opens in a new tab". This turns the recurring `rel="noreferrer"` requirement into a grep for raw `target="_blank"` outside one file. (F05)
-
-- **The home page documents all four provenance states and says plainly that `LIVE` never appears in this build.** `PROVIDER_IS_REALTIME` is `false` for all three providers, so a quote can only badge `DELAYED`, `SIMULATED` or `STALE`. The feature tile drops "live NSE prices" for "real NSE prices, honestly delayed", and `build-plan.md`'s own F04 wording was corrected in the same change — architecture invariants outrank a build-plan feature. (F04)
-
-- **The hero is typographic — no mock terminal UI.** It is what the build plan specifies, and F40 can screenshot the finished terminal, which beats a hand-built fake and avoids maintaining a second UI until the real one exists. (F04)
-
-- **The simulator disclaimer is dismissible and remembered, with no flash.** A blocking inline script in the root layout reads `localStorage` and stamps `data-disclaimer="dismissed"` on `<html>` before first paint; CSS hides the strip off that attribute. The same technique `next-themes` already runs here, and it keeps the `(marketing)` layout a Server Component — only the close button is a client island. (F03)
-
-## Live prices and interpolation
-
-- **Dashboard money tiles jump on the anchor and never tween.** `architecture.md` contradicted itself: line 517 listed the dashboard summary tiles as an ambient surface that may interpolate, while the invariant says every monetary total renders the server anchor. The invariant wins and line 517 is corrected in the same change — the index strip stays ambient. Tiles still recompute from anchors so they do not sit frozen beside a ticking watchlist, display-only exactly as F19's `dayChange`. (F21, evicted from Key Decisions at F24)
-
-- **The index strip is a derived composite over our own priced universe, never a named index.** F17 shipped it as an empty slot because NIFTY 50, SENSEX and BANK NIFTY exist nowhere in the data — `instruments` holds 200 NSE equities, so there is no row, no quote and no simulator anchor for any of them, and SENSEX is BSE against an NSE-only scope. F21 filled it with what we can honestly compute: an equal-weighted mean of per-symbol day change across every priced active instrument, with advances/declines and **the constituent count on screen**, so "10 of 200 priced" cannot be read as the Nifty 200. Simulating an index level instead would have fabricated data in the most prominent chrome on the page. If Yahoo ever lands, `^NSEI` and `^NSEBANK` may join it — they do not replace it, and neither may be badged LIVE. (F17, F21)
-
-- **Only symbols currently rendering a price feed the data-source badge.** `worstSource([])` returns STALE by design, so counting the symbols with no quote row would pin the badge to STALE on account of absent data and say nothing about the prices actually visible. A row showing an em dash makes no claim and cannot be dishonest. (F20, evicted from Key Decisions at F23)
-
-- **One ticking clock provided from the terminal layout, so the badge and every price read the same instant.** Otherwise a row can render DELAYED under a badge saying STALE — a contradiction the visitor can see. **F17's pill keeps its own timer**, because it deliberately lands *on* the session boundary rather than up to a heartbeat late. (F20, evicted from Key Decisions at F23)
-
-- **Provenance is announced, not merely hoverable.** The facts render as `sr-only` text tied to the price by `aria-describedby` as well as in a HoverCard, because hover does not exist on touch and never fires for a screen reader — and the guarantee is that *no* price renders without accessible provenance. (F20, evicted from Key Decisions at F22)
-
-- **Only STALE prices are muted, not SIMULATED.** Every price in this build is simulated, so muting them all would render the whole terminal grey and the treatment would stop carrying information. The badge and the per-price disclosure carry that honesty instead, which is what `architecture.md` specifies. (F20, evicted from Key Decisions at F22)
-
-- **Realtime can subscribe successfully and deliver nothing, silently.** It authorises each subscriber against RLS by JWT, and `quotes` is readable by `authenticated` only; the cookie session loads asynchronously, so subscribing before the token exists opens a socket that reports `SUBSCRIBED` and never fires. Await `getSession()` and `realtime.setAuth(token)` before `.subscribe()`, and always pass a status callback so a channel cannot fail in silence. (F19)
-
-- **`touch_symbol_demand` fires twice while the mobile sheet is open.** `WatchlistPanel` is mounted by both `WatchlistRail` (always mounted, hidden at `md`) and `WatchlistSheet` (mounted on open), and each calls `useSymbolDemand`; both also render the full row list at once. Harmless — the RPC is idempotent — but it is a duplicated round trip and a duplicated subscription, and it is why the demand count moves in twos. Worth hoisting the hook when the responsive pass (F37) touches this. (F18, found at the Phase 3 checkpoint)
-
-- **Every surface that renders a price must pass provenance for the *server* row too, not only for the live one.** `PriceWithProvenance` renders an em dash whenever provenance is null — correctly, since a figure with nothing behind it must not be shown — so `provenance={live ? provenanceOf(live, now) : null}` renders every price as an em dash in the SSR HTML and on the first client render, beside a change column showing the server's own figure. Use `serverProvenance(row, now)` as the fallback. **Hydration hides this**: the screen looks right within a second, and only the `fetch()`ed HTML shows it. Applies to F30, F31 and F33, which all add price surfaces. (F20, found and fixed at the Phase 3 checkpoint)
-
-- **The Realtime channel subscribes to `UPDATE` only, so a symbol's *first* quote row does not reach an open browser.** The tick upserts, and the first tick for a never-quoted symbol is an `INSERT`; the row stays an em dash until the next server render. Acceptable today because the demand union means a watched symbol is usually already quoted, but any feature that adds a symbol to a live page needs either an `INSERT` subscription or a `router.refresh()`. (Phase 3 checkpoint)
-
-- **Never subscribe a component to `state.quotes` wholesale.** The interpolation loop rebuilds that map every animation frame, so the component re-renders ~60×/s for the ~800ms after each tick — and for anything reading `anchor`, to produce identical output. Two dashboard components did this, one of them re-rendering a Recharts SVG. Select flat maps of primitives through `useShallow`; a map of `LiveQuote` objects compares unequal every frame and fixes nothing. (Phase 3 checkpoint)
-
-- **`seedQuotes` adopts a server row that is *fresher*, not merely a row for a symbol it has not seen.** Skipping on presence alone pinned a symbol to its first-ever seed for the whole session: the store lives in the terminal layout and survives every client-side navigation, so if Realtime never delivers — no token, `CHANNEL_ERROR`, the free tier's connection cap, each of which only logs — every later server render carried a newer price that could not get in. Compare `fetchedAt`. (F19, fixed at the Phase 3 checkpoint)
-
-- **The interpolation loop tweens between server anchors and invents nothing.** `build-plan.md` described "micro-ticks ... bounded so it never drifts beyond a small band", which is bounded jitter — figures no provider reported and the market never traded at. `architecture.md` → Interpolated values says the loop "moves prices between server anchors" and outranks a build-plan feature, so the build plan was rewritten. (F19, evicted from Key Decisions at F21)
-
-- **The interpolation bound is an interval, not a band.** The displayed value always lies on the closed segment between the previous and current anchor — strictly stronger than "within X% of the anchor", and testable at tier 1 with no DOM. (F19, evicted from Key Decisions at F21)
-
-- **The watchlist's day change is recomputed on the client once prices are live.** `library-docs.md`'s `LiveQuote` carries `prevClose` for exactly this. Display-only and never persisted, so `CLAUDE.md`'s money rule — which forbids computing a figure in TypeScript *and storing it* — is untouched; a ticking price beside a frozen change would be the worse outcome. (F19, evicted from Key Decisions at F21)
-
-- **Rows read `store ?? prop` with the store seeded in an effect.** Server and first client render both use the prop, so the HTML matches — the lesson F17's `serverNow` pill taught — and a symbol with no quote keeps its em dash instead of flashing into existence. (F19, evicted from Key Decisions at F21)
-
-## Database concurrency
-
-- **`add_watchlist_item` still races on `sort_order`, and its own comment describes the wrong failure.** The header says the function exists because "two concurrent adds read the same maximum and collide on the primary key" — but the PK is `(user_id, symbol)`, so there is no collision. The real defect is that `select max(sort_order) + 1` is unserialised, so two concurrent adds take the *same* `sort_order`, which is exactly the duplicate state the migration's renumber preamble says makes reorder a silent no-op. It self-heals only once `move_watchlist_item` runs, because that renumbers first. **Not fixed** — the fix wants `select … for update` on the user's rows or an advisory lock, plus a tier-3 two-connection test, and tier 3 commits into the one real database. Whoever next touches the watchlist writes owns this. (F18, found at the Phase 3 checkpoint)
-
-## Quote providers
-
-- **Watchlists join the tick's demand union.** `symbol_demand` has no write path until F18 and nobody holds anything yet, so the union as originally specified would select zero symbols and the whole write path — upsert, provenance columns, `fetched_at` — would ship untested. A watched symbol is genuinely demanded, and this stays correct once F18 narrows refreshes to what is on screen. (F16)
-
-- **The provider seam is built but the limiter is not.** `QuoteProvider`, an ordered chain and a per-provider circuit breaker, all exercised against a deliberately failing fake — retrofitting a chain around a hardcoded simulator later is worse than the seam costing a little now, and F14 proved the breaker is the piece that matters. A token bucket in front of a local simulator caps nothing, so it waits for a provider that makes outbound requests. (F15)
-
-- **The simulator walks from a real NSE close, seeded into `instruments.prev_close` from bhavcopy.** `library-docs.md` said it seeds from "instruments reference data", but that table carried no price, so a cold start had nothing to walk from. Bhavcopy is on the reachable archive host, not the blocked API. The close is a seed and never a quote — no `NSE_BHAVCOPY` enum value, no provenance rewrite, and every price still badges `SIMULATED`. (F15)
-
-- **The universe is seeded but its Yahoo symbols are unvalidated, and the JSON records that.** `yahoo_validated: false` is written into `nifty200.json`, and the probe ships behind `--probe` rather than being deleted, because it is exactly what must run when Yahoo returns. `${symbol}.NS` remains a derivation nothing has confirmed against the live API. (F14, evicted from Key Decisions at F17)
-
-- **`quotes.prev_close` rolls at the first in-session tick, and the roll is derived from the data rather than scheduled.** `roll_previous_close()` carries each stale quote's `ltp` into its `prev_close` when the row's `fetched_at` falls on an earlier IST date than the running session. A 15:30 job would have been the obvious design and the wrong one here: Render sleeps, the cron window is coarse, and a missed run would leave the roll undone with nothing to notice. Because the condition is a fact about the row, a missed tick costs nothing and the next one repairs it, and it is idempotent within a session by construction. **`loadAnchors` must therefore prefer `quotes.prev_close` over `instruments.prev_close`** — reading the bhavcopy seed is what trapped every simulated price within 5% of the day the universe was seeded, and the seed is now only the cold-start fallback. (F16, resolving a Phase 2 review finding)
-
-- **The circuit breaker cannot open across ticks, so it does not yet do the job it was built for.** `createQuoteService` is called inside the Edge Function's request handler, and its failure counts and cool-off timestamps are closure-local — `pg_cron` fires a fresh invocation every minute, so an upstream returning 429 gets a full `failureThreshold` of fresh attempts every minute, forever. That is precisely the 40-minute Yahoo IP block F14 hit and F15 built the breaker to prevent. Harmless while the simulator is the whole chain (it cannot fail), but **the feature that adds Yahoo must move the state somewhere that survives an invocation** — module scope only helps when the isolate happens to be warm, so a table is the honest answer. Found by the Phase 2 review. (F15, F16)
-
-- **The `instruments.prev_close` invariant is narrower than F15 wrote it.** "Nothing writes it into `quotes`" was false as shipped — the tick writes it as `quotes.prev_close`, correctly, because that column means the previous session's close. What still holds absolutely: never an `ltp`, no `NSE_BHAVCOPY` value in `quote_provider`, no provenance derived from it, never rendered as a live price. Corrected by migration `20260821190523` rather than by rewriting applied history. (F15, F16)
-
-
-- **Refresh and seed are separate acts.** `fetch-reference-data.mts` hits NSE and Yahoo and rewrites committed JSON; `seed-reference.mts` reads that JSON and upserts. NSE's endpoints are undocumented — its warm-up URL already 403s from this machine while the API call succeeds — so a seed depending on them live breaks unpredictably and offers no diff to review before ~200 rows change. (F14)
-
-- **Every `yahoo_symbol` is probed at refresh time, not sampled.** `${symbol}.NS` is wrong for a few names every year, and Yahoo's clean 200/404 makes full validation cheap; the fetch refuses to write on any failure. The build plan's five-symbol spot check would sample 2.5% of the universe and miss a symbol that never quotes until Phase 5. (F14)
-
-- **Yahoo is deferred to the end of the project (decided 2026-08-21), so Phase 3 ships simulator-backed.** With Twelve Data ruled out and NSE's `quote-equity` answering 403, the simulator is the only provider that can serve a price until Yahoo returns. The chain, circuit breaker, limiter and provenance helpers are still built in F15 — a provider is dropped into a finished chain, not the other way round — and every price badges `SIMULATED`, which is honest by construction. **The thing that must not ship is that state alongside copy promising real prices:** `/` and `/about` claim "real NSE prices, honestly delayed", and either Yahoo lands or that copy is reconciled before F39 deploys. (F14)
-
-- **Twelve Data's free plan does not include NSE symbols**, so it cannot serve as the secondary quote provider for this project. Verified 2026-08-21 against the live API with a real key: `AAPL` returns a quote, `RELIANCE` with or without `exchange=NSE` returns 404 "available starting with the Grow or Venture plan". A plan entitlement, not a symbol-format issue. Its limits are 8 requests/minute and 800 credits/day, which could not sustain a one-minute tick over a ~375-minute session even with access. The chain is therefore Yahoo → simulator, and `architecture.md`'s stack table, tick diagram and quote-service example were reconciled to that at the Phase 2 checkpoint — they had still named a `TwelveDataProvider` and a `QuoteService` class that no longer exist. (F14, closed 2.00.02)
-
-- **Yahoo throttles bursts at the IP level and the block outlasts any in-process backoff.** ~16 requests/second across 200 symbols got every one back as 429 — and the first version of the probe reported that as "200 symbols do not resolve", condemning a good universe. Never treat 429 as a verdict on a symbol: only 404 means the symbol is unknown. `curl` succeeding while `node fetch` gets 429 is a recovery-window artefact, not a client difference — both are blocked together once tripped. Probe sequentially (~1.5s apart) and cache results so a throttled run resumes instead of restarting. (F14)
+- **The money tables grant `select` and nothing else** — no insert, update or delete for any client role on `funds`, `fund_ledger`, `orders`, `trades`, `holdings` or `positions`, and no write policy for any command. Every write arrives through a `security definer` function, so a write grant would exist only to be unused. (F11)
+- **Supabase grants `anon` and `authenticated` ALL privileges on new public tables by default** — verified on `support_messages`, where SELECT, UPDATE, DELETE and TRUNCATE were all present, leaving RLS as the single layer. Revoke, then grant back only what a role needs. (F07B)
+- **`revoke execute … from public` does not revoke a function from `anon` or `authenticated`.** Supabase sets default privileges granting EXECUTE directly to all three roles, so name all three in the revoke and assert `has_function_privilege(...)` is false rather than assuming. (F13)
+- **On a public-write table, prefer a missing grant to a filtering policy** — if a permissive policy is ever added by mistake, the absent grant still refuses. (F07B)
+- **No `anon` grant on any reference table.** The publishable key ships in the browser bundle, so granting `anon` select would publish the whole Nifty 200 universe to anyone who reads the JavaScript. (F10)
+- **`security_invoker` is the boundary on a view, not a hand-written predicate.** The watchlist view carried both; falsification showed the predicate was holding the line and the invoker setting was free to drop with every test still green. The predicate is application code doing RLS's job, so it was removed. (F18)
+- **Supabase's `verify_jwt` accepts any valid project key, including the publishable one in the browser bundle** — measured against the deployed `market-tick`. Any Edge Function that writes data therefore needs a second layer: a Vault-held secret compared in constant time before it touches the database, refusing rather than falling open when unset. (F16)
+- **A table's write path ships with the feature that uses it, not with the table.** A granted, callable, untested function with no caller for eight features is the thing being avoided. (F10)
+- **Three of `trading-contract.md` §12's identities are CHECK constraints, not test assertions** — identities 8, 12 and 6 are all row-level, so a violating row is unstorable rather than merely detectable later. (F11)
+- **A CHECK constraint passes when its expression evaluates to NULL**, not only when it is true, so any nullable operand turns it into a suggestion. Wrap anything nullable (`coalesce(jsonb_typeof(...), '')`) and test the expression against malformed input before trusting it. (F11)
+- **Retire an order's margin before its status leaves `OPEN`.** `orders_no_margin_unless_open` is a non-deferrable CHECK, so a statement moving an order out of `OPEN` while `blocked_margin` is non-zero fails with 23514. Release first, or write both columns in one `UPDATE`. (F11)
+- **Foreign keys cascade from `orders` and from `profiles`** as a backstop against a future path that forgets a table; `reset_account` still deletes each one explicitly per §11. (F11)
+- **Client-ID generation is its own function so exhaustion is testable.** `generate_client_id()` is separate from `handle_new_user()` because proving the 10-attempt bound requires stubbing it, and exhaustion must fail the signup loudly — a user admitted without a `funds` row would break every money function after it. (F13)
+- **`OPENING_BALANCE` is a literal in SQL, pinned from both sides.** The migration writes `100000.00` citing `trading-contract.md` §11, pgTAP asserts a bootstrapped account holds exactly that, and a tier-1 test pins the TypeScript constant — both anchored to the contract rather than to each other. (F13)
+- **The default watchlist seeds by `INSERT…SELECT` against `instruments`**, which is FK-safe by construction and idempotent whatever the seed contains. (F13)
 
 ## Charges and the trading contract
 
-- **Reported P&L and settled cash are different numbers on a short cover.** §7 settled from `average_price`, which is net of entry charges already debited at entry — so every cover debited them twice and identity 1 failed. The cash row uses the gross `entry_reference_price`; `trades.realised_pnl` keeps the net average per §9. §12.11 says what it meant: the *reported* P&L never reads the gross average. (F24, evicted from Key Decisions at F26)
+`trading-contract.md` is authoritative and always read. These record *why* it says what it says, and
+the shape of the code that implements it.
 
-- **A cover is reserved from its collateral, not from cash.** F23's `reserve_margin` asked for `quantity × price` on every buy, so a user who shorted most of their balance could not close their own position — the money was in `used_margin` by construction. Symmetric to the sell rule it already had. Found by F24 reading the cash path, not by a test. (F23, fixed at F24, evicted from Key Decisions at F26)
-
-- **`now()` ties every row a transaction writes, and three columns ordered by it.** `fund_ledger.created_at`, `trades.traded_at` and `orders.placed_at` are all `clock_timestamp()` now. Not cosmetic: F28's matcher fills every crossed order in one run and F29's square-off closes every position in one, so Reports would order a whole square-off arbitrarily. (F23, F24, evicted from Key Decisions at F26)
-
-- **`place_order` returns `(order_id, status, rejection_reason)`, not a bare uuid.** A business rejection returns normally per `code-standards.md`, so `error` is null and the Server Action cannot tell a fill from a rejection; raising instead would roll back the REJECTED row §4 and the Orders page both require. (F24, evicted from Key Decisions at F26)
-
-- **Session logic gets a second implementation, in Postgres, and tier 4 proves the two equal.** `market_state(at)` reads `market_holidays` so `place_order` can reject a MARKET order with `MARKET_CLOSED`. A Server Action gate would sit outside the security boundary — `place_order` is granted to `authenticated`, so anyone calling the RPC directly would trade at any hour. `architecture.md`'s "one place decides market time" invariant names both. (F24, evicted from Key Decisions at F26)
-
-- **`execute_order` enforces §5's staleness window**, with `market_constants()` mirroring `_shared/market-constants.ts` exactly as `charge_rates()` mirrors the rate table and tier 4 comparing them. Without it "never filled at a stale price" has no implementation anywhere and a Monday fill can execute against Friday's close. (F24, evicted from Key Decisions at F25)
-
-- **A fill crossing zero apportions its charges pro-rata by quantity**, closing share rounded and the remainder to the opening leg so the two always sum to `trades.charges`. §8 never covered the case; rejecting it would make F23's shorting-excess reservation and flip-to-long path unreachable. (F24, evicted from Key Decisions at F25)
-
-- **A short reserves its collateral up front, not its notional.** `trading-contract.md` §6 reserved 100% of notional while collateral at fill is 120% plus closing charges, so delta was positive by a fifth of the trade on *every* short — which made §7's short-entry `MARGIN_RELEASE` row a block, falsified §6's own claim that the top-up is the gap-up case, and let a user place a maximum-size short that its own fill then rejected. A short-opening MIS sell now reserves the §6 formula evaluated at the reservation price; buys are unchanged. (F23)
-
-- **`transfer_margin_to_position` runs *before* F24 writes the trade and the position**, taking `(p_order_id, p_fill_price, p_actual_charges)` and returning `(ok, required_collateral, entry_reference_price)`. On a shortfall it releases the whole reservation itself and returns `ok = false`, so nothing needs unwinding — the alternative was a raised exception and a plpgsql subtransaction rollback. It also computes the gross `entry_reference_price`, making the collateral module the only writer of that concept and §12.11 structural. (F23)
-
-- **A fourth function, `recompute_position_collateral`, owns the release side.** Transfer is the block path, recompute is the release path, and both call one `IMMUTABLE` `short_collateral_requirement` — which is what makes §6's "one collateral formula, everywhere" true structurally rather than by care. Without it F23's partial-cover tests would assert against code that does not exist until F24. (F23)
-
-- **An MIS sell crossing zero reserves on the shorting excess only** — `quantity − max(net_quantity, 0)`, with estimated charges for the whole order. The quantity that closes an existing long carries no obligation. The contract covered neither this case nor `delta` on a fill that *adds* to a short, whose §6 step 2 formula double-blocked; both are amended. (F23)
-
-- **A short entry writes three ledger rows, not two.** §6 steps 4 and 6 beat §7's summary table: `MARGIN_RELEASE +|delta|`, `MARGIN_RELEASE +actual_charges`, `CHARGES −actual_charges`. Same net cash, but the paired charge rows make "estimated charges are never paid twice" auditable in the ledger rather than netted away inside the function. (F23)
-
-- **The charge parity test gets a fourth, read-only test tier.** Proving the TypeScript estimator and the Postgres calculator equal needs both in one process, and none of the three tiers can host it: tier 1 has no database, tier 2 is SQL-only, and tier 3 is gated behind `ALLOW_RACE_TESTS` because it commits. `calculate_charges` writes nothing, so `pnpm test:parity` runs read-only and joins `test:all` — putting it in tier 3 would leave the feature's headline test skipped inside a green run. (F22, evicted from Key Decisions at F24)
-
-- **`calculate_charges` returns `(total numeric, breakdown jsonb)`.** F24 does `select … into` and inserts both `trades.charges` and `trades.charge_breakdown` with no cast on the money path. The jsonb keys are snake_case and were already pinned by the `trades_breakdown_has_all_components` CHECK constraint, so they were never this feature's choice to make. (F22, evicted from Key Decisions at F24)
-
-- **Postgres holds the charge rates in one `IMMUTABLE` `charge_rates()` composite, not in literals or a table.** Postgres inlines immutable SQL functions, so there is no per-call cost when F24 calls the calculator inside `execute_order` under a row lock, and the parity test can read the rates directly rather than only inferring them from results. A table would have made the function `STABLE` and put a lookup inside the locked transaction. (F22, evicted from Key Decisions at F24)
-
-- **The dashboard aggregates holdings only; MIS positions stay on `/positions`.** Portfolio value is `available_cash + Σ(quantity × ltp)`, invested is `Σ(quantity × average_price)` with charges already capitalised per §8, and overall P&L is unrealised only. Kite's own split, and it keeps the intraday sign handling out of a donut that would have to draw a negative slice. (F21, evicted from Key Decisions at F23)
-
-- **Day's P&L is `Σ quantity × (ltp − prev_close)` over holdings**, recorded in `trading-contract.md` §9, which defined realised and unrealised P&L but never this one. It is the same basis as the watchlist's change column, so the two cannot disagree on screen, and it needs no read of `trades` — which matters because no trading engine exists to write them yet. (F21, evicted from Key Decisions at F23)
-
-- **The watchlist's change is computed in Postgres, in a `security_invoker` view.** `CLAUDE.md` puts money arithmetic in Postgres and leaves TypeScript formatting it; the view also makes the panel one round trip and gives F30's holdings day change and F33's header the same shape to read. (F18)
-
-- **The home page quotes no charge rates.** CNC vs MIS is explained as settlement versus 15:20 square-off, shorting rules, and the no-leverage point from `trading-contract.md` §1. §3 still carries a TODO that every rate needs a dated source before F06, and a second copy on the home page would be a second thing to keep in sync. Rates live on `/pricing` only. (F04)
-
-- **`trading-contract.md` §3 had three things wrong, all corrected against Zerodha's published charge list on 2026-08-21.** NSE exchange transaction charge was stale at 0.00297% and is 0.00307%; the DP charge is ₹15.34 **inclusive** of GST, not "₹15.34 + 18% GST", which would have double-charged GST on every CNC sell; and DP is charged once per **scrip per day** in reality. This unblocks F06 and F22. (F06)
-
-- **DP is charged once per sell order in this simulator — a deliberate divergence, documented in F08's simplifications.** Per-scrip-per-day would make `execute_order` query the user's same-day trades inside the locked transaction and give account reset another case to handle. (F06)
-
-- **`charge_breakdown` splits DP into `dp_charge` ₹13.00 with its ₹2.34 GST rolled into `gst`**, so every rupee of GST sits in one key and `gst` never changes meaning depending on whether a DP charge was involved. The pricing page still shows ₹15.34, footnoted, because that is the number on a real contract note. (F06)
-
-- **GST is computed on unrounded sub-components and rounded once**, resolving an ambiguity §2 left open. §13's sweep grep is also extended to charge terms — it matched only margin and P&L identifiers, so it could not detect drift caused by a §3 rate edit. (F06)
-
-## Next.js behaviour
-
-- **The 404 carries full public chrome; the error boundary carries none.** A mistyped URL is ordinary navigation and wants the nav, so `PublicShell` is extracted and shared — an unmatched URL never enters the `(marketing)` group, so the route-group layout cannot supply it. An error means this subtree already failed, so the fallback depends on as little as possible and stays a small client bundle. (F08)
-
-- **A Server Component throw renders nothing server-side; the boundary appears on hydration.** `curl` shows an empty body and a 500, which looks like the white screen the criterion forbids — the check only means something in a browser. Proven with a temporary throwing route, then deleted. (F08)
-
-- **Moving or renaming a route file leaves a stale `.next/types/validator.ts`** that fails `pnpm typecheck` *and* `pnpm build` on a module that no longer exists. `rm -rf .next` clears it. Every feature that moves a route will hit this. (F03)
-
-- **Next treats leading-underscore directories as private and does not route them.** A `__boom/` test page builds clean and simply does not exist — an absence that reads as a routing bug. (F08)
+- **The §6 collateral formula is written in exactly one place**, `short_collateral_requirement()`, called by `reserve_margin`, `transfer_margin_to_position` and `recompute_position_collateral`. A second copy is how a partial cover starts releasing the wrong amount. (F23)
+- **`transfer_margin_to_position` owns the block path and `recompute_position_collateral` the release path.** The transfer runs *before* the trade and position rows are written and returns `(ok, required_collateral, entry_reference_price)`, so a shortfall has nothing to unwind; it is also the only writer of the `entry_reference_price` concept, which makes §12.11 structural rather than a rule to remember. (F23)
+- **A short reserves its collateral up front, not its notional.** Reserving 100% of notional against a 120%-plus-charges requirement made `delta` positive on *every* short and let a user place a maximum-size short that its own fill then rejected. (F23)
+- **A cover is reserved from its collateral, not from cash**, and an MIS sell crossing zero reserves only the shorting excess. Without both, a user who shorted most of their balance cannot close their own position. (F23, fixed at F24)
+- **Reported P&L and settled cash are different numbers on a short cover** — see §7 and §12.11. Settling from `average_price` debits the entry charges twice and fails identity 1 on every cover. (F24)
+- **A short entry writes three ledger rows, not two**, per §6 steps 4 and 6. The paired charge rows make "estimated charges are never paid twice" auditable in the ledger rather than netted away inside the function. (F23)
+- **A fill crossing zero apportions charges pro-rata by quantity**, closing share rounded and the remainder to the opening leg, so the two always sum to `trades.charges`. (F24)
+- **`place_order` returns `(order_id, status, rejection_reason)`, not a bare uuid.** A business rejection returns normally, so `error` is null and the caller could not otherwise tell a fill from a rejection; raising would roll back the `REJECTED` row §4 requires. (F24)
+- **Session logic is implemented exactly twice and proven equal at tier 4** — `_shared/market-hours.ts` and Postgres `market_state(at)`. `place_order` is granted to `authenticated`, so a gate living only in a Server Action is bypassed by anything calling the RPC directly. A third implementation is not permitted. (F24)
+- **`execute_order` enforces §5's staleness window**, with `market_constants()` mirroring `_shared/market-constants.ts` as `charge_rates()` mirrors the rate table. Without it a Monday fill can execute against Friday's close. (F24)
+- **Postgres holds the charge rates in one `IMMUTABLE` `charge_rates()` composite**, not literals or a table. Postgres inlines immutable SQL functions, so there is no per-call cost inside the locked transaction; a table would have made the function `STABLE` and put a lookup there instead. (F22)
+- **`calculate_charges` returns `(total numeric, breakdown jsonb)`** so `execute_order` inserts both `trades.charges` and `trades.charge_breakdown` with no cast on the money path. (F22)
+- **The charge parity test is its own read-only fourth tier.** Proving the TypeScript estimator and the Postgres calculator equal needs both in one process, and tier 3 is gated behind `ALLOW_RACE_TESTS` — putting it there would leave the feature's headline test skipped inside a green run. (F22)
+- **`now()` ties every row a transaction writes**, so `fund_ledger.created_at`, `trades.traded_at` and `orders.placed_at` all use `clock_timestamp()`. F28 fills every crossed order in one run and F29 closes every position in one, so Reports would otherwise order a whole square-off arbitrarily. (F23, F24)
+- **The rate table was corrected against Zerodha's published charges on 2026-08-21:** NSE transaction charge is 0.00307% (not 0.00297%), and ₹15.34 DP is *inclusive* of GST — treating it as the base double-charges GST on every CNC sell. `charge_breakdown` therefore splits `dp_charge` ₹13.00 with its ₹2.34 GST rolled into the single `gst` key. (F06)
+- **GST is computed on unrounded sub-components and rounded once.** §13's sweep grep was extended to charge terms in the same change, since it matched only margin and P&L identifiers and could not detect a rate edit. (F06)
+- **DP is charged once per sell order in this simulator** — a deliberate divergence disclosed on `/legal`. Per-scrip-per-day would make `execute_order` query the user's same-day trades inside the locked transaction. (F06)
+- **The dashboard aggregates holdings only; MIS positions stay on `/positions`.** Kite's own split, and it keeps intraday sign handling out of a donut that would have to draw a negative slice. (F21)
+- **Day's P&L is `Σ quantity × (ltp − prev_close)` over holdings**, now recorded in §9. Same basis as the watchlist's change column, so the two cannot disagree on screen, and it needs no read of `trades`. (F21)
+- **The watchlist's change is computed in Postgres, in a `security_invoker` view**, which also makes the panel one round trip and gives F30 and F33 the same shape to read. (F18)
+- **The home page quotes no charge rates.** Rates live on `/pricing` only; a second copy would be a second thing to keep in sync. (F04)
 
 ## Order entry
 
-- **Margin shown in the ticket is position-aware, and proven exactly equal to the engine at tier 4.** `src/lib/trading/margin.ts` implements §6's reservation rules over the user's actual holding and MIS position; the naive notional figure would tell a user covering a 100-share short that they need ₹10,029 where the engine reserves ₹29. The build-plan's "within one paisa" is corrected to exact — the looser bar hides the drift the test exists to catch. (F25)
+- **Margin shown in the ticket is position-aware, and proven exactly equal to the engine at tier 4.** `src/lib/trading/margin.ts` implements §6's reservation rules over the user's actual holding and position; the naive notional figure would demand ₹10,029 where the engine reserves ₹29. The build plan's "within one paisa" was corrected to exact — a looser bar hides the drift the test exists to catch. (F25)
+- **The ticket fetches the symbol's holding and position when it opens**, one RLS-scoped query, rather than server-rendering the whole portfolio into every terminal page. Fresh by construction, one round trip per open rather than per keystroke. (F25)
+## Testing
 
-- **The ticket fetches the symbol's holding and position when it opens**, one RLS-scoped query, rather than server-rendering the whole portfolio into every terminal page. Fresh by construction — it reflects a fill from another tab — and one round trip per open rather than per keystroke. The margin panel shows a skeleton while it resolves. (F25)
+- **Tier 3 commits into the production database.** It cannot be avoided — proving two connections cannot both fill an order requires the first to commit. Three guards are mandatory: `ALLOW_RACE_TESTS` must be set or `pnpm test:race` exits, seeded rows carry a recognisable prefix, and `afterEach` cleanup runs on failure too. A crashed process can still strand rows; that is the accepted residual risk. (1.00.03)
+- **`supabase test db` requires Docker even with `--db-url`** — it connects to the remote database, then shells out to `pg_prove` in a container and dies with `LegacyDockerRunError`. Tier 2 runs through `scripts/run-pgtap.mts`, which reads pgTAP's TAP output back as text rows. (F09)
+- **The tier-2 runner must fail on a plan mismatch, not only on `not ok`.** A suite declaring `plan(2)` that runs one assertion has a bug; all three failure modes were observed failing before the runner was trusted. (F09)
+- **pgTAP is enabled by a tracked migration, never created ad hoc by the runner** — an untracked extension the tests silently depend on means a fresh database looks healthy right up until the suite runs. (F09)
+- **The tier-2 runner is a standalone TypeScript script**, run by `node scripts/run-pgtap.mts`. Keeping it out of Vitest means nothing about tier 2 can be picked up by `pnpm test`. (F09)
+- **Tier 3 is gated by `scripts/run-race.mts`, which decides before Vitest starts**, so an un-permitted run never imports `pg` at all. (F09)
+- **Prove a negative with a positive control.** A first attempt used `console.log` and saw nothing in *either* case, because Vitest suppresses it — an absence that looked like evidence and was not. (F09)
+- **A pgTAP assertion running as the owning role is not filtered by RLS**, so an unscoped query sees every real row in the database. Scope owner-role assertions to their fixture; assertions under `set local role authenticated` are safe because RLS scopes them. (F13)
+- **When the function under test is deliberately unscoped, the fixture must clear the world instead.** `select_demanded_symbols` asks what the whole system wants refreshed, so `04-market-tick` empties the demand tables outright. Safe only because the suite always rolls back. (F16)
+- **Market-time logic takes its calendar as an argument so tier 1 can falsify it.** `marketStatusAt(at, holidays)` and `isTradingSessionAt(at, holidays)` are pure; the database-backed wrappers load the calendar and delegate. (F15)
+- **The market-hours core is shared, not duplicated, so the planned drift test was never written.** An Edge Function cannot import from `src/`, but the dependency runs the other way: the pure logic lives in `supabase/functions/_shared/`, read relatively by Deno and through `@shared/*` by the app. Removing the duplication removes the failure instead of policing it. (F16)
+- **Tier 1 runs in Vitest's node environment with no jsdom and no Testing Library** — neither is an approved dependency, and tier 1 is scoped to pure logic. Component behaviour is proven in the browser. (F01)
+- **`server-only` cannot be imported by Vitest** and is aliased to the package's own `empty.js` in `vitest.config.mts`. `next build` still resolves the throwing entry for client bundles, which is what the falsifiability check exercises. (F01)
+- **`fetch-reference-data.mts` treats any probe failure as "this symbol does not exist"**, so one transient Yahoo 5xx kills a ~5-minute 200-symbol run. Only 404 should be a verdict. **Not fixed** — the script is manual, rare and re-runnable. (F14)
 
-- **F25 ends at an injected `onSubmit` prop; F26 supplies the action.** The whole ticket becomes tier-1 testable with no database, and the double-submit guard is a UI concern that belongs in the ticket either way. F25's verify item becomes "double-clicking calls the handler exactly once", which is what it was testing. (F25)
+## Database concurrency
+
+- **`add_watchlist_item` still races on `sort_order`, and its own comment describes the wrong failure.** The real defect is that `select max(sort_order) + 1` is unserialised, so two concurrent adds take the *same* `sort_order` — the duplicate state that makes reorder a silent no-op until `move_watchlist_item` renumbers. **Not fixed**: the fix wants `select … for update` or an advisory lock plus a tier-3 test, and tier 3 commits into the one real database. Whoever next touches the watchlist writes owns this. (F18)
+
+## Verification routine
+
+- **A backgrounded tab freezes animations and dispatches no focus events.** `element.focus()` sets `document.activeElement` and fires nothing, not even native listeners bound directly; CSS animations never reach `animationend` and `requestAnimationFrame` never fires. **Read `document.visibilityState` before believing an automated check that says an interaction does nothing** — four features have lost time to this. Hover coordinates are also in screenshot space, not CSS pixels: at `innerWidth` 1640 against a 1456-wide capture they differ by ~12%. (F17, F19, F20)
+- **Kill `next start` by PID from `lsof -nP -iTCP:3000 -sTCP:LISTEN` before trusting any post-rebuild check.** `pkill` does not reliably stop it, and the surviving process keeps port 3000 and serves the *previous* build — which has silently invalidated a verification pass twice. (F03, F04)
+- **`resize_window` does not change `window.innerWidth`** in macOS fullscreen; it reports success and does nothing. Measure inside a 375×760 `<iframe>`, or drive headless Brave through the `puppeteer-core` that ships under `lighthouse`. (F03, 1.00.06)
+- **pnpm appends extra script arguments rather than substituting `$1`**, so `audit:a11y` silently audited `/` and returned a plausible score. The script is wrapped in a shell function; confirm the target by reading `finalDisplayedUrl` out of the report, not by trusting the score. (F05)
+
+## Local development environment
+
+- **A blank white page on `localhost:3000` is usually HTTP 431, not a rendering bug.** Cookies are scoped by host and ignore port, so every Supabase app ever run on `localhost` piles its `sb-<ref>-auth-token` chunks into one jar; crossing Node's 16 KB header limit kills the request **before Next.js sees it** — no error page, no log line. The same limit silently kills Server Action POSTs. Diagnose with `document.cookie.length`, then clear the foreign `sb-*` cookies or set `NODE_OPTIONS=--max-http-header-size=32768`. (F12)
+
+## Supabase CLI
+
+- **`src/types/database.ts` is in `.prettierignore` and must stay there.** `supabase gen types` emits double quotes where Prettier wants single, so formatting it makes `format:check` fail after every regeneration — on a file that is never hand-edited. (F10)
+- **`supabase migration new` can hang past a 120s timeout having already written the file.** Check before assuming it failed and re-running. (F09)
+- **There are two Supabase CLIs on this machine** — Homebrew 2.111.0 and the project's pinned 2.115.0 — and authenticating one does not authenticate the other. An absent `~/.supabase/` proves nothing; `supabase projects list` failing is the only reliable check. (1.00.03)
+
+## Accessibility
+
+- **Lighthouse cannot audit any `(terminal)` page.** It carries no session, follows the redirect, and reports a perfect score for the login page — a 1.00 that says nothing about the page requested. Signed-in pages need an authenticated run or a DOM-level check. Applies to all of Phase 5 and F38. (Phase 3 checkpoint)
+- **A Lighthouse 100 is not evidence about tap targets** — target size is not in its audit set. `/support` scored 100 with every `<summary>` 20px tall, under WCAG 2.2's 24px minimum. Measure `getBoundingClientRect()` at 375px. (F07)
+- **A horizontally scrollable region needs `tabIndex={0}` and a labelled `role="region"`**, or keyboard users cannot reach the overflowing columns. Lighthouse does not audit this; axe does. Applies to every table in Phase 5. (F05)
+- **A dialog opened from a store restores focus itself; Radix cannot.** Radix returns focus to its `DialogTrigger`, and a dialog mounted once and opened imperatively has none. The store captures `document.activeElement` at the click and `onCloseAutoFocus` puts it back, guarding `isConnected`. Applies to every call site F31 and later add. (F25)
+- **A Radix `DropdownMenuItem asChild` must wrap the interactive element, never a `<form>`.** The menu item handles Enter and Space with `event.currentTarget.click()`, and `HTMLFormElement.click()` has no default action — so a form-as-menu-item is mouse-operable and dead to the keyboard. (F17)
+- **Recharts stamps `role="application"` on its SVG**, which hands a screen reader every keystroke and breaks browse mode. Pair every chart with a table carrying the same numbers and mark the chart `aria-hidden`. (F21)
+- **Reorder ships as move-up / move-down, not drag.** Drag alone is unreachable by keyboard and the project has no drag-and-drop dependency; buttons write the same `sort_order`. (F18)
+
+## Theming and design tokens
+
+- **Every `dark:` utility is stripped from added components.** Tailwind v4 binds `dark:` to `prefers-color-scheme`, so a leftover `dark:` class follows the visitor's OS rather than this project's theme class. A grep guard enforces it. (F02)
+- **Interpolated class names generate no CSS.** Tailwind scans source for complete strings, so `bg-chart-${n}` produces nothing. Write every variant out literally. (F02)
+- **`cn()` silently deletes a custom type size when it meets a colour.** tailwind-merge cannot tell `text-number-sm` (a size) from `text-ink` (a colour) and drops one with no warning. `src/lib/utils.ts` declares the project's `--text-*` scale to `extendTailwindMerge`; **a size added to `globals.css` and not to that list starts disappearing.** (F19)
+- **Every text token clears WCAG AA against canvas, surface and surface-elevated in both themes**, and `theme-tokens.test.ts` computes the ratios rather than trusting the eye. The muted tones invert in `.light`, because on a light ground "more prominent" means darker. (1.00.01)
+- **`text-brand` is only legible on dark surfaces — the one contrast failure still open.** Brand yellow is 11–13.5:1 on dark and 1.37–1.43:1 on light, because F02's invariant keeps `--color-brand` byte-identical across themes. Use `text-ink` for figures and headings and reserve brand for CTA *backgrounds*. Filed against F38. (F06)
+- **`--color-muted` is for links, captions and column headers — never running paragraph copy**, which uses `--color-body`. The misuse also fails WCAG AA, and `--color-muted-strong` does not fix it; a real fix needs `.light` overrides for both and belongs to F38. (F04)
+- **Validation errors are `text-body`, not `text-down`.** `--color-down` means "price fell" everywhere in the app. The red signal comes from the shadcn bridge instead, where `--color-destructive` maps onto `--color-down`. (F25)
+- **The `--color-chart-*` ramp is measured, not chosen, and `chart-ramp.test.ts` holds it that way.** Three rules bind any edit: hue alone cannot separate ten categories for a deuteranope, so the ramp steps *lightness* too; the contrast target is `--color-surface`, not `--color-canvas`, because every chart ships beside a table carrying the same numbers; and **no green and no red at all**, since any green reads as "up" on a trading screen. (F21)
+- **An aggregated `Others` slice takes the neutral, never a ramp colour** — it is drawn last, so `index % 10` would hand it chart-1 and the legend would show two identical swatches. (F21)
+- **Inline links inside a text block carry a persistent underline**, deviating from DESIGN.md, because WCAG 1.4.1 forbids identifying a link by colour alone. Nav and footer links are not in a text block and keep hover-only. (F04)
+- **The marketing footer is `bg-surface`, not DESIGN.md's always-light `#fafafa`.** That token already *is* `#fafafa` in the light theme, so the source value is reached through the token rather than hardcoded. (F03)
+- **`profiles.theme` defaults to `'dark'`.** `architecture.md` said `light` and was corrected: the scope document specifies a dark-default terminal and outranks it. (F10)
+- **Measure a theme by loading it, not by toggling the class from script.** Elements with `transition-colors` return stale computed colours after a scripted class change, fabricating failures that do not exist. (1.00.01)
+- **`pnpm audit:a11y` only ever sees the dark theme**; the contrast assertions in `theme-tokens.test.ts` are what cover light. **Lighthouse also cannot audit the 404**, returning `ERRORED_DOCUMENT_REQUEST` for any non-200 document. (F06, F08)
+
+## Formatting and display
+
+- **Two money formatters, not one with flags.** `formatCurrency` always renders ₹ and 2dp; `formatSignedCurrency` renders an explicit +/− where the sign carries meaning. `Intl.NumberFormat('en-IN')` gives Indian digit grouping natively. (F02)
+- **`formatPercent` is fixed at 2dp and is wrong for statutory rates** — it renders 0.00307% as "0.00%". `formatRate` (up to 5dp, no trailing zeros) exists for those. (F06)
+
+## shadcn/ui
+
+- **shadcn's token vocabulary is bridged onto this project's, never merged.** A `@theme inline` block maps their names onto our palette so `shadcn add` keeps working. `--color-muted` is the one real collision — shadcn means a *surface*, this project means the *text* grey — resolved in this project's favour. (F02)
+- **The shadcn CLI needs `init -b radix -t next -p nova --css-variables -y`.** It picks between Base UI, Radix and React Aria and prompts for a style preset that `-y` does not skip. `shadcn` is also a *runtime* dependency shipping `shadcn/tailwind.css`. (F02)
+- **Overriding a variant-prefixed utility needs the same prefix.** `SheetContent` sizes itself with `data-[side=right]:w-3/4`; a plain `w-full` loses on specificity and `tailwind-merge` keeps both, so the class list looks right while the width is wrong. Only measuring exposes it. (F03)
+- **`components/ui/table.tsx` is a Client Component**, so importing it puts a hydrated boundary on the page. Marketing tables use a plain semantic `<table>`; the terminal is where the primitive earns its cost. (F05)
+- **The watchlist rail lives in the layout beside `<main>`; only the sheet trigger lives in the nav.** One component rendering both shells put the 288px `aside` inside the header's 64px flex row. `WatchlistRail` and `WatchlistSheet` are separate exports over one shared `WatchlistPanel`. (F17)
+
+## Marketing site
+
+- **The support form uses React 19's form action and `useActionState`, not react-hook-form**, so it submits and validates without JavaScript. `code-standards.md` carries the exception to its own Server Action shape rule. (F07B)
+- **FAQ disclosure is native `<details>`/`<summary>`** — zero JavaScript, and keyboard operation, focus handling and screen-reader semantics come from the browser rather than being hand-written and audited at F38. (F07)
+- **`support_messages` carries CHECK length bounds and a honeypot, and volume abuse is deliberately unmitigated.** The publishable key ships in the browser bundle, so bounds cap the damage per request and real rate limiting is out of scope for a portfolio contact form. (F07B)
+- **The three honesty sections divide by purpose, not subject.** Home carries price provenance, About carries the Real / Simulated inventory, `/legal` carries the consequences and divergences — because a notice has to stand alone. (F05)
+- **The home page documents all four provenance states and says plainly that `LIVE` never appears in this build.** `PROVIDER_IS_REALTIME` is `false` for all three providers. (F04)
+- **The About page's stack table renders from a typed `src/lib/stack.ts` guarded by a bidirectional drift test** — every `installed` row's version must equal `package.json`'s, and every `planned` row's package must be absent from it. Packages later phases install render as "planned", never with an invented version. (F05)
+- **All external links go through a shared `ExternalLink`** carrying `target="_blank" rel="noreferrer"` and an sr-only "opens in a new tab", which turns a recurring requirement into a grep for raw `target="_blank"`. (F05)
+- **The hero is typographic — no mock terminal UI.** F40 can screenshot the finished terminal, which beats maintaining a hand-built fake. (F04)
+- **The simulator disclaimer is dismissible and remembered, with no flash.** A blocking inline script stamps `data-disclaimer` on `<html>` before first paint and CSS hides the strip off that attribute — the same technique `next-themes` already uses, keeping the layout a Server Component. (F03)
+- **Mobile nav is the shadcn `sheet` primitive**, which is Radix Dialog — no new dependency, and it brings focus trap, Escape handling and scroll lock rather than leaving all three to F38. (F03)
+
+## Live prices and interpolation
+
+- **The interpolation loop tweens between server anchors and invents nothing.** The displayed value always lies on the closed segment between the previous and current anchor — strictly stronger than "within X% of the anchor", and testable at tier 1 with no DOM. The build plan's "micro-ticks bounded to a small band" was bounded jitter and was rewritten. (F19)
+- **Dashboard money tiles jump on the anchor and never tween.** `architecture.md` contradicted itself; the invariant wins — every monetary total renders the server anchor. Tiles still recompute from anchors so they do not sit frozen beside a ticking watchlist. The index strip stays ambient. (F21)
+- **Never subscribe a component to `state.quotes` wholesale.** The interpolation loop rebuilds that map every frame, so the component re-renders ~60×/s for ~800ms after each tick — one of them a Recharts SVG. Select flat maps of primitives through `useShallow`. (Phase 3 checkpoint)
+- **Rows read `store ?? prop` with the store seeded in an effect**, so server and first client render match and a symbol with no quote keeps its em dash. (F19)
+- **`seedQuotes` adopts a server row that is *fresher*, not merely one for an unseen symbol.** The store lives in the terminal layout and survives client-side navigation, so skipping on presence alone pinned a symbol to its first seed for the whole session whenever Realtime never delivered. Compare `fetchedAt`. (F19)
+- **Realtime can subscribe successfully and deliver nothing, silently.** It authorises each subscriber against RLS by JWT, and the cookie session loads asynchronously — subscribing before the token exists opens a socket that reports `SUBSCRIBED` and never fires. Await `getSession()` and `realtime.setAuth(token)` before `.subscribe()`, and always pass a status callback. (F19)
+- **The Realtime channel subscribes to `UPDATE` only, so a symbol's *first* quote row never reaches an open browser.** Any feature that adds a symbol to a live page needs an `INSERT` subscription or a `router.refresh()`. (Phase 3 checkpoint)
+- **Every surface that renders a price must pass provenance for the *server* row too, not only the live one.** `PriceWithProvenance` renders an em dash whenever provenance is null, so `provenance={live ? … : null}` renders every price as an em dash in the SSR HTML. Use `serverProvenance(row, now)` as the fallback. **Hydration hides this** — only the fetched HTML shows it. Applies to F30, F31 and F33. (F20)
+- **Provenance is announced, not merely hoverable** — the facts render as `sr-only` text tied to the price by `aria-describedby` as well as in a HoverCard, because hover does not exist on touch and never fires for a screen reader. (F20)
+- **Only STALE prices are muted, not SIMULATED.** Every price in this build is simulated, so muting them all would grey the whole terminal and the treatment would stop carrying information. (F20)
+- **Only symbols currently rendering a price feed the data-source badge.** `worstSource([])` returns STALE by design, so counting symbols with no quote row would pin the badge to STALE on account of absent data. A row showing an em dash makes no claim. (F20)
+- **One ticking clock provided from the terminal layout, so the badge and every price read the same instant** — otherwise a row can render DELAYED under a badge saying STALE. F17's market-status pill keeps its own timer, because it must land *on* the session boundary. (F20)
+- **The watchlist's day change is recomputed on the client once prices are live.** Display-only and never persisted, so the money rule — which forbids computing a figure in TypeScript *and storing it* — is untouched. (F19)
+- **The index strip is a derived composite over our own priced universe, never a named index.** NIFTY 50, SENSEX and BANK NIFTY exist nowhere in the data, so the strip shows an equal-weighted mean day change with advances/declines and the constituent count on screen. Simulating an index level would have fabricated data in the most prominent chrome on the page. (F17, F21)
+- **`touch_symbol_demand` fires twice while the mobile sheet is open**, because `WatchlistPanel` is mounted by both the rail and the sheet. Harmless — the RPC is idempotent — but worth hoisting the hook when F37 touches this. (F18)
+
+## Quote providers
+
+- **Yahoo is deferred to the end of the project, so the build ships simulator-backed** and every price badges `SIMULATED`, which is honest by construction. **What must not ship is that state alongside copy promising real prices:** either Yahoo lands or `/` and `/about` are reconciled before F39 deploys. (F14)
+- **Twelve Data's free plan carries no NSE symbols at all** — verified against the live API with a real key. A plan entitlement, not a symbol-format issue, and its 800 credits/day could not sustain a one-minute tick even with access. The chain is Yahoo → simulator. (F14)
+- **Yahoo throttles bursts at the IP level and the block outlasts any in-process backoff.** Never treat 429 as a verdict on a symbol — only 404 means the symbol is unknown. Probe sequentially (~1.5s apart) and cache results so a throttled run resumes. (F14)
+- **The circuit breaker cannot open across ticks, so it does not yet do its job.** `createQuoteService` is called inside the request handler and its counts are closure-local, so a fresh invocation every minute gets a full `failureThreshold` of fresh attempts forever. Harmless while the simulator is the whole chain; **the feature that adds Yahoo must move that state to a table.** (F15, F16)
+- **The provider seam is built but the limiter is not.** A token bucket in front of a local simulator caps nothing, so it waits for a provider that makes outbound requests. (F15)
+- **The simulator walks from a real NSE close, seeded into `instruments.prev_close` from bhavcopy.** The close is a seed and never a quote — no `NSE_BHAVCOPY` provider value, no provenance derived from it, never rendered as a live price. (F15, narrowed F16)
+- **`quotes.prev_close` rolls at the first in-session tick, derived from the row rather than scheduled.** A 15:30 job would leave the roll undone whenever a run was missed; because the condition is a fact about the row, the next tick repairs it and it is idempotent within a session. **`loadAnchors` must therefore prefer `quotes.prev_close` over `instruments.prev_close`** — reading the seed trapped every simulated price within 5% of the day the universe was seeded. (F16)
+- **Watchlists join the tick's demand union.** `symbol_demand` had no write path until F18, so the union as originally specified would have selected zero symbols and shipped the whole write path untested. (F16)
+- **Refresh and seed are separate acts.** `fetch-reference-data.mts` hits NSE and Yahoo and rewrites committed JSON; `seed-reference.mts` reads that JSON and upserts. NSE's endpoints are undocumented, so a seed depending on them live breaks unpredictably and offers no diff to review. (F14)
+- **Every `yahoo_symbol` is probed at refresh time, not sampled**, and the fetch refuses to write on any failure. A five-symbol spot check would sample 2.5% of the universe and miss a symbol that never quotes until Phase 5. The universe is seeded with `yahoo_validated: false` recorded in the JSON, because `${symbol}.NS` remains a derivation nothing has confirmed live. (F14)
+
+## Next.js behaviour
+
+- **Moving or renaming a route file leaves a stale `.next/types/validator.ts`** that fails `pnpm typecheck` *and* `pnpm build` on a module that no longer exists. `rm -rf .next` clears it. (F03)
+- **A Server Component throw renders nothing server-side; the boundary appears on hydration.** `curl` shows an empty body and a 500, which looks like a white screen — the check only means something in a browser. (F08)
+- **Next treats leading-underscore directories as private and does not route them**, so a `__boom/` test page builds clean and simply does not exist. (F08)
+- **The 404 carries full public chrome; the error boundary carries none.** An unmatched URL never enters the `(marketing)` group, so `PublicShell` is extracted and shared; an error means the subtree already failed, so its fallback depends on as little as possible. (F08)
+
+## Documentation upkeep
+
+- **Nothing sweeps the non-money documents, so the phase checkpoint is where they get reconciled.** `trading-contract.md` §13 has a sweep because money rules are restated in four files; the same restatement problem exists outside money with no equivalent guard. Re-read the non-money docs against the code at every checkpoint. (1.00.06)
+- **`context/` is read in tiers, not whole.** Reading every document at session start cost >100k tokens, most of it phases already shipped and libraries the session never touched. `CLAUDE.md` carries the always list and the trigger table; the cost of adding a line to an always-read file is paid by every future session. (4.00.02)
