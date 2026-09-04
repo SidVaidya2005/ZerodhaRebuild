@@ -14,8 +14,15 @@ insert into public.instruments (symbol, name, yahoo_symbol) values
   ('RELIANCE', 'Reliance Industries Limited', 'RELIANCE.NS')
   on conflict (symbol) do nothing;
 
+-- Idempotent for the same reason the insert above it is: this suite runs against
+-- the one hosted project, where market-tick has already written a row for every
+-- seeded symbol. A bare insert here passed only while `quotes` was empty.
 insert into public.quotes (symbol, ltp, provider, provider_ts) values
-  ('RELIANCE', 1402.50, 'YAHOO', now() - interval '2 minutes');
+  ('RELIANCE', 1402.50, 'YAHOO', now() - interval '2 minutes')
+  on conflict (symbol) do update
+    set ltp = excluded.ltp,
+        provider = excluded.provider,
+        provider_ts = excluded.provider_ts;
 
 -- ── The trigger owns updated_at, not the writer ─────────────────────────────
 -- Run as the owner, because no client role may update this table at all.
