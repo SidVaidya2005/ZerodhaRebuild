@@ -18,9 +18,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 4 — Trading Engine. **F16 and the Phase 2 checkpoint stay open by decision — F16 is being finished at the very end of the project, so do not tick it.** Two of its verify items are nonetheless evidenced (2026-09-04) and recorded in the journal so the evidence is not gathered twice
-**Last completed:** 29 MIS auto square-off. `square_off_mis` exits every open MIS position at 15:20 IST through a real order and `execute_order`, and its tier 3 race test is now **proven falsifiable** (`4.29.03`): it goes red on B's `faulted` counter against a build with the position re-read removed, and the intermittent timeout is gone — six consecutive clean runs, three times faster. Two real bugs were found and fixed on the way; see Key Decisions
+**Last completed:** 29 MIS auto square-off. `square_off_mis` exits every open MIS position at 15:20 IST through a real order and `execute_order`. Its position re-read (`4.29.01`) turned out to invert the lock order every other caller of `execute_order` uses, so the sweep deadlocked against a user's own order on the same position and left it open past 15:20 — found by reading the two functions' lock sequences, reproduced deterministically, and fixed by taking the `funds` row first. Both tier 3 square-off tests are proven falsifiable against the specific migration each one guards
 **In progress:** 27 Orders page (three of five browser items pass) and 28 Limit order matching (the live fill is unproven). Both are blocked on the same thing and nothing else
-**Next:** Monday 2026-09-07 in market hours — F27's last two browser items, F26's filled path and F28's live fill, one errand on one account. Then the Phase 4 checkpoint: `/code-review` over the phase diff, journal entries for F27–F29 (none written yet), and the `40P01` decision recorded under F29 in `build-plan/phase-4.md`
+**Next:** Monday 2026-09-07 in market hours — F27's last two browser items, F26's filled path and F28's live fill, one errand on one account. Then the Phase 4 checkpoint: `/code-review` over the phase diff and the §12 identity reconciliation. The remaining `40P01` question is narrowed to a counter split and deferred to Phase 5, recorded under F29 in `build-plan/phase-4.md`
 
 ---
 
@@ -94,7 +94,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
-- **A guard's race test must assert what the sweep *returns*, not only what it left behind.** `squareoff.race.test.ts` passed against a build with `square_off_mis`'s position re-read removed because the two builds leave an identical end state: without the re-read the second run deadlocks with the first over the `funds` row, and `exception when others` swallows the `40P01` as a fault, so the naked short is never written. Asserting `(1, 0)` and `(0, 0)` is what makes the test falsifiable. (F29)
+- **`square_off_mis` locks the user's `funds` row before the position row, matching `execute_order`.** It holds the position lock across the `execute_order` call it makes, and `execute_order` takes funds first — so the re-read added in `4.29.01` made this the one path in the system that inverted the pair, and any concurrent order on the same user and symbol closed an ABBA cycle. The sweep lost, `exception when others` counted the `40P01` as a fault, and the position stayed open past 15:20 against an invariant that states it cannot. **A guard added under a lock is also a change to lock order** — check it against every other holder of the same rows. (F29)
+
+- **A guard's race test must assert what the sweep *returns*, not only what it left behind.** `squareoff.race.test.ts` passed against a build with `square_off_mis`'s position re-read removed, because on that build the two runs deadlocked, `exception when others` swallowed the `40P01`, and the naked short was never written — an identical end state reached for the opposite reason. Asserting the returned `(squared, faulted)` pair is what made it falsifiable, and restaging it on the funds row later made it fail on the hazard itself. (F29)
 
 - **`square_off_mis` re-reads the position under its own lock before writing an exit order.** Without it two overlapping runs both select a position, the first closes it, and the second's exit order executes against nothing — which `execute_order` correctly reads as *opening* a short, so the 15:20 job could create a naked position with collateral blocked against it. Reproduced deterministically before the guard was written. (F29)
 
@@ -112,6 +114,5 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 - **A tier-2 suite that empties a reference table must empty its dependants too.** F26 made the app able to write `orders`, and the first real order turned `pnpm test:db` red permanently on `orders_symbol_fkey` — a failing test tier caused by using the product. The deletes roll back, so the fix is cheap; the bug it prevents is a suite whose result depends on what the account holds. (F26)
 
-- **A rejection is `ok:false` with `code` set to the reason; a fault is the only thing that is not a normal return.** `place_order` hands back `REJECTED`, `OPEN` and `COMPLETE` identically, with `error` null in all three. Putting a rejection on the failure branch means every caller uses the one branch it already has and `code-standards.md`'s toast-on-failure rule applies unchanged. The rejected order's id is not returned — F27's page is where one is inspected. (F26)
 
 
