@@ -64,15 +64,24 @@ const DASH = '—'
 async function fetchExposure(symbol: string): Promise<SymbolExposure> {
   const supabase = createClient()
 
-  const [{ data: holding }, { data: position }] = await Promise.all([
-    supabase.from('holdings').select('quantity').eq('symbol', symbol).maybeSingle(),
-    supabase
-      .from('positions')
-      .select('net_quantity')
-      .eq('symbol', symbol)
-      .eq('product', 'MIS')
-      .maybeSingle(),
-  ])
+  const [{ data: holding, error: holdingError }, { data: position, error: positionError }] =
+    await Promise.all([
+      supabase.from('holdings').select('quantity').eq('symbol', symbol).maybeSingle(),
+      supabase
+        .from('positions')
+        .select('net_quantity')
+        .eq('symbol', symbol)
+        .eq('product', 'MIS')
+        .maybeSingle(),
+    ])
+
+  // Raised, not ignored. supabase-js *resolves* with `{ data, error }` rather
+  // than rejecting, so reading only `data` turns a failed read into a confident
+  // "nothing open" — the caller's catch, which exists to log exactly this and
+  // fall back, would never run and the inflated margin would have no
+  // explanation anywhere. The fallback is the same either way; the log is not.
+  const failure = holdingError ?? positionError
+  if (failure) throw failure
 
   return {
     holding: holding?.quantity ?? 0,
@@ -164,10 +173,16 @@ function TicketForm({
 
   const symbol = request.symbol
 
-  // The live price, so a MARKET order's estimate moves with the price it will
-  // fill at. Selected as a primitive: subscribing to the quote object would
-  // re-render this dialog on every interpolation frame.
-  const ltp = useQuoteStore((state) => (symbol ? (state.quotes[symbol]?.ltp ?? null) : null))
+  // **`anchor`, never `ltp`.** The ticket is a decision surface, and
+  // `architecture.md` names it first among those that must render the server
+  // anchor rather than an interpolated figure — the store's own contract repeats
+  // it. `ltp` is synthetic mid-tween, so an estimate computed from it is priced
+  // off a figure no provider ever reported. The anchor is also the correct
+  // basis: it is what `execute_order` reads out of `quotes` to price the fill.
+  //
+  // Selected as a primitive: subscribing to the quote object would re-render
+  // this dialog on every interpolation frame.
+  const anchor = useQuoteStore((state) => (symbol ? (state.quotes[symbol]?.anchor ?? null) : null))
 
   const form = useForm({
     resolver: zodResolver(placeOrderSchema),
@@ -219,8 +234,8 @@ function TicketForm({
   }, [symbol, loadExposure])
 
   // The price the estimate is computed against: §6 says `limit_price` for a
-  // limit order and the current `ltp` for a market one.
-  const price = orderType === 'LIMIT' ? (limitPrice ?? null) : ltp
+  // limit order and the current quote for a market one.
+  const price = orderType === 'LIMIT' ? (limitPrice ?? null) : anchor
 
   const estimate = useMemo(() => {
     if (price === null || price <= 0 || !Number.isFinite(quantity) || quantity <= 0) return null
@@ -333,11 +348,16 @@ function TicketForm({
             // The schema refuses a market order carrying a price, mirroring
             // `orders_limit_price_iff_limit`, so the field is cleared rather
             // than left holding a stale figure the user cannot see. Seeded from
-            // the live price only when there IS one: `ltp` is null for a symbol
-            // with no quote — which is every symbol outside a session — and a
+            // the anchor only when there IS one: it is null for a symbol with no
+            // quote — which is every symbol outside a session — and a
             // non-positive seed puts a figure in the field that the schema then
-            // rejects as a bad price rather than as an absence.
-            setValue('limitPrice', value === 'LIMIT' && ltp !== null && ltp > 0 ? ltp : null)
+            // rejects as a bad price rather than as an absence. The seed becomes
+            // the user's own limit price if they leave it, so it is a decision
+            // figure too and takes the anchor for the same reason.
+            setValue(
+              'limitPrice',
+              value === 'LIMIT' && anchor !== null && anchor > 0 ? anchor : null
+            )
           }}
           options={[
             { value: 'MARKET', label: 'Market' },
