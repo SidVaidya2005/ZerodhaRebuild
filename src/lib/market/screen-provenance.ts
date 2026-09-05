@@ -148,3 +148,38 @@ export function serverProvenance(
     isInterpolated: false,
   }
 }
+
+/**
+ * Provenance for a surface that renders the **anchor** rather than the tween.
+ *
+ * **`provenanceOf` describes the store, not the figure on screen.** Its
+ * `isInterpolated` is `quote.ltp !== quote.anchor` — true whenever a tween is in
+ * flight, whatever the caller chose to render. Every monetary surface renders
+ * `anchor` by `architecture.md`'s invariant, so passing `provenanceOf` into
+ * `PriceWithProvenance` there announces "this figure is interpolated" over a
+ * figure that is literally the last reported price. The claim would be false in
+ * the one direction the honesty guarantee exists to prevent: overstating how
+ * synthetic a number is costs trust, but understating how *reported* it is
+ * misdescribes it outright.
+ *
+ * F21's tiles never hit this because they render no single-symbol price and so
+ * never reach `PriceWithProvenance`. F30 is the first surface that renders an
+ * anchor through it, and F31 and F33 will be the next two.
+ *
+ * Takes the three fields it actually reads rather than a whole `LiveQuote`,
+ * because its callers do not have one: the F19 constraint forbids subscribing a
+ * component to `state.quotes`, so a table holds flat maps of primitives and
+ * reassembles this shape per row. `LiveQuote` satisfies it structurally.
+ */
+export function anchorProvenance(
+  quote: { provider: QuoteProviderName; providerTs: Date | null; fetchedAt: Date },
+  now: Date
+): Provenance {
+  return {
+    source: deriveSource(quote.provider, quote.providerTs, now),
+    provider: quote.provider,
+    providerTs: quote.providerTs,
+    fetchedAt: quote.fetchedAt,
+    isInterpolated: false,
+  }
+}

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { badgeSource, compositeSource, provenanceOf } from '@/lib/market/screen-provenance'
+import {
+  anchorProvenance,
+  badgeSource,
+  compositeSource,
+  provenanceOf,
+} from '@/lib/market/screen-provenance'
 import type { LiveQuote } from '@/lib/stores/quote-store'
 
 const NOW = new Date('2026-08-22T09:00:00Z')
@@ -115,5 +120,34 @@ describe('the composite strip provenance', () => {
 
   it('never reports LIVE, because no provider in this build streams', () => {
     expect(compositeSource(['YAHOO'], NOW, NOW)).toBe('DELAYED')
+  })
+})
+
+describe('the provenance of an anchor-rendered figure', () => {
+  it('reports as reported, even mid-tween', () => {
+    // The trap this exists for: the store is tweening, so `provenanceOf` says
+    // interpolated — but the caller is rendering `anchor`, which is exactly the
+    // price the provider reported. Announcing it as synthetic would misdescribe
+    // it, and every monetary surface renders the anchor.
+    const tweening = quote({ ltp: 99.4, anchor: 100 })
+
+    expect(provenanceOf(tweening, NOW).isInterpolated).toBe(true)
+    expect(anchorProvenance(tweening, NOW).isInterpolated).toBe(false)
+  })
+
+  it('changes nothing else about the claim', () => {
+    const providerTs = agoMs(60_000)
+    const tweening = quote({ provider: 'YAHOO', providerTs, ltp: 99.4, anchor: 100 })
+
+    expect(anchorProvenance(tweening, NOW)).toEqual({
+      ...provenanceOf(tweening, NOW),
+      isInterpolated: false,
+    })
+  })
+
+  it('still never dresses simulated data as anything else', () => {
+    expect(anchorProvenance(quote({ provider: 'SIMULATOR', providerTs: NOW }), NOW).source).toBe(
+      'SIMULATED'
+    )
   })
 })
