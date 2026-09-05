@@ -599,21 +599,33 @@ with no surface at all; the open-order exemption is what makes the today filter 
 
 ### 28 Limit order matching
 
-
+The resting side of the book. A LIMIT order placed away from the market waits as `OPEN`; this is the
+function that notices a quote has crossed it. It adds **no fill logic and no pricing** — `execute_order`
+is still the only place a fill happens, and it was already built to be called on any open order.
 
 **Logic:**
 
-- `match_open_orders()` selecting open limit orders whose symbol's refreshed quote has crossed the limit — buys at or below, sells at or above — and calling `execute_order` for each.
-- Called by the market tick function after the quote upsert, inside the same run.
-- Idempotent under both sequential retry and simultaneous invocation; safety comes from the status guard in `execute_order`, not from the scheduler.
+- `match_open_orders()` returning `(filled integer, faulted integer)`, `security definer`, `set search_path = ''`, revoked from `public, anon, authenticated`. It selects `OPEN` `LIMIT` orders joined to `quotes` — fresh quote, buys at or below, sells at or above — and calls `execute_order` for each.
+- **The selection is an optimisation, not a correctness boundary.** `execute_order` re-checks `status = 'OPEN'` *and* re-checks limit eligibility under the row lock, so a bug in the predicate here can cost a fill a tick; it cannot cause a wrong one. It exists to avoid taking row locks on orders that would decline anyway.
+- **No symbol argument.** Sweeping every crossing order is simpler than passing the refreshed list, and strictly better: it also catches an order placed between ticks that already crosses the last quote.
+- **`order by placed_at, id`**, load-bearing twice. Fairness: where a user's cash covers only one of two crossing orders, the one resting longer fills — the exchange's time-priority rule. Deadlock avoidance: two simultaneous runs take the same order-row locks in the same sequence.
+- **One subtransaction per order**, the `BEGIN/EXCEPTION` shape `modify_order` established (F27). A faulting order rolls back alone, logs `raise warning`, and the run continues; the alternative lets one poisoned order block every user's fills on every tick. Business rejections never come through here — `execute_order` files those as `REJECTED` rows and returns normally.
+- **`filled` counts orders that reached `COMPLETE`**, read back after the call, because `execute_order` returning is not the same as a fill. Under two overlapping runs both may report the same fill; the count is per-run bookkeeping for the tick's log line, never a claim of exclusivity.
+- Called by `market-tick` **strictly after the quote upsert**, inside the existing session gate — matching before the upsert would match this tick's orders against last tick's prices. `matched` and `faulted` join the tick's response body so `cron.job_run_details` shows them.
 
 **Verify:**
 
-- Test: a buy limit above the current price fills on the next tick; one below stays open.
-- Test: a sell limit below the current price fills; above stays open.
-- Test, **two concurrent sessions**: `match_open_orders()` invoked simultaneously produces exactly one fill for a crossing order. A sequential double-run does not exercise this — the second pass no longer selects the order, so it passes with the bug present.
-- Test: a limit order for a user whose cash has since been spent is rejected, not filled into a negative balance.
-- Observed live: a limit order placed just off the market fills within two minutes during market hours.
+- Test (tier 2, `13-match-open-orders.sql`): a buy limit above the market fills and one below keeps resting; a sell limit below fills and one above rests. `pnpm test:db`.
+- Test (tier 2): a stale quote fills nothing however far the order has crossed, and leaves it resting rather than rejected — §5's window, not the price, is what stops it.
+- Test (tier 2): a crossing order the account can no longer afford is `REJECTED` and `available_cash` stays at or above zero. The setup is artificial by necessity and says so: a buy reserves at its limit and fills at or below it, so the branch is unreachable through the product's own flows.
+- Test (tier 2): two crossing orders both fill, and the older one's trade carries the earlier `traded_at` — pinning the `ORDER BY` without starving the account.
+- Test (tier 2): with a fault injected on one order, `faulted` is 1, `filled` is 1, the following order fills normally, and the faulting order is rolled back to `OPEN` so the next tick retries it. **Falsifiability: remove the `EXCEPTION` clause and this suite dies on the injected fault.**
+- Test (tier 2): identities 1, 3 and 8 all hold after the run.
+- **The fixture empties `orders` and `quotes` first.** The matcher takes no user and no symbol, so a suite that left real resting orders in place would fill them and its result would depend on what the developer happens to be holding (F16's rule). Orders are retired with `cancel_order`, never `delete` — `fund_ledger` and `trades` reference `orders on delete cascade`, so a delete would take the `MARGIN_BLOCK` row with it while the cash stayed moved, and §12.1 would pass for the wrong reason.
+- Test (tier 3, `matcher.race.test.ts`): two simultaneous `match_open_orders()` runs produce exactly one trade, one `BUY_DEBIT`, and `filled_quantity` 10. **The interleaving is forced, not hoped for**: session A takes the order's row lock first, B's sweep selects the still-`OPEN` order and blocks inside `execute_order`, and A only proceeds once `pg_stat_activity` confirms B is waiting. Issuing B's sweep and immediately committing A is *not* enough — if B's query has not reached the wire, its own SELECT filters the filled order out and the test passes with the guard removed, the selection having deduplicated instead of the guard. **Falsifiability: remove `execute_order`'s post-lock status re-check and this fails with two trades.**
+- **Tier 3 commits, and the matcher sweeps every symbol**, so the test first asserts that no *other* fresh-quoted crossing order exists and fails loudly if one does. Outside market hours nothing qualifies, because quotes go stale within minutes; during a session it would fill a real user's order into their real ledger.
+- Observed live: a limit order placed just off the market fills within two minutes during market hours. **Needs an open session** — pair it with F27's remaining items and F26's filled path.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### 29 MIS auto square-off
 

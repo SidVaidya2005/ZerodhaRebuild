@@ -97,6 +97,8 @@ the shape of the code that implements it.
 
 - **Margin shown in the ticket is position-aware, and proven exactly equal to the engine at tier 4.** `src/lib/trading/margin.ts` implements §6's reservation rules over the user's actual holding and position; the naive notional figure would demand ₹10,029 where the engine reserves ₹29. The build plan's "within one paisa" was corrected to exact — a looser bar hides the drift the test exists to catch. (F25)
 - **The ticket fetches the symbol's holding and position when it opens**, one RLS-scoped query, rather than server-rendering the whole portfolio into every terminal page. Fresh by construction, one round trip per open rather than per keystroke. (F25)
+- **The order ticket is mounted once in the terminal layout and opened through a `useOrderTicket` store.** F18's watchlist panel renders twice — the `md` rail and the mobile sheet — so a per-row dialog would mount two copies of the same form for one symbol. (F25)
+- **The limit price is a `Controller` mapping empty to `null` at the field**, because an uncontrolled `type="number"` input has no single "empty" value: `''`, `null`, `undefined` and `NaN` all reach the schema depending on whether the user or `setValue` wrote last, and `Number(null)` is 0 — so a user who typed nothing was told their price must exceed zero. (F25)
 ## Testing
 
 - **Tier 3 commits into the production database.** It cannot be avoided — proving two connections cannot both fill an order requires the first to commit. Three guards are mandatory: `ALLOW_RACE_TESTS` must be set or `pnpm test:race` exits, seeded rows carry a recognisable prefix, and `afterEach` cleanup runs on failure too. A crashed process can still strand rows; that is the accepted residual risk. (1.00.03)

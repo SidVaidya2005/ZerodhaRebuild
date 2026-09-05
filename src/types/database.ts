@@ -753,6 +753,13 @@ export type Database = {
         Args: { p_at?: string }
         Returns: Database["public"]["Enums"]["market_session_state"]
       }
+      match_open_orders: {
+        Args: never
+        Returns: {
+          faulted: number
+          filled: number
+        }[]
+      }
       modify_order: {
         Args: { p_limit_price?: number; p_order_id: string; p_quantity: number }
         Returns: {
