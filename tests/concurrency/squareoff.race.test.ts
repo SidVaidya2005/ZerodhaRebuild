@@ -15,12 +15,34 @@ import {
  * Feature 29's race: two `market-tick` runs overlapping at 15:20.
  *
  * The job runs every minute and an Edge Function can be slow, so two runs can
- * genuinely overlap — and both will select the same open position, because
- * `square_off_mis`'s SELECT takes no locks. Each then writes its *own* exit
- * order, so the order rows do not collide; what stops the second from exiting
- * the position twice is that `execute_order` finds no position left to close.
+ * genuinely overlap — and both select the same open position, because the
+ * sweep's SELECT takes no locks. What stops the second from acting on it is
+ * `square_off_mis`'s re-read of the position row `for update`, which finds it
+ * closed and skips. Without that re-read the second run writes its exit order
+ * anyway and `execute_order`, finding no position to close, opens a naked short.
  *
  * pgTAP cannot express this: one session, one transaction.
+ *
+ * **Falsifiability (testing.md).** Confirmed 2026-09-05 against a build with the
+ * re-read removed — three runs each way, deterministic:
+ *
+ * | build | locks B holds when it blocks | A returns | B returns | end state |
+ * | --- | --- | --- | --- | --- |
+ * | re-read present | `positions` only | `(1, 0)` | `(0, 0)` | 0 positions, 1 trade |
+ * | re-read removed | **`funds`**, `orders`, `positions` | `(1, 0)` | **`(0, 1)`** | 0 positions, 1 trade |
+ *
+ * The end state is **identical**, which is why the first version of this test
+ * passed against both and could not be cited. Without the re-read, B is already
+ * inside `execute_order` holding the `funds` row lock when it blocks on the
+ * position row; A then wants that same funds row, and the two deadlock.
+ * `square_off_mis`'s `exception when others` swallows the 40P01, counts a fault
+ * and continues, so the naked short is never written — a deadlock, not the
+ * guard, is what kept the end state clean.
+ *
+ * The `faulted` counters are therefore what carries this test. To re-prove it,
+ * apply `20260905150000_square_off_mis.sql` (the pre-fix body), re-run, and
+ * confirm B returns `(0, 1)`; then re-apply
+ * `20260905180000_square_off_locks_position.sql`.
  */
 
 let clients: Client[] = []
@@ -55,43 +77,65 @@ async function seedTrader(client: Client, cash: number): Promise<string> {
   return id
 }
 
+/** One sweep's return value: `select * from square_off_mis(...)`. */
+type Sweep = { squared: number; faulted: number }
+
 /**
  * `square_off_mis` sweeps every open MIS position and tier 3 **commits**, so
- * prove this test's fixture is the only one it can reach before invoking it.
- * Failing loudly beats a silent skip.
+ * prove nothing is open *before* the fixture is created. Failing loudly beats a
+ * silent skip.
+ *
+ * Checked across every symbol including this file's own, which the earlier
+ * `symbol <> $1` form could not do. A stray fixture position — left by a run
+ * that died with a query in flight, before `afterEach` cascaded it away — is
+ * invisible to a check that excludes its own symbol, and it makes the sweep
+ * multi-row: the two runs then contend over two positions instead of one, and
+ * the interleaving staged below is no longer the one being asserted about. That
+ * is the reading of the intermittent timeout this test used to show.
  */
-async function assertNothingElseWouldSquareOff(client: Client): Promise<void> {
+async function assertNoOpenMisPositions(client: Client): Promise<void> {
   const { rows } = await client.query<{ n: number }>(
     `select count(*)::int as n from public.positions
-      where product = 'MIS' and net_quantity <> 0 and symbol <> $1`,
-    [SQUAREOFF_SYMBOL]
+      where product = 'MIS' and net_quantity <> 0`
   )
   expect(
     rows[0]!.n,
-    'a real MIS position would be squared off by this test — it sweeps every symbol and tier 3 commits'
+    'an open MIS position exists before this test seeded anything — either a real one, which this test would square off since it sweeps every symbol and tier 3 commits, or a stray fixture from a run that failed to clean up'
   ).toBe(0)
 }
 
-async function waitUntilBlocked(observer: Client): Promise<void> {
-  // `pg_blocking_pids()` is the canonical "waiting on another backend" test.
-  // `wait_event_type = 'Lock'` was the first attempt and proved flaky: a backend
-  // passes through other wait states, so a poll can miss the window and time out
-  // on a run where the block did happen.
+/**
+ * Waits until backend `pid` is blocked on another backend.
+ *
+ * Asks about **one known pid**, never "is there a backend whose `query` looks
+ * like mine". Two earlier forms matched on `query ilike '%square_off_mis%'` and
+ * both timed out roughly one run in three with the block plainly present — the
+ * dump from a failing run showed a backend `idle in transaction` on
+ * `Lock`/`transactionid` whose `query` still read `begin`. Tier 3 connects
+ * through Supavisor in session mode, and `pg_stat_activity.query` is not a
+ * dependable way to find your own statement through it; the pid is, because
+ * session mode pins the client to one server backend.
+ *
+ * `pg_blocking_pids()` is otherwise the canonical test — `wait_event_type =
+ * 'Lock'` was an even earlier attempt and is worse still, since a backend passes
+ * through other wait states and a poll can miss the window entirely.
+ */
+async function waitUntilBlocked(observer: Client, pid: number): Promise<void> {
   const deadline = Date.now() + 15000
   for (;;) {
     const { rows } = await observer.query<{ n: number }>(
-      `select count(*)::int as n from pg_stat_activity
-        where cardinality(pg_blocking_pids(pid)) > 0
-          and query ilike '%square_off_mis%'
-          and pid <> pg_backend_pid()`
+      'select cardinality(pg_blocking_pids($1)) as n',
+      [pid]
     )
-    if (rows[0]!.n > 0) return
+    if ((rows[0]?.n ?? 0) > 0) return
     if (Date.now() > deadline) {
       const activity = await observer.query(
         `select pid, state, wait_event_type, wait_event, left(query, 60) as query
            from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid()`
       )
-      throw new Error('square_off_mis never blocked: ' + JSON.stringify(activity.rows))
+      throw new Error(
+        `square_off_mis never blocked (watching pid ${pid}): ` + JSON.stringify(activity.rows)
+      )
     }
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
@@ -100,6 +144,8 @@ async function waitUntilBlocked(observer: Client): Promise<void> {
 test('two simultaneous square-off runs exit a position exactly once', async () => {
   const [a, b] = await connectPair()
   clients = [a, b]
+
+  await assertNoOpenMisPositions(a)
 
   await seedRaceInstrument(a, 100, SQUAREOFF_SYMBOL)
   const trader = await seedTrader(a, 50000)
@@ -113,8 +159,6 @@ test('two simultaneous square-off runs exit a position exactly once', async () =
     [SQUAREOFF_SYMBOL]
   )
   await a.query('select public.execute_order($1)', [placed[0]!.order_id])
-
-  await assertNothingElseWouldSquareOff(a)
 
   // A holds the position row first, so B is guaranteed to have selected it
   // while it was still open. Issuing B's run and committing A immediately is
@@ -138,14 +182,35 @@ test('two simultaneous square-off runs exit a position exactly once', async () =
   expect(locked.rowCount, 'A locked no position row, so B has nothing to block on').toBe(1)
 
   await b.query('begin')
-  const bRun = b.query('select * from public.square_off_mis($1::timestamptz)', [AT_1520])
+  // Read B's backend pid from *inside* its transaction: that is the connection
+  // the sweep below will run on, and the one `waitUntilBlocked` must watch.
+  const { rows: bBackend } = await b.query<{ pid: number }>('select pg_backend_pid() as pid')
+  const bRun = b.query<Sweep>('select * from public.square_off_mis($1::timestamptz)', [AT_1520])
+  // Awaited below. Handled here too, so that a throw while staging the
+  // interleaving fails as itself rather than as an unhandled rejection once
+  // `afterEach` closes the connection out from under it.
+  bRun.catch(() => undefined)
 
-  await waitUntilBlocked(a)
+  await waitUntilBlocked(a, bBackend[0]!.pid)
 
-  await a.query('select * from public.square_off_mis($1::timestamptz)', [AT_1520])
+  const aRun = await a.query<Sweep>('select * from public.square_off_mis($1::timestamptz)', [
+    AT_1520,
+  ])
   await a.query('commit')
-  await bRun
+  const bRows = (await bRun).rows
   await b.query('commit')
+
+  // What each run *returned* is the only thing that separates this build from
+  // one without the position re-read — the end state below does not. See the
+  // falsifiability table at the top of this file.
+  expect(aRun.rows[0], 'A did not square off the position whose row it holds').toEqual({
+    squared: 1,
+    faulted: 0,
+  })
+  expect(
+    bRows[0],
+    'B did not skip cleanly. A fault here means B entered execute_order, took the funds row lock and deadlocked with A — which is exactly what the position re-read exists to prevent, and what makes the end-state assertions below pass on a build without it'
+  ).toEqual({ squared: 0, faulted: 0 })
 
   const { rows: positions } = await a.query<{ n: number }>(
     `select count(*)::int as n from public.positions where user_id = $1`,
