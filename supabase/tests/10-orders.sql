@@ -9,7 +9,7 @@
 -- on the day and hour it runs is worse than no suite. The stub is created inside
 -- the transaction and the rollback removes it.
 begin;
-select plan(76);
+select plan(79);
 
 insert into auth.users (id) values
   ('11111111-1111-1111-1111-111111111111'),
@@ -626,6 +626,40 @@ select cmp_ok(
     where user_id = '11111111-1111-1111-1111-111111111111'::uuid)::integer,
   '>', 0,
   'and the reset touched nobody else''s account'
+);
+
+-- ── M. A CNC sell that closes the holding out (F30) ─────────────────────────
+--
+-- **After L, deliberately.** `reset_account()` acts on `auth.uid()`, and
+-- `pg_temp.place` sets that claim for the user it places as — so a section
+-- placing an order for Ao ahead of the reset silently redirects the reset onto
+-- Ao's account and takes four of L's assertions down with it. L is left reading
+-- Bo's claim from K, which is what it was written against.
+--
+-- Ao has held 20 RELIANCE since section C. Selling all 20 must remove the row,
+-- not leave it at zero: §8 says a row reaching zero quantity is deleted in both
+-- tables, because a zero row would otherwise pollute Holdings, Positions and the
+-- top-10 donut with a position the user does not have.
+--
+-- **Both assertions are needed and neither is redundant.** `holdings` carries
+-- `CHECK (quantity > 0)`, so a build that tried to leave a zero row would raise
+-- rather than write one — and the order would come back REJECTED with the row
+-- still holding 20. Asserting only that the table is empty would then pass on a
+-- build where the sell had failed outright, which is the same end state reached
+-- for the opposite reason (the F29 lesson).
+
+select lives_ok($$ select pg_temp.price(130.00) $$, 'the price moves to 130.00');
+
+select is(
+  (select p.status from pg_temp.place('11111111-1111-1111-1111-111111111111', 'SELL', 'MARKET', 'CNC', 20) p),
+  'COMPLETE'::public.order_status,
+  'a delivery sell of the entire holding fills'
+);
+
+select is_empty(
+  $$ select 1 from public.holdings
+      where user_id = '11111111-1111-1111-1111-111111111111'::uuid $$,
+  '§8: and the holdings row is deleted rather than left at quantity zero'
 );
 
 select finish();
