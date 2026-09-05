@@ -135,3 +135,128 @@ export function toDonutSlices(
 function round(slice: DonutSlice): DonutSlice {
   return { ...slice, value: roundToPaise(slice.value) }
 }
+
+/**
+ * One holdings row, restated against the prices that have arrived since the page
+ * rendered.
+ *
+ * Defined here rather than in `types.ts` for the same reason `DonutSlice` is:
+ * that file holds the shapes the *server* returns, and this is a product of this
+ * module. Everything it carries is display arithmetic and reaches nothing — the
+ * figures the page first renders come from `portfolio_holdings`, per
+ * `CLAUDE.md`'s money rule.
+ */
+export type LiveHolding = HoldingRow & {
+  /**
+   * The stock's own move since its previous close, in percent — not the
+   * holding's. Null when either price is absent, never zero: a zero claims the
+   * price is unchanged, and the absence of a previous close is the absence of
+   * any claim at all (§9).
+   */
+  dayChangePct: number | null
+}
+
+/**
+ * A holdings row valued at the live anchor.
+ *
+ * **Every figure is the anchor's, never the tween's.** `architecture.md` names
+ * every total on Holdings as a surface that renders the price a provider
+ * actually reported, and F30 renders the LTP column from the anchor too — so the
+ * whole row jumps together when a tick lands rather than the price sliding beside
+ * a current value that does not. `anchorFor` is the only price source in scope
+ * here, which is what makes that structural.
+ */
+export function recomputeHolding(
+  holding: HoldingRow,
+  anchors: PriceMap,
+  prevCloses: PriceMap = {}
+): LiveHolding {
+  const price = anchorFor(holding, anchors)
+  const prevClose = prevCloseFor(holding, prevCloses)
+
+  // No price is not a price of zero. Every derived figure drops out together,
+  // so the row renders em dashes rather than valuing the holding at nothing.
+  if (price === null) {
+    return {
+      ...holding,
+      ltp: null,
+      prevClose,
+      marketValue: null,
+      unrealisedPnl: null,
+      dayPnl: null,
+      dayChangePct: null,
+    }
+  }
+
+  return {
+    ...holding,
+    ltp: price,
+    prevClose,
+    marketValue: roundToPaise(holding.quantity * price),
+    // Unrealised measures against average_price — what this holding has made
+    // since it was opened. The day's figure below measures against prev_close.
+    // The two answer different questions and §9 forbids substituting either.
+    unrealisedPnl: roundToPaise(holding.quantity * (price - holding.averagePrice)),
+    dayPnl: prevClose === null ? null : roundToPaise(holding.quantity * (price - prevClose)),
+    // Not rounded to paise: this is a percentage, not money. `formatPercent`
+    // renders it at 2dp, which is the precision a day change is read at.
+    dayChangePct:
+      prevClose === null || prevClose === 0 ? null : ((price - prevClose) / prevClose) * 100,
+  }
+}
+
+/** The columns the holdings table can be ordered by. */
+export type HoldingSortKey =
+  | 'symbol'
+  | 'quantity'
+  | 'averagePrice'
+  | 'invested'
+  | 'ltp'
+  | 'marketValue'
+  | 'unrealisedPnl'
+  | 'dayPnl'
+
+export type SortDirection = 'asc' | 'desc'
+
+/**
+ * Orders two restated rows.
+ *
+ * **An unpriced holding sorts last in both directions.** Treating its null as
+ * negative infinity would put it at the head of an ascending P&L sort, reading as
+ * the worst performer in the portfolio when in fact nothing is known about it —
+ * the same misreading the em dash exists to prevent, reintroduced through the
+ * ordering.
+ *
+ * Ties break on symbol so the order is total: without it two holdings of equal
+ * value swap places between renders for no reason a user could explain.
+ */
+export function compareHoldings(
+  a: LiveHolding,
+  b: LiveHolding,
+  key: HoldingSortKey,
+  direction: SortDirection
+): number {
+  if (key === 'symbol') {
+    const order = a.symbol.localeCompare(b.symbol)
+    return direction === 'asc' ? order : -order
+  }
+
+  const left = a[key]
+  const right = b[key]
+
+  if (left === null && right === null) return a.symbol.localeCompare(b.symbol)
+  if (left === null) return 1
+  if (right === null) return -1
+
+  if (left === right) return a.symbol.localeCompare(b.symbol)
+  return direction === 'asc' ? left - right : right - left
+}
+
+/** `compareHoldings` applied, without mutating the caller's array. */
+export function sortHoldings(
+  holdings: readonly LiveHolding[],
+  key: HoldingSortKey,
+  direction: SortDirection
+): LiveHolding[] {
+  return [...holdings].sort((a, b) => compareHoldings(a, b, key, direction))
+}

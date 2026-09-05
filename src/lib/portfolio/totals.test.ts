@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { DONUT_SLICE_LIMIT, recomputeSummary, toDonutSlices } from '@/lib/portfolio/totals'
+import {
+  DONUT_SLICE_LIMIT,
+  recomputeHolding,
+  recomputeSummary,
+  sortHoldings,
+  toDonutSlices,
+  type LiveHolding,
+} from '@/lib/portfolio/totals'
 import type { HoldingRow, PortfolioSummary } from '@/lib/portfolio/types'
 
 function holding(overrides: Partial<HoldingRow> = {}): HoldingRow {
@@ -156,5 +163,212 @@ describe('the donut', () => {
 
   it('is empty for a portfolio with nothing in it', () => {
     expect(toDonutSlices([])).toEqual([])
+  })
+})
+
+// ── F30: one holdings row, and the footer it has to agree with ──────────────
+//
+// The fixture is hand-computed in the comments so an assertion never restates
+// the expression the function uses — the same discipline `10-orders.sql` keeps.
+//
+//   INFY      5 @ avg 1400, anchor 1500, prev close 1450
+//     invested 7000   value 7500   unrealised +500   day +250   +3.45%
+//   RELIANCE 10 @ avg 2400, anchor 2380, prev close 2400
+//     invested 24000  value 23800  unrealised −200   day −200   −0.83%
+//   NOQUOTE   7 @ avg  150, no quote at all
+//     invested 1050   value —      unrealised —      day —      —
+//
+//   priced value 31300   priced invested 31000   overall +300   day +50
+
+const F30_HOLDINGS: HoldingRow[] = [
+  holding({
+    symbol: 'INFY',
+    quantity: 5,
+    averagePrice: 1400,
+    invested: 7000,
+    ltp: null,
+    prevClose: null,
+  }),
+  holding({
+    symbol: 'RELIANCE',
+    quantity: 10,
+    averagePrice: 2400,
+    invested: 24_000,
+    ltp: null,
+    prevClose: null,
+  }),
+  holding({
+    symbol: 'NOQUOTE',
+    quantity: 7,
+    averagePrice: 150,
+    invested: 1050,
+    ltp: null,
+    prevClose: null,
+    provider: null,
+    fetchedAt: null,
+  }),
+]
+
+const F30_ANCHORS = { INFY: 1500, RELIANCE: 2380 }
+const F30_PREV_CLOSES = { INFY: 1450, RELIANCE: 2400 }
+
+function liveRows(): LiveHolding[] {
+  return F30_HOLDINGS.map((row) => recomputeHolding(row, F30_ANCHORS, F30_PREV_CLOSES))
+}
+
+describe('restating one holdings row', () => {
+  it('values at the live anchor', () => {
+    const [infy] = liveRows()
+
+    expect(infy?.ltp).toBe(1500)
+    expect(infy?.marketValue).toBe(7500)
+    expect(infy?.unrealisedPnl).toBe(500)
+  })
+
+  it('falls back to the server figure for a symbol that has not ticked', () => {
+    const row = recomputeHolding(holding({ ltp: 100, prevClose: 80 }), {})
+
+    expect(row.ltp).toBe(100)
+    expect(row.marketValue).toBe(1000)
+  })
+
+  it('measures unrealised against the average and the day against the previous close', () => {
+    const [, reliance] = liveRows()
+
+    // Same figure by coincidence here (avg equals prev close), so the bases are
+    // separated by a case where they differ.
+    const row = recomputeHolding(
+      holding({ quantity: 10, averagePrice: 90, ltp: null }),
+      { RELIANCE: 100 },
+      { RELIANCE: 95 }
+    )
+
+    expect(reliance?.unrealisedPnl).toBe(-200)
+    expect(row.unrealisedPnl).toBe(100) // 10 × (100 − 90)
+    expect(row.dayPnl).toBe(50) // 10 × (100 − 95)
+  })
+
+  it('reports the day change as the stock’s own move, not the holding’s', () => {
+    const [infy] = liveRows()
+
+    // 50 / 1450 — a per-share percentage, independent of the 5 shares held.
+    expect(infy?.dayChangePct).toBeCloseTo(3.448_275_86, 6)
+  })
+
+  it('nulls every derived figure for an unpriced holding rather than zeroing it', () => {
+    const noquote = liveRows()[2]
+
+    expect(noquote?.ltp).toBeNull()
+    expect(noquote?.marketValue).toBeNull()
+    expect(noquote?.unrealisedPnl).toBeNull()
+    expect(noquote?.dayPnl).toBeNull()
+    expect(noquote?.dayChangePct).toBeNull()
+    // Cost basis is known even when the price is not.
+    expect(noquote?.invested).toBe(1050)
+  })
+
+  it('nulls the day figures when there is no previous close', () => {
+    const row = recomputeHolding(holding({ ltp: null, prevClose: null }), { RELIANCE: 100 })
+
+    expect(row.marketValue).toBe(1000)
+    expect(row.dayPnl).toBeNull()
+    expect(row.dayChangePct).toBeNull()
+  })
+})
+
+// The verify item this file exists for: the footer must be the rows. Both sides
+// are driven from the same anchors — one `useHoldingPrices` call feeds both in
+// the component — so this asserts the arithmetic agrees, and the browser check
+// confirms they move on the same tick.
+describe('the footer totals equal the sum of the rows', () => {
+  const rows = liveRows()
+  const footer = recomputeSummary(
+    summary({ availableCash: 100_000, invested: 32_050, holdingCount: 3 }),
+    F30_HOLDINGS,
+    F30_ANCHORS,
+    F30_PREV_CLOSES
+  )
+
+  function sum(pick: (row: LiveHolding) => number | null): number {
+    return rows.reduce((total, row) => total + (pick(row) ?? 0), 0)
+  }
+
+  it('current value', () => {
+    expect(footer.marketValue).toBe(31_300)
+    expect(sum((row) => row.marketValue)).toBe(footer.marketValue)
+  })
+
+  it('overall P&L', () => {
+    expect(footer.overallPnl).toBe(300)
+    expect(sum((row) => row.unrealisedPnl)).toBe(footer.overallPnl)
+  })
+
+  it('day P&L', () => {
+    expect(footer.dayPnl).toBe(50)
+    expect(sum((row) => row.dayPnl)).toBe(footer.dayPnl)
+  })
+
+  it('counts the unpriced holding rather than valuing it', () => {
+    expect(footer.unpricedCount).toBe(1)
+    // Invested spans all three; the valuation spans two. The count is what
+    // makes that difference visible instead of reading as a loss.
+    expect(footer.invested).toBe(32_050)
+  })
+})
+
+describe('ordering the holdings table', () => {
+  it('sorts by symbol in both directions', () => {
+    expect(sortHoldings(liveRows(), 'symbol', 'asc').map((row) => row.symbol)).toEqual([
+      'INFY',
+      'NOQUOTE',
+      'RELIANCE',
+    ])
+    expect(sortHoldings(liveRows(), 'symbol', 'desc').map((row) => row.symbol)).toEqual([
+      'RELIANCE',
+      'NOQUOTE',
+      'INFY',
+    ])
+  })
+
+  it('sorts by a live column on the anchor', () => {
+    expect(sortHoldings(liveRows(), 'marketValue', 'desc').map((row) => row.symbol)).toEqual([
+      'RELIANCE',
+      'INFY',
+      'NOQUOTE',
+    ])
+  })
+
+  it('puts the unpriced holding last in both directions, never first', () => {
+    // Ascending P&L would otherwise lead with NOQUOTE, reading as the worst
+    // performer in the portfolio when nothing at all is known about it.
+    expect(sortHoldings(liveRows(), 'unrealisedPnl', 'asc').map((row) => row.symbol)).toEqual([
+      'RELIANCE',
+      'INFY',
+      'NOQUOTE',
+    ])
+    expect(sortHoldings(liveRows(), 'unrealisedPnl', 'desc').map((row) => row.symbol)).toEqual([
+      'INFY',
+      'RELIANCE',
+      'NOQUOTE',
+    ])
+  })
+
+  it('breaks ties on symbol so the order is total', () => {
+    const tied = [
+      recomputeHolding(holding({ symbol: 'ZZZ', quantity: 1, averagePrice: 10 }), { ZZZ: 100 }),
+      recomputeHolding(holding({ symbol: 'AAA', quantity: 1, averagePrice: 10 }), { AAA: 100 }),
+    ]
+
+    expect(sortHoldings(tied, 'marketValue', 'desc').map((row) => row.symbol)).toEqual([
+      'AAA',
+      'ZZZ',
+    ])
+  })
+
+  it('does not mutate the array it was given', () => {
+    const rows = liveRows()
+    sortHoldings(rows, 'marketValue', 'desc')
+
+    expect(rows.map((row) => row.symbol)).toEqual(['INFY', 'RELIANCE', 'NOQUOTE'])
   })
 })
