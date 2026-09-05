@@ -11,7 +11,7 @@ import {
 
 import { toDonutSlices, type DonutSlice } from '@/lib/portfolio/totals'
 import type { HoldingRow } from '@/lib/portfolio/types'
-import { useHoldingPrices } from '@/components/dashboard/use-holding-prices'
+import { useHoldingPrices } from '@/components/terminal/use-holding-prices'
 import { formatCurrency } from '@/lib/utils'
 
 /**

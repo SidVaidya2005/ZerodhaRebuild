@@ -5,7 +5,7 @@ import { useId } from 'react'
 import { worstSource } from '@shared/provenance.ts'
 
 import { SOURCE_COPY, serverProvenance } from '@/lib/market/screen-provenance'
-import { useHoldingPrices } from '@/components/dashboard/use-holding-prices'
+import { useHoldingPrices } from '@/components/terminal/use-holding-prices'
 import { recomputeSummary } from '@/lib/portfolio/totals'
 import type { HoldingRow, PortfolioSummary } from '@/lib/portfolio/types'
 import { cn, formatCurrency, formatSignedCurrency } from '@/lib/utils'
