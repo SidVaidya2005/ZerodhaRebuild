@@ -17,9 +17,15 @@
 -- caller convention, which is exactly what failed in F29. Pinning them means a
 -- second caller, or a reordering, has to come back through this file.
 begin;
-select plan(5);
+select plan(6);
 
 -- The tables a function locks, in acquisition order.
+--
+-- **Per definition, not per call graph.** A function that calls another extends
+-- its own sequence with the callee's, and this does not follow that edge — so
+-- `square_off_mis` reads as {funds, positions} while the *composed* sequence is
+-- funds, positions, orders, because `execute_order` locks the order row. The
+-- last assertion below covers the exception that makes that safe.
 --
 -- Splitting on `for update` and taking the last `public.<table>` named in each
 -- preceding fragment is what makes this reliable: the naive "does funds appear
@@ -78,6 +84,24 @@ select is(
   array['positions', 'funds'],
   'recompute_position_collateral still inverts positions/funds — callers must already hold the funds row'
 );
+
+-- The precondition behind `square_off_mis`'s remaining inversion.
+--
+-- Composed with `execute_order`, the sweep takes funds before the orders row,
+-- against the canonical sequence. That is safe only because the order it locks
+-- is one it inserted itself moments earlier, so no other transaction can hold or
+-- want it. Squaring off through a pre-existing order row would make it a
+-- contended lock taken out of order — so the property is pinned here rather than
+-- left as a remark in a migration nobody re-reads.
+with d as (
+  select pg_get_functiondef('public.square_off_mis(timestamptz)'::regprocedure) as def
+)
+select ok(
+  position('insert into public.orders' in def) > 0
+    and position('public.execute_order(' in def) > 0
+    and position('insert into public.orders' in def) < position('public.execute_order(' in def),
+  'square_off_mis inserts its exit order before calling execute_order, so the order row it locks is its own'
+) from d;
 
 select * from finish();
 rollback;
