@@ -180,3 +180,98 @@ export async function cleanupRaceInstrument(symbol: string = RACE_SYMBOL): Promi
     await client.end().catch(() => undefined)
   }
 }
+
+/**
+ * Feature 29's lock-order test gets its own symbol, per the rule above.
+ */
+export const SQUAREOFF_LOCK_SYMBOL = 'ZRRACEL'
+
+/**
+ * A funded tier-3 account, identified by the `zr-race-` email prefix so
+ * `cleanupRaceAccounts` can find it however the test ended.
+ *
+ * The bootstrap trigger writes the `funds` row and its `SIGNUP_CREDIT` ledger
+ * row, so both are updated rather than inserted — identity 1 (`available_cash =
+ * Σ fund_ledger.amount`) must hold before the test starts, or every assertion
+ * about money afterwards is measured from a broken baseline.
+ */
+export async function seedRaceTrader(client: Client, cash: number): Promise<string> {
+  const email = `${RACE_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
+  const { rows } = await client.query<{ id: string }>(
+    `insert into auth.users (id, email, raw_user_meta_data)
+     values (gen_random_uuid(), $1, '{"full_name": "Race Trader"}'::jsonb)
+     returning id`,
+    [email]
+  )
+  const id = rows[0]!.id
+  await client.query(`update public.funds set available_cash = $2 where user_id = $1`, [
+    id,
+    cash.toFixed(2),
+  ])
+  await client.query(
+    `update public.fund_ledger set amount = $2, balance_after = $2 where user_id = $1`,
+    [id, cash.toFixed(2)]
+  )
+  return id
+}
+
+/**
+ * `square_off_mis` sweeps every open MIS position and tier 3 **commits**, so
+ * prove nothing is open *before* the fixture is created. Failing loudly beats a
+ * silent skip.
+ *
+ * Checked across every symbol including the caller's own, which a `symbol <> $1`
+ * form could not do. A stray fixture position — left by a run that died with a
+ * query in flight, before `afterEach` cascaded it away — is invisible to a check
+ * that excludes its own symbol, and it makes the sweep multi-row: the two runs
+ * then contend over two positions instead of one, and the staged interleaving is
+ * no longer the one being asserted about.
+ */
+export async function assertNoOpenMisPositions(client: Client): Promise<void> {
+  const { rows } = await client.query<{ n: number }>(
+    `select count(*)::int as n from public.positions
+      where product = 'MIS' and net_quantity <> 0`
+  )
+  if ((rows[0]?.n ?? 0) !== 0) {
+    throw new Error(
+      `an open MIS position exists before this test seeded anything (${rows[0]?.n}) — either a ` +
+        'real one, which this test would square off since it sweeps every symbol and tier 3 ' +
+        'commits, or a stray fixture from a run that failed to clean up'
+    )
+  }
+}
+
+/**
+ * Waits until backend `pid` is blocked on another backend.
+ *
+ * Asks about **one known pid**, never "is there a backend whose `query` looks
+ * like mine". Two earlier forms matched on `query ilike '%square_off_mis%'` and
+ * both timed out roughly one run in three with the block plainly present — the
+ * dump from a failing run showed a backend `idle in transaction` on
+ * `Lock`/`transactionid` whose `query` still read `begin`. Tier 3 connects
+ * through Supavisor in session mode, and `pg_stat_activity.query` is not a
+ * dependable way to find your own statement through it; the pid is, because
+ * session mode pins the client to one server backend.
+ *
+ * `pg_blocking_pids()` is otherwise the canonical test — `wait_event_type =
+ * 'Lock'` was an even earlier attempt and is worse still, since a backend passes
+ * through other wait states and a poll can miss the window entirely.
+ */
+export async function waitUntilBlocked(observer: Client, pid: number): Promise<void> {
+  const deadline = Date.now() + 15000
+  for (;;) {
+    const { rows } = await observer.query<{ n: number }>(
+      'select cardinality(pg_blocking_pids($1)) as n',
+      [pid]
+    )
+    if ((rows[0]?.n ?? 0) > 0) return
+    if (Date.now() > deadline) {
+      const activity = await observer.query(
+        `select pid, state, wait_event_type, wait_event, left(query, 60) as query
+           from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid()`
+      )
+      throw new Error(`backend ${pid} never blocked: ` + JSON.stringify(activity.rows))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+}

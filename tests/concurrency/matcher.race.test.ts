@@ -2,13 +2,13 @@ import type { Client } from 'pg'
 import { afterEach, expect, test } from 'vitest'
 
 import {
-  RACE_PREFIX,
   MATCHER_SYMBOL,
   cleanupRaceAccounts,
   cleanupRaceInstrument,
   closePair,
   connectPair,
   seedRaceInstrument,
+  seedRaceTrader,
 } from './helpers'
 
 /**
@@ -33,26 +33,6 @@ afterEach(async () => {
   await cleanupRaceAccounts()
   await cleanupRaceInstrument(MATCHER_SYMBOL)
 })
-
-async function seedTrader(client: Client, cash: number): Promise<string> {
-  const email = `${RACE_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
-  const { rows } = await client.query<{ id: string }>(
-    `insert into auth.users (id, email, raw_user_meta_data)
-     values (gen_random_uuid(), $1, '{"full_name": "Race Trader"}'::jsonb)
-     returning id`,
-    [email]
-  )
-  const id = rows[0]!.id
-  await client.query(`update public.funds set available_cash = $2 where user_id = $1`, [
-    id,
-    cash.toFixed(2),
-  ])
-  await client.query(
-    `update public.fund_ledger set amount = $2, balance_after = $2 where user_id = $1`,
-    [id, cash.toFixed(2)]
-  )
-  return id
-}
 
 /**
  * `match_open_orders` takes no user and no symbol — it sweeps every resting
@@ -125,7 +105,7 @@ test('two simultaneous matcher runs fill a crossing order exactly once', async (
 
   // ltp 100.00, and a resting buy at 110.00 crosses it (§5).
   await seedRaceInstrument(a, 100, MATCHER_SYMBOL)
-  const trader = await seedTrader(a, 15000)
+  const trader = await seedRaceTrader(a, 15000)
 
   await a.query(`select set_config('request.jwt.claim.sub', $1, false)`, [trader])
   const { rows: placed } = await a.query<{ order_id: string }>(
