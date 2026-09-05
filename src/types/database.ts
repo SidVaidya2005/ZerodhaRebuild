@@ -747,6 +747,7 @@ export type Database = {
           market_open_ist: number
           pre_open_start_ist: number
           quote_stale_after_ms: number
+          square_off_ist: number
         }[]
       }
       market_state: {
@@ -825,6 +826,13 @@ export type Database = {
         Returns: number
       }
       short_margin_buffer: { Args: never; Returns: number }
+      square_off_mis: {
+        Args: { p_at?: string }
+        Returns: {
+          faulted: number
+          squared: number
+        }[]
+      }
       touch_symbol_demand: { Args: { p_symbols: string[] }; Returns: number }
       transfer_margin_to_position: {
         Args: {

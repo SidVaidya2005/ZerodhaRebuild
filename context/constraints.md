@@ -78,6 +78,7 @@ the shape of the code that implements it.
 - **Reported P&L and settled cash are different numbers on a short cover** — see §7 and §12.11. Settling from `average_price` debits the entry charges twice and fails identity 1 on every cover. (F24)
 - **A short entry writes three ledger rows, not two**, per §6 steps 4 and 6. The paired charge rows make "estimated charges are never paid twice" auditable in the ledger rather than netted away inside the function. (F23)
 - **A fill crossing zero apportions charges pro-rata by quantity**, closing share rounded and the remainder to the opening leg, so the two always sum to `trades.charges`. (F24)
+- **The success toast names the fill price, read back rather than returned.** One extra RLS-scoped select on `orders` after a `COMPLETE`; widening `place_order`'s return would have meant a migration against a function proven at three tiers, for one string. (F26)
 - **`place_order` returns `(order_id, status, rejection_reason)`, not a bare uuid.** A business rejection returns normally, so `error` is null and the caller could not otherwise tell a fill from a rejection; raising would roll back the `REJECTED` row §4 requires. (F24)
 - **Session logic is implemented exactly twice and proven equal at tier 4** — `_shared/market-hours.ts` and Postgres `market_state(at)`. `place_order` is granted to `authenticated`, so a gate living only in a Server Action is bypassed by anything calling the RPC directly. A third implementation is not permitted. (F24)
 - **`execute_order` enforces §5's staleness window**, with `market_constants()` mirroring `_shared/market-constants.ts` as `charge_rates()` mirrors the rate table. Without it a Monday fill can execute against Friday's close. (F24)
@@ -135,6 +136,7 @@ the shape of the code that implements it.
 ## Supabase CLI
 
 - **`src/types/database.ts` is in `.prettierignore` and must stay there.** `supabase gen types` emits double quotes where Prettier wants single, so formatting it makes `format:check` fail after every regeneration — on a file that is never hand-edited. (F10)
+- **Dropping a function discards its ACL, and Supabase's defaults then re-grant EXECUTE to `public`, `anon` and `authenticated`.** `create or replace` cannot change an OUT-parameter row type, so widening a `returns table (...)` means a drop — and the recreated function is callable from the browser unless the revoke is repeated. Caught by `11-order-identities.sql`, which asserts exactly which functions a browser can reach. (F29)
 - **`supabase migration new` can hang past a 120s timeout having already written the file.** Check before assuming it failed and re-running. (F09)
 - **There are two Supabase CLIs on this machine** — Homebrew 2.111.0 and the project's pinned 2.115.0 — and authenticating one does not authenticate the other. An absent `~/.supabase/` proves nothing; `supabase projects list` failing is the only reliable check. (1.00.03)
 

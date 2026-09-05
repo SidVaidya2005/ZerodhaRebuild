@@ -629,22 +629,33 @@ is still the only place a fill happens, and it was already built to be called on
 
 ### 29 MIS auto square-off
 
-
+Intraday positions do not survive the day. At or after 15:20 IST every open MIS position is exited at
+the last traded price — the same thing a user exit does, which is why this feature settles nothing of
+its own.
 
 **Logic:**
 
-- `square_off_mis()` finding every open MIS position after `SQUARE_OFF_TIME_IST` on the same trading day and exiting it at the last traded price.
-- Exit trades marked so Reports can distinguish them from user-initiated exits.
-- Called by the market tick function; no-op before 15:20 IST.
+- `square_off_mis(p_at timestamptz default now())` returning `(squared integer, faulted integer)`, `security definer`, `set search_path = ''`, revoked from `public, anon, authenticated`. `p_at` exists so the 15:19/15:20 boundary is testable, mirroring `market_state(at)`.
+- **The exit is a real order filled by `execute_order`**, because `architecture.md`'s invariant admits no other route: a square-off is a fill. So it writes a MARKET order and calls `execute_order`, inheriting §3's charges, §6's collateral release and loss cap, §7's ledger rows and §9's P&L without restating any of them. The order appears on the Orders page under Executed, as Kite presents an auto square-off.
+- **`is_auto_squareoff` is set by `square_off_mis` after the fill**, matching on `order_id`, rather than by widening `execute_order`. Atomic — `execute_order` runs inside its transaction — and it leaves a function proven at three tiers alone.
+- **It re-reads the position under its own lock before writing the exit order**, and skips when it has gone. Without this, two overlapping runs both select a position, the first closes it, and the second's exit order executes against nothing — which `execute_order` correctly reads as *opening* a short. The job could create a naked position at 15:20 with collateral blocked against it. Same guard `execute_order` applies to an order's status, for the same reason.
+- No margin is reserved: the exit is entirely a closing leg.
+- Oldest position first (`opened_at`), one subtransaction per position — the fairness and deadlock reasoning of F28.
+- A stale quote rejects the exit with `NO_QUOTE` and the next run retries; §5's window is not bypassed for this caller. Called by `market-tick` **after** the matcher, so an order crossing on this tick fills on this tick before being squared off.
+- `market_constants()` gains `square_off_ist`, mirroring `SQUARE_OFF_TIME_IST`.
 
 **Verify:**
 
-- Test with an injected clock: a position open at 15:19 survives; after the first run at or past 15:20 it is flat with a closing trade and realised P&L recorded.
-- Test: square-off releases `positions.blocked_margin` in full through `recompute_position_collateral` and deletes the row.
-- Test: a symbol whose only quote is simulator-sourced still squares off, and the closing trade records that provenance rather than passing as a real close.
-- **Loss-cap test:** a short whose adverse move exceeds collateral plus available cash still squares off. `available_cash` lands at exactly zero, a `SIMULATION_ADJUSTMENT` row carries the uncovered remainder, `trades.realised_pnl` records the **true** uncapped loss, and identity 9 still balances.
-- Test, **two concurrent sessions**: `square_off_mis()` invoked simultaneously after 15:20 exits each position exactly once.
-- Test: no CNC holding is ever touched by the square-off job.
+- Test (tier 2, `14-square-off.sql`, 25 assertions): a position open at 15:19 survives with no square-off trade; at 15:20 all three close, their rows are deleted, and each exit trade carries `is_auto_squareoff` while the user's own entry does not.
+- Test (tier 2): the short's collateral is fully released and identities 1 and 3 hold after it.
+- Test (tier 2): the CNC holding is untouched and no exit order is written for a CNC-only account.
+- Test (tier 2): a short whose loss exceeds collateral plus cash still closes — cash lands at exactly `0.00`, a `SIMULATION_ADJUSTMENT` carries the remainder, and `trades.realised_pnl` keeps the true uncapped loss.
+- Test (tier 2): **two underwater shorts on one account both close.** The case that found `execute_order` rejecting a *closing* leg for want of funds — its solvency check demanded `available_cash >= charges` with no opening leg, while the collateral about to pay them sat in `positions.blocked_margin` where the check could not see it. **Falsifiability: drop `v_open_quantity > 0` and this goes red with the second position stranded.**
+- Test (tier 2): after a square-off, a duplicate exit order opens a naked short — characterising, deterministically, the hazard the position lock exists to prevent.
+- Test (tier 2): a second run in the same minute squares off nothing.
+- Test (tier 3, `squareoff.race.test.ts`): two simultaneous runs exit a position exactly once. **This test is not yet proven falsifiable — it passes against a build with the position lock removed, and it times out staging the interleaving roughly one run in three.** It is kept for the assertions it does make, and must not be cited as evidence for the lock; the tier 2 characterisation above is what documents the hazard. **Open work.**
+- Constants stay mirrored: `pnpm test:parity` asserts `square_off_ist` field by field.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### Phase checkpoint
 

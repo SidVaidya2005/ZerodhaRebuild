@@ -1,0 +1,12 @@
+-- Restore `market_constants()`'s revoke, lost when F29 dropped it.
+--
+-- `create or replace` cannot change an OUT-parameter row type, so adding
+-- `square_off_ist` meant dropping the function — and **a drop discards the
+-- ACL**. Supabase's default privileges then granted EXECUTE to `public`, `anon`
+-- and `authenticated` on the recreated function, quietly making an internal-only
+-- function callable from the browser.
+--
+-- Caught by `11-order-identities.sql`, which asserts exactly which functions are
+-- reachable from a browser rather than trusting that each migration remembered.
+-- Any future migration that drops and recreates a function inherits this trap.
+revoke execute on function public.market_constants() from public, anon, authenticated;

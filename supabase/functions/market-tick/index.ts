@@ -23,7 +23,7 @@ import type { SymbolAnchor } from '../_shared/provider-types.ts'
  * necessary for the opposite reason.
  *
  * It is the only writer of `quotes` and the only caller of `match_open_orders`
- * (F28). `square_off_mis` is not called yet: F29 builds it and wires it in here.
+ * (F28) and `square_off_mis` (F29).
  */
 
 type TickResult =
@@ -34,6 +34,7 @@ type TickResult =
       provider: string | null
       matched: number
       faulted: number
+      squared: number
       at: string
     }
   | { ok: false; error: string }
@@ -100,7 +101,15 @@ async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
 
   const symbols = (demanded ?? []).map((row: { symbol: string }) => row.symbol)
   if (symbols.length === 0) {
-    return { ok: true, refreshed: 0, provider: null, matched: 0, faulted: 0, at: now.toISOString() }
+    return {
+      ok: true,
+      refreshed: 0,
+      provider: null,
+      matched: 0,
+      faulted: 0,
+      squared: 0,
+      at: now.toISOString(),
+    }
   }
 
   const anchors = await loadAnchors(supabase, symbols)
@@ -113,7 +122,15 @@ async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
 
   const { quotes, provider } = await service.getQuotes(symbols)
   if (quotes.length === 0) {
-    return { ok: true, refreshed: 0, provider: null, matched: 0, faulted: 0, at: now.toISOString() }
+    return {
+      ok: true,
+      refreshed: 0,
+      provider: null,
+      matched: 0,
+      faulted: 0,
+      squared: 0,
+      at: now.toISOString(),
+    }
   }
 
   const { error: upsertError } = await supabase.from('quotes').upsert(
@@ -144,6 +161,14 @@ async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
   // A `returns table (...)` function arrives as an array of one row.
   const run = matched?.[0] ?? { filled: 0, faulted: 0 }
 
+  // After the matcher, not before: an order that crosses on this tick should
+  // fill on this tick, and only then be squared off if it is intraday and the
+  // clock has passed 15:20. Reversing the two would leave a position opened at
+  // 15:21 alive until the next run. The function is its own no-op before then.
+  const { data: squaredOff, error: squareOffError } = await supabase.rpc('square_off_mis')
+  if (squareOffError) throw squareOffError
+  const exits = squaredOff?.[0] ?? { squared: 0, faulted: 0 }
+
   return {
     ok: true,
     refreshed: quotes.length,
@@ -152,7 +177,8 @@ async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
     // Surfaced rather than logged only: a fault is an order the matcher could
     // not fill and will retry every minute, so it belongs where
     // `cron.job_run_details` will show it.
-    faulted: run.faulted,
+    faulted: run.faulted + exits.faulted,
+    squared: exits.squared,
     at: now.toISOString(),
   }
 }

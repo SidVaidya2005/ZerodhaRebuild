@@ -7,6 +7,7 @@ import {
   MARKET_OPEN_IST,
   PRE_OPEN_START_IST,
   QUOTE_STALE_AFTER_MS,
+  SQUARE_OFF_TIME_IST,
 } from '@shared/market-constants.ts'
 import { marketStatusAt, type HolidaySet } from '@shared/market-hours.ts'
 
@@ -84,6 +85,7 @@ describe('the session constants are the same constants', () => {
     expect(Number(c.ist_offset_minutes)).toBe(IST_OFFSET_MINUTES)
     expect(Number(c.pre_open_start_ist)).toBe(PRE_OPEN_START_IST)
     expect(Number(c.market_open_ist)).toBe(MARKET_OPEN_IST)
+    expect(Number(c.square_off_ist)).toBe(SQUARE_OFF_TIME_IST)
     expect(Number(c.market_close_ist)).toBe(MARKET_CLOSE_IST)
     expect(Number(c.quote_stale_after_ms)).toBe(QUOTE_STALE_AFTER_MS)
   })
