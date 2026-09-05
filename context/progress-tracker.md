@@ -17,10 +17,10 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Current Status
 
-**Phase:** Phase 4 — Trading Engine. **F16 and the Phase 2 checkpoint stay open by decision — F16 is being finished at the very end of the project, so do not tick it.** Two of its verify items are nonetheless now evidenced (2026-09-04): 300 consecutive one-minute ticks refreshing 10 symbols, the gate flipping to `MARKET_CLOSED` exactly at 15:30 IST, 4,803 cron runs since 2026-08-21 all `succeeded` with no 401s, and zero provenance violations in `quotes` — recorded in the journal so the evidence is not gathered twice
-**Last completed:** 26 Place order end to end, plus a context-docs restructure (`4.00.02`): `context/` is now read in tiers, cutting session start from >100k tokens to ~36k. `pnpm context:cost` guards the always-read budget and the tracker/constraints split
-**In progress:** 27 Orders page (three of five browser items pass; two need a live session) and 29 MIS auto square-off — **built, all deterministic checks green**: `square_off_mis` applied with its position-lock guard, `market_constants()` gained `square_off_ist`, tier 2 at 25/25 in `14-square-off.sql`, tier 4 at 36, and the tick now calls the matcher then the square-off. **Two real bugs were found and fixed on the way** — see Key Decisions
-**Next:** finish F29's one open item — **`squareoff.race.test.ts` is not proven falsifiable** (it passes with the position lock removed) and times out staging the interleaving roughly one run in three. Do not cite it as evidence for the guard; the deterministic tier 2 characterisation is what documents the hazard. Then Monday 2026-09-07 in market hours closes F27's last two items, F26's filled path and F28's live fill — one errand on one account
+**Phase:** Phase 4 — Trading Engine. **F16 and the Phase 2 checkpoint stay open by decision — F16 is being finished at the very end of the project, so do not tick it.** Two of its verify items are nonetheless evidenced (2026-09-04) and recorded in the journal so the evidence is not gathered twice
+**Last completed:** 29 MIS auto square-off. `square_off_mis` exits every open MIS position at 15:20 IST through a real order and `execute_order`, and its tier 3 race test is now **proven falsifiable** (`4.29.03`): it goes red on B's `faulted` counter against a build with the position re-read removed, and the intermittent timeout is gone — six consecutive clean runs, three times faster. Two real bugs were found and fixed on the way; see Key Decisions
+**In progress:** 27 Orders page (three of five browser items pass) and 28 Limit order matching (the live fill is unproven). Both are blocked on the same thing and nothing else
+**Next:** Monday 2026-09-07 in market hours — F27's last two browser items, F26's filled path and F28's live fill, one errand on one account. Then the Phase 4 checkpoint: `/code-review` over the phase diff, journal entries for F27–F29 (none written yet), and the `40P01` decision recorded under F29 in `build-plan/phase-4.md`
 
 ---
 
@@ -68,7 +68,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 - [x] 26 Place order end to end
 - [ ] 27 Orders page
 - [ ] 28 Limit order matching
-- [ ] 29 MIS auto square-off
+- [x] 29 MIS auto square-off
 - [ ] Phase checkpoint — verify Phase 4 — Trading Engine is stable before starting the next phase
 
 ### Phase 5 — Portfolio Pages
@@ -94,6 +94,8 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
+- **A guard's race test must assert what the sweep *returns*, not only what it left behind.** `squareoff.race.test.ts` passed against a build with `square_off_mis`'s position re-read removed because the two builds leave an identical end state: without the re-read the second run deadlocks with the first over the `funds` row, and `exception when others` swallows the `40P01` as a fault, so the naked short is never written. Asserting `(1, 0)` and `(0, 0)` is what makes the test falsifiable. (F29)
+
 - **`square_off_mis` re-reads the position under its own lock before writing an exit order.** Without it two overlapping runs both select a position, the first closes it, and the second's exit order executes against nothing — which `execute_order` correctly reads as *opening* a short, so the 15:20 job could create a naked position with collateral blocked against it. Reproduced deterministically before the guard was written. (F29)
 
 - **A closing leg is never rejected for want of funds, and `execute_order` did not implement that.** Its solvency check demanded `available_cash >= charges` even with no opening leg, while the collateral about to pay them sits in `positions.blocked_margin` where the check cannot see it — so an account already floored at zero by one capped square-off had its *second* underwater short rejected and stranded past 15:20. Fixed with `v_open_quantity > 0`; the code comment had claimed this was already true. (F29)
@@ -112,5 +114,4 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 - **A rejection is `ok:false` with `code` set to the reason; a fault is the only thing that is not a normal return.** `place_order` hands back `REJECTED`, `OPEN` and `COMPLETE` identically, with `error` null in all three. Putting a rejection on the failure branch means every caller uses the one branch it already has and `code-standards.md`'s toast-on-failure rule applies unchanged. The rejected order's id is not returned — F27's page is where one is inspected. (F26)
 
-- **A rejection closes the ticket.** The row is already filed as `REJECTED`; leaving the dialog open would imply it is still editable, and each retry would file another order. F25's inline `failure` state becomes unreachable and goes with it. (F26)
 
