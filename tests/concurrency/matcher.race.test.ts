@@ -3,7 +3,7 @@ import { afterEach, expect, test } from 'vitest'
 
 import {
   RACE_PREFIX,
-  RACE_SYMBOL,
+  MATCHER_SYMBOL,
   cleanupRaceAccounts,
   cleanupRaceInstrument,
   closePair,
@@ -31,7 +31,7 @@ afterEach(async () => {
   await closePair(clients)
   clients = []
   await cleanupRaceAccounts()
-  await cleanupRaceInstrument()
+  await cleanupRaceInstrument(MATCHER_SYMBOL)
 })
 
 async function seedTrader(client: Client, cash: number): Promise<string> {
@@ -79,7 +79,7 @@ async function assertNothingElseWouldFill(client: Client): Promise<void> {
           (o.side = 'BUY' and q.ltp <= o.limit_price)
           or (o.side = 'SELL' and q.ltp >= o.limit_price)
         )`,
-    [RACE_SYMBOL]
+    [MATCHER_SYMBOL]
   )
   expect(
     rows[0]!.n,
@@ -96,6 +96,9 @@ async function assertNothingElseWouldFill(client: Client): Promise<void> {
  * the guard removed.
  */
 async function waitUntilBlocked(observer: Client): Promise<void> {
+  // Reverted to `wait_event_type = 'Lock'` after `pg_blocking_pids()` proved
+  // *less* stable here, not more. This form ran clean three times and failed
+  // correctly against a build with the status guard removed; that is the bar.
   const deadline = Date.now() + 5000
   for (;;) {
     const { rows } = await observer.query<{ n: number }>(
@@ -106,7 +109,11 @@ async function waitUntilBlocked(observer: Client): Promise<void> {
     )
     if (rows[0]!.n > 0) return
     if (Date.now() > deadline) {
-      throw new Error('the second matcher run never blocked on the order lock')
+      const activity = await observer.query(
+        `select pid, state, wait_event_type, wait_event, left(query, 60) as query
+           from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid()`
+      )
+      throw new Error('the second matcher run never blocked: ' + JSON.stringify(activity.rows))
     }
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
@@ -117,13 +124,13 @@ test('two simultaneous matcher runs fill a crossing order exactly once', async (
   clients = [a, b]
 
   // ltp 100.00, and a resting buy at 110.00 crosses it (§5).
-  await seedRaceInstrument(a, 100)
+  await seedRaceInstrument(a, 100, MATCHER_SYMBOL)
   const trader = await seedTrader(a, 15000)
 
   await a.query(`select set_config('request.jwt.claim.sub', $1, false)`, [trader])
   const { rows: placed } = await a.query<{ order_id: string }>(
     `select order_id from public.place_order($1, 'BUY', 'LIMIT', 'CNC', 10, 110.00)`,
-    [RACE_SYMBOL]
+    [MATCHER_SYMBOL]
   )
   const orderId = placed[0]!.order_id
 
