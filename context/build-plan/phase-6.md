@@ -29,6 +29,7 @@
 - Watchlist becomes a bottom sheet or drawer on mobile.
 - Dense tables scroll horizontally inside their own container; the page body never scrolls sideways.
 - The order ticket is usable one-handed at 375px.
+- **Already measured, still open — the terminal header overflows by 100px at 375px.** `header.scrollWidth` is 475 against a 375 viewport, from the `ml-auto flex items-center gap-3 lg:ml-0` cluster carrying the market-status pill, the data-source badge and available cash. It lives in the `(terminal)` layout, so **every** terminal page scrolls sideways at 375px, against the "renders correctly at 375px" success criterion. Found during F27's browser pass; F27's own table is *not* the cause — its `overflow-x-auto` region measures 343 wide with every ancestor at 375, so it contains its 720px table correctly. (F27)
 
 **Verify:**
 
