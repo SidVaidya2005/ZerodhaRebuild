@@ -4,7 +4,7 @@ import { OrderChannel } from '@/components/terminal/OrderChannel'
 import { OrdersTabs } from '@/components/terminal/OrdersTabs'
 import { istDayStart } from '@/lib/market/market-hours'
 import { toRejectionCode } from '@/lib/trading/order-copy'
-import type { OrderRow, OrderStatus } from '@/lib/trading/types'
+import type { OrderRow } from '@/lib/trading/types'
 import { createClient } from '@/lib/supabase/server'
 
 export const metadata: Metadata = {
@@ -69,7 +69,12 @@ export default async function OrdersPage() {
     // be a price the user never set.
     limitPrice: row.limit_price === null ? null : Number(row.limit_price),
     averagePrice: row.average_price === null ? null : Number(row.average_price),
-    status: row.status as OrderStatus,
+    // Not cast. `side`, `product` and `order_type` above are assigned straight
+    // across, and this column is no different — `database.ts` is regenerated
+    // after every migration, so an added `order_status` value fails `tsc` here.
+    // Cast, it compiled and `OrdersTabs` pushed onto an undefined group at
+    // runtime instead, blanking the page through the error boundary.
+    status: row.status,
     // Mapped to a known code at the boundary, so nothing downstream can render a
     // raw `rejection_reason` string.
     rejectionReason: row.rejection_reason === null ? null : toRejectionCode(row.rejection_reason),
