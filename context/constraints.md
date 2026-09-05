@@ -122,6 +122,8 @@ the shape of the code that implements it.
 - **`server-only` cannot be imported by Vitest** and is aliased to the package's own `empty.js` in `vitest.config.mts`. `next build` still resolves the throwing entry for client bundles, which is what the falsifiability check exercises. (F01)
 - **`fetch-reference-data.mts` treats any probe failure as "this symbol does not exist"**, so one transient Yahoo 5xx kills a ~5-minute 200-symbol run. Only 404 should be a verdict. **Not fixed** — the script is manual, rare and re-runnable. (F14)
 
+- **A tier-2 suite that empties a reference table must empty its dependants too.** F26 made the app able to write `orders`, and the first real order turned `pnpm test:db` red permanently on `orders_symbol_fkey` — a failing test tier caused by using the product. The deletes roll back, so the fix is cheap; the bug it prevents is a suite whose result depends on what the account holds. (F26)
+
 ## Database concurrency
 
 - **One lock order everywhere: `orders` → `funds` → `holdings`/`positions`**, set by `execute_order` and pinned by `15-lock-order.sql`, which reads the sequence out of each live definition. `square_off_mis` held a position row across its `execute_order` call and deadlocked with any concurrent order on the same user and symbol — **adding a guard under a row lock is also a change to lock order.** (F29)
