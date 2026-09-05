@@ -24,7 +24,7 @@
 | 1 | A limit order placed just off the market fills within two minutes | F28 | trade row exists, `executed_at` within ~2 min of the crossing quote |
 | 2 | A fill moves the row Open → Executed **with no reload** | F27 | row changes and `performance.getEntriesByType('navigation').length` is still 1 |
 | 3 | Modifying an executed order is refused | F27 | action absent on the row **and** the RPC refuses directly |
-| 4 | A market buy fills and appears in Holdings without a reload | F26 | `COMPLETE` toast naming the fill price, Holdings updated, navigation length still 1 |
+| 4 | A market buy fills and shows in the portfolio without a reload | F26 | `COMPLETE` toast naming the fill price, `/dashboard` summary and donut updated, navigation length still 1. **Not `/holdings`** — see below |
 | 5 | The 15:20 sweep runs in production | F29 | `is_auto_squareoff` trade written, position row gone |
 | 6 | Sweep evidence captured | F29 | tick response body read **the same day** |
 | 7 | §12 identities hold after the day's churn | checkpoint | identities 1, 3 and 8 all true for the account |
@@ -64,9 +64,14 @@ total in the morning, not four.
    never reaches `animationend`, and can stop delivering synthetic clicks entirely; five features have
    lost time to this. Note `performance.getEntriesByType('navigation').length` **now**, so item 2 has a
    before-value.
-9. While waiting, do item 4 **from `/dashboard`**: a small CNC **MARKET BUY**. Expect the toast to name
-   the fill price, Holdings to show it, and the header's available cash to have moved — with navigation
-   length still 1, so it cannot have been a reload. CNC, not MIS: MIS lands in Positions, not Holdings.
+9. While waiting, do item 4 **on `/dashboard`, and only there**: a small CNC **MARKET BUY**. Expect the
+   toast to name the fill price, the summary cards and the top-10 donut to pick it up, and the header's
+   available cash to have moved — with navigation length still 1, so it cannot have been a reload.
+   CNC, not MIS: the dashboard aggregates holdings only.
+   **`/holdings` is still a `TerminalPlaceholder` and arrives at F30**, so F26's item as written —
+   "appears in Holdings" — cannot be closed on a Phase 4 session. `/dashboard` reads
+   `portfolio_summary` and `portfolio_holdings`, so it is the same data through the surface that
+   exists. Record the item as closed against the dashboard, with the page itself deferred to F30.
 10. When the limit fills (items 1 + 2): the row moves Open → Executed with no reload. Capture the order
     id, `executed_at`, and the crossing quote's `fetched_at` — query C.
 11. Item 3, on the order that just filled: the modify action must be **absent** on the row, and calling
@@ -77,8 +82,9 @@ total in the morning, not four.
 12. **By 15:10**, open an MIS position: a small MIS MARKET buy. It has to exist before 15:20 or there is
     nothing for the sweep to do.
 13. **This is the first production run of the corrected lock order** (`20260905190000`). It is proven at
-    tiers 2 and 3 but has never executed against a real position. Watch `/positions` across 15:20–15:22:
-    the position should disappear within a minute of 15:20, since the job runs every minute.
+    tiers 2 and 3 but has never executed against a real position. **`/positions` is a placeholder until
+    F31**, so there is nothing to watch — poll query D from 15:20, roughly every 30 seconds. The
+    position should be gone within a minute of 15:20, since the job runs every minute.
 14. Confirm the exit is flagged: query D, `is_auto_squareoff` true, position row gone.
 15. **Capture the sweep evidence the same day** — query E. `pg_net` retains `net._http_response` for
     roughly six hours, so the tick's response body with its `squared`/`faulted` counts is gone by
