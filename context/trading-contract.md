@@ -225,6 +225,15 @@ Exact rows written per event. Every row moves `available_cash`; `balance_after` 
 | Short cover | `MARGIN_RELEASE` `+position.blocked_margin`, `CHARGES` `−charges`, `REALISED_PNL` `±(entry_reference_price − cover_price) × quantity` — the **gross** basis, see below |
 | Short cover exceeding the account | the rows above with `REALISED_PNL` capped per §6, plus `SIMULATION_ADJUSTMENT` `+uncovered_remainder`. Cash floors at zero; `trades.realised_pnl` still carries the true loss |
 
+**Within one event, the order of these rows is not normative unless stated.** Where sequence is part
+of the rule it is written with an explicit *then* — the short entry's three rows are the case, because
+§6 steps 4 and 6 happen at different points. Elsewhere the list says which rows are written and with
+what sign, not the order `clock_timestamp()` will show them in. A buy fill writes its `CHARGES` row
+before its `BUY_DEBIT`, which satisfies identities 1 and 2 exactly as the reverse would; the solvency
+gate in `execute_order` covers value *plus* charges, so no intermediate balance can trip
+`available_cash >= 0` either way. What is normative is the set of rows, their signs, and the balance
+they leave.
+
 Rationale for not crediting short proceeds on entry: crediting them and then re-blocking an equal margin produces two offsetting rows and a balance that momentarily looks spendable. Settling on cover keeps the ledger legible and the balance honest.
 
 **The cover's cash row uses the gross `entry_reference_price`, while `trades.realised_pnl` uses the net
