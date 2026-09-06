@@ -220,6 +220,7 @@ the shape of the code that implements it.
 - **The watchlist's day change is recomputed on the client once prices are live.** Display-only and never persisted, so the money rule — which forbids computing a figure in TypeScript *and storing it* — is untouched. (F19)
 - **The index strip is a derived composite over our own priced universe, never a named index.** NIFTY 50, SENSEX and BANK NIFTY exist nowhere in the data, so the strip shows an equal-weighted mean day change with advances/declines and the constituent count on screen. Simulating an index level would have fabricated data in the most prominent chrome on the page. (F17, F21)
 - **`touch_symbol_demand` fires twice while the mobile sheet is open**, because `WatchlistPanel` is mounted by both the rail and the sheet. Harmless — the RPC is idempotent — but worth hoisting the hook when F37 touches this. (F18)
+- **Realtime on `orders` calls `router.refresh()` rather than patching client state.** Orders are server state and never enter Zustand, and a refresh also picks up the cash and margin the same fill moved — which a row-level patch would leave stale in the header beside a row that had updated. The channel still filters `user_id` server-side: RLS scopes delivery, but an unfiltered subscription has every row delivered to and authorised for every subscriber. (F27)
 
 ## Quote providers
 

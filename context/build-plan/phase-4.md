@@ -515,6 +515,18 @@ date filter or a Friday limit order vanishes from the terminal on Monday while s
 F34 covers completed *trades*, not orders, so a strict today-only page would leave a cancelled order
 with no surface at all; the open-order exemption is what makes the today filter safe.
 
+**Open, found at the Phase 4 checkpoint — an older order that fills today vanishes from the page at
+the moment it fills.** Watched live: a limit order placed on 22 Aug filled on 6 Sept and went from
+Open straight to *absent*, never appearing under Executed, because the fill ended the `OPEN`
+exemption and the order was not placed today. The reasoning above covers a Friday order still
+*resting* on Monday but not one that *fills* — and the fill is the most interesting moment in that
+order's life, so the surface disappears exactly when the user most wants it. The trade is still in
+`trades` and reaches F34, so nothing is lost from the record; what is lost is the confirmation. Three
+candidate fixes, none chosen: widen the exemption to "placed today, **or** executed today", which is
+one more `.or()` clause and probably right; keep a filled order visible for the rest of the session;
+or accept it and let F34 carry the whole story. Decide it when F34 is built, since that is what
+determines whether the Orders page still owes the user anything here.
+
 **UI:**
 
 - Tabs — Open, Executed, Cancelled, Rejected — with counts, over the shadcn `tabs` primitive.
