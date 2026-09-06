@@ -198,9 +198,7 @@ export function HoldingsTable({ holdings, summary }: HoldingsTableProps) {
               <td className="py-2 text-right text-ink tabular-nums">
                 {formatCurrency(footer.marketValue)}
               </td>
-              <td
-                className={cn('py-2 text-right tabular-nums', toneOf(footer.overallPnl))}
-              >
+              <td className={cn('py-2 text-right tabular-nums', toneOf(footer.overallPnl))}>
                 {formatSignedCurrency(footer.overallPnl)}
               </td>
               <td className={cn('py-2 text-right tabular-nums', toneOf(footer.dayPnl))}>
