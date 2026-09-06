@@ -26,8 +26,14 @@ import type { SymbolAnchor } from '../_shared/provider-types.ts'
  * (F28) and `square_off_mis` (F29).
  */
 
+/**
+ * `sessionOverride` is present and true only when the caller supplied
+ * `session_at`. A run under an override must be distinguishable from a real one
+ * in `net._http_response` and `cron.job_run_details` — otherwise the evidence
+ * this project keeps about its own scheduled job would be quietly untrue.
+ */
 type TickResult =
-  | { ok: true; skipped: 'MARKET_CLOSED'; at: string }
+  | { ok: true; skipped: 'MARKET_CLOSED'; at: string; sessionOverride?: true }
   | {
       ok: true
       refreshed: number
@@ -36,6 +42,7 @@ type TickResult =
       faulted: number
       squared: number
       at: string
+      sessionOverride?: true
     }
   | { ok: false; error: string }
 
@@ -79,12 +86,33 @@ async function loadAnchors(
   })
 }
 
-async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
+/**
+ * `now` is the real clock and is what every written timestamp uses. `sessionAt`,
+ * when given, replaces it **for the business-time decisions only** — the session
+ * gate and the square-off boundary.
+ *
+ * That split is the whole point. Every other layer already has this seam:
+ * `market_state(p_at)` and `square_off_mis(p_at)` both take a timestamp
+ * precisely so their boundaries are testable, and the Edge Function was the one
+ * layer without one — which made every session-gated UI check wait for a
+ * weekday window. Letting `sessionAt` reach `fetched_at` instead would put a
+ * false timestamp on a quote row and make the staleness window in §5 lie, so it
+ * does not: a quote fetched now records now, whatever business time the caller
+ * claimed. Only a judgement is overridden, never a recorded fact.
+ */
+async function tick(
+  supabase: SupabaseClient,
+  now: Date,
+  sessionAt: Date | null
+): Promise<TickResult> {
+  const gateAt = sessionAt ?? now
+  const override = sessionAt ? ({ sessionOverride: true } as const) : null
+
   // The gate comes first, and nothing writes before it returns true. The
   // `pg_cron` window is a cost bound only: it cannot express 09:15–15:30 and
   // cannot encode a trading holiday, so trusting it would trade on Republic Day.
-  if (!(await isTradingSession(supabase, now))) {
-    return { ok: true, skipped: 'MARKET_CLOSED', at: now.toISOString() }
+  if (!(await isTradingSession(supabase, gateAt))) {
+    return { ok: true, skipped: 'MARKET_CLOSED', at: now.toISOString(), ...override }
   }
 
   // Before anything is read for pricing: if this is the first tick of a session,
@@ -162,7 +190,14 @@ async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
   // fill on this tick, and only then be squared off if it is intraday and the
   // clock has passed 15:20. Reversing the two would leave a position opened at
   // 15:21 alive until the next run. The function is its own no-op before then.
-  const { data: squaredOff, error: squareOffError } = await supabase.rpc('square_off_mis')
+  //
+  // `p_at` is passed only under an override, so an ordinary run keeps calling
+  // this exactly as before and still reads its own `now()` inside the
+  // transaction. Under an override the boundary has to move with the gate:
+  // a caller claiming a session at 15:25 means the square-off it expects.
+  const { data: squaredOff, error: squareOffError } = sessionAt
+    ? await supabase.rpc('square_off_mis', { p_at: sessionAt.toISOString() })
+    : await supabase.rpc('square_off_mis')
   if (squareOffError) throw squareOffError
   const exits = squaredOff?.[0] ?? { squared: 0, faulted: 0 }
 
@@ -177,6 +212,7 @@ async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
     faulted: run.faulted + exits.faulted,
     squared: exits.squared,
     at: now.toISOString(),
+    ...override,
   }
 }
 
@@ -216,8 +252,30 @@ Deno.serve(async (request) => {
     { auth: { persistSession: false, autoRefreshToken: false } }
   )
 
+  // Read AFTER the secret check, never before. The override is only as
+  // restricted as the secret is, and anyone holding that can already run the
+  // tick — so it widens nothing. `session_at` rather than reusing the `at` the
+  // cron body already sends, so an ordinary scheduled run cannot shift its own
+  // gate by accident: the override has to be asked for by name.
+  let sessionAt: Date | null = null
   try {
-    return Response.json(await tick(supabase, new Date()))
+    const body = await request.json()
+    if (typeof body?.session_at === 'string') {
+      const parsed = new Date(body.session_at)
+      if (Number.isNaN(parsed.getTime())) {
+        return Response.json({ ok: false, error: 'BAD_SESSION_AT' } satisfies TickResult, {
+          status: 400,
+        })
+      }
+      sessionAt = parsed
+      console.warn('[market-tick] session gate overridden to', parsed.toISOString())
+    }
+  } catch {
+    // No body, or not JSON. Neither is an error: the gate uses the real clock.
+  }
+
+  try {
+    return Response.json(await tick(supabase, new Date(), sessionAt))
   } catch (error) {
     // The detail is logged; the body carries a code. `String(error)` here would
     // leak database text into an HTTP response, which the Error Handling rules
