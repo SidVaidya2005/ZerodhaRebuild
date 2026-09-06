@@ -46,8 +46,18 @@ const ALWAYS = [
 ]
 
 /** Read only when the work triggers it. Reported, never budgeted. */
+// Mirrors CLAUDE.md's trigger table. The six phase files belong here because
+// that table points a session at `build-plan/phase-<n>.md`, never at the
+// `build-plan.md` stub — listing only the stub understated the on-demand total by
+// most of its real weight. Found by the Phase 4 checkpoint review.
 const ON_DEMAND = [
   'context/build-plan.md',
+  'context/build-plan/phase-1.md',
+  'context/build-plan/phase-2.md',
+  'context/build-plan/phase-3.md',
+  'context/build-plan/phase-4.md',
+  'context/build-plan/phase-5.md',
+  'context/build-plan/phase-6.md',
   'context/architecture/data-model.md',
   'context/architecture/patterns.md',
   'context/code-standards/boundary-patterns.md',
@@ -96,7 +106,20 @@ function findDuplicatedDecisions(): string[] {
   const tracker = readFileSync(join(process.cwd(), 'context/progress-tracker.md'), 'utf8')
   const constraints = readFileSync(join(process.cwd(), 'context/constraints.md'), 'utf8')
 
-  const keyDecisions = tracker.slice(tracker.indexOf('## Key Decisions'))
+  // `indexOf` returning -1 would make `slice(-1)` a one-character string: no
+  // bullet would match, and this would report "no duplicated decisions" forever
+  // — a check whose whole purpose is catching that kind of drift, failing open
+  // the moment the heading it keys on is renamed. Found by the Phase 4
+  // checkpoint review.
+  const headingAt = tracker.indexOf('## Key Decisions')
+  if (headingAt === -1) {
+    throw new Error(
+      'context/progress-tracker.md has no "## Key Decisions" heading — the duplicate-decision ' +
+        'check keys on it, and silently passing without it is the failure this guard exists to prevent.'
+    )
+  }
+
+  const keyDecisions = tracker.slice(headingAt)
   const duplicated: string[] = []
 
   for (const line of keyDecisions.split('\n')) {
