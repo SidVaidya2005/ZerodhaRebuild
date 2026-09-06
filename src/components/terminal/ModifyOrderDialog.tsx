@@ -1,7 +1,7 @@
 'use client'
 
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { modifyOrderSchema, type ModifyOrderInput } from '@/lib/trading/schemas'
+import { modifyOrderSchemaFor, type ModifyOrderInput } from '@/lib/trading/schemas'
 import type { OrderRow } from '@/lib/trading/types'
 import { modifyOrder } from '@/server/actions/orders'
 
@@ -38,8 +38,14 @@ import { modifyOrder } from '@/server/actions/orders'
 export function ModifyOrderDialog({ order }: { order: OrderRow }) {
   const [open, setOpen] = useState(false)
 
+  // Refined against this row's order type, which the form knows and the Server
+  // Action must not trust — see `modifyOrderSchemaFor`. Without it a cleared
+  // price field reports NOT_MODIFIABLE, whose copy describes the opposite of
+  // what happened. `modify_order` still re-checks under the row lock.
+  const schema = useMemo(() => modifyOrderSchemaFor(order.orderType), [order.orderType])
+
   const { control, register, handleSubmit, formState, reset } = useForm<ModifyOrderInput>({
-    resolver: zodResolver(modifyOrderSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       orderId: order.id,
       quantity: order.quantity,

@@ -119,3 +119,21 @@ export const modifyOrderSchema = z.object({
 })
 
 export type ModifyOrderInput = z.infer<typeof modifyOrderSchema>
+
+/**
+ * The same shape, refined against an order type the *caller* already knows.
+ *
+ * The Server Action cannot use this — a client-supplied order type is not a
+ * fact, which is why `modify_order` decides it under the row lock. A form can,
+ * because it is editing one known row. Without it, clearing the price field on a
+ * LIMIT order submits `null`, and `modify_order` answers `NOT_MODIFIABLE`, whose
+ * copy reads "only the quantity and limit price of an open limit order can be
+ * changed" — a true sentence that describes the opposite of what went wrong.
+ * Found by the Phase 4 checkpoint review.
+ */
+export function modifyOrderSchemaFor(orderType: 'MARKET' | 'LIMIT') {
+  return modifyOrderSchema.refine(
+    (value) => (orderType === 'LIMIT') === (value.limitPrice != null),
+    { error: 'A limit order needs a limit price.', path: ['limitPrice'] }
+  )
+}

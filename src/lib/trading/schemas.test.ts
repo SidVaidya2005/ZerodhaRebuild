@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { placeOrderSchema } from './schemas'
+import { modifyOrderSchemaFor, placeOrderSchema } from './schemas'
 
 /**
  * The schema is the client's half of a rule Postgres also enforces, so these
@@ -97,5 +97,50 @@ describe('placeOrderSchema', () => {
     expect(errorFor({ ...base, symbol: 'reliance; drop table' }, 'symbol')).toBe(
       'That is not a symbol.'
     )
+  })
+})
+
+/**
+ * The modify form's half of the same rule. `modifyOrderSchema` itself carries no
+ * order type on purpose — a client-supplied one is not a fact — so the
+ * refinement is applied by the form, which knows the row it is editing.
+ *
+ * Without it, clearing the price field submits `null`, `modify_order` answers
+ * `NOT_MODIFIABLE`, and the user reads copy describing the opposite of what went
+ * wrong. Found by the Phase 4 checkpoint review.
+ */
+describe('modifyOrderSchemaFor', () => {
+  const order = { orderId: '3f1a5c2e-8b7d-4e2a-9c1f-0d6a4b8e5c11', quantity: 10 }
+
+  function modifyErrorFor(orderType: 'MARKET' | 'LIMIT', input: unknown): string | undefined {
+    const result = modifyOrderSchemaFor(orderType).safeParse(input)
+    if (result.success) return undefined
+    return result.error.issues.find((issue) => issue.path.join('.') === 'limitPrice')?.message
+  }
+
+  it.each([[null], [undefined]])(
+    'names the missing price on a LIMIT order rather than leaving it to NOT_MODIFIABLE (%s)',
+    (value) => {
+      expect(modifyErrorFor('LIMIT', { ...order, limitPrice: value })).toBe(
+        'A limit order needs a limit price.'
+      )
+    }
+  )
+
+  it('accepts a LIMIT order carrying a price', () => {
+    expect(modifyErrorFor('LIMIT', { ...order, limitPrice: 95.5 })).toBeUndefined()
+  })
+
+  // A MARKET order cannot rest in OPEN, so this branch is unreachable through
+  // the product — asserted anyway, because the refinement is stated both ways
+  // and a one-sided version would pass every test above.
+  it('refuses a price on a MARKET order, the way the CHECK constraint does', () => {
+    expect(modifyErrorFor('MARKET', { ...order, limitPrice: 95.5 })).toBe(
+      'A limit order needs a limit price.'
+    )
+  })
+
+  it('accepts a MARKET order with no price', () => {
+    expect(modifyErrorFor('MARKET', { ...order, limitPrice: null })).toBeUndefined()
   })
 })
