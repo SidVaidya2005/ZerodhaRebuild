@@ -9,7 +9,7 @@
 -- on the day and hour it runs is worse than no suite. The stub is created inside
 -- the transaction and the rollback removes it.
 begin;
-select plan(79);
+select plan(87);
 
 insert into auth.users (id) values
   ('11111111-1111-1111-1111-111111111111'),
@@ -660,6 +660,96 @@ select is_empty(
   $$ select 1 from public.holdings
       where user_id = '11111111-1111-1111-1111-111111111111'::uuid $$,
   '§8: and the holdings row is deleted rather than left at quantity zero'
+);
+
+-- ── N. A capped loss on a fill that CROSSES ZERO (§6, §7) ───────────────────
+--
+-- Section K covers a capped loss on a pure cover, where nothing follows the cap.
+-- This is the other shape: a BUY that covers a short *and* opens a long, whose
+-- cover loss exceeds the account. Found by the Phase 4 checkpoint review.
+--
+-- §6's cap leaves `available_cash` at exactly zero. The opening leg's BUY_DEBIT
+-- used to be posted straight after it, and `funds_available_cash_non_negative`
+-- is not deferrable — so the debit was refused and the whole fill died with
+-- 23514. Not a rejection: through `place_order` the RPC aborted outright, and
+-- through `match_open_orders` the order faulted on every tick forever. §6 says
+-- the position still closes and architecture.md says no position is ever
+-- stranded; the loss cap was the thing preventing both.
+--
+-- **Falsifiability:** apply 20260905170000_closing_leg_never_rejected.sql (the
+-- body with the opening leg posted after the cap) and the flip assertion below
+-- dies on 23514 rather than merely reporting a wrong number.
+--
+-- Bo is restaged with 13000.00 — enough to afford a one-share opening leg at the
+-- tripled price, which K's 12100.00 fixture is not.
+--
+-- Short 100 @ 100.00 — reservation 12011.48 (collateral 12005.06 + charges 6.42),
+-- leaving 988.52 in cash, average_price 99.94, entry_reference_price 100.00.
+--
+-- The price triples. MIS BUY 101 @ 250.00 covers 100 and opens 1.
+--   turnover 25250.00
+--   brokerage 0.0003 × 25250 = 7.575 → 7.58, stt 0 (intraday buy)
+--   exchange  0.0000307 × 25250 = 0.775175 → 0.78
+--   sebi      0.000001  × 25250 = 0.02525  → 0.03
+--   stamp     0.00003   × 25250 = 0.7575   → 0.76
+--   gst 0.18 × (7.575 + 0.775175 + 0.02525) = 1.5075765 → 1.51
+--   charges = 7.58 + 0.78 + 0.03 + 0.76 + 1.51 = 10.66
+--   closing share round(10.66 × 100/101, 2) = 10.55, opening remainder 0.11
+--
+--   reservation 1 × 250.00 + 10.66 = 260.66 → cash 727.86
+--   release 260.66 → 988.52, collateral 12005.06 → 12993.58, charges → 12982.92
+--   BUY_DEBIT −250.00 → 12732.92   ← the row that has to land BEFORE the cap
+--   loss (100.00 − 250.00) × 100 = −15000.00 against 12732.92
+--   → SIMULATION_ADJUSTMENT +2267.08, REALISED_PNL −15000.00, cash 0.00
+--   → trades.realised_pnl = (99.94 − 250.00) × 100 − 10.55 = −15016.55, uncapped
+
+update public.funds set available_cash = 13000.00, used_margin = 0
+ where user_id = '22222222-2222-2222-2222-222222222222'::uuid;
+delete from public.fund_ledger where user_id = '22222222-2222-2222-2222-222222222222'::uuid;
+insert into public.fund_ledger (user_id, type, amount, balance_after, note)
+values ('22222222-2222-2222-2222-222222222222'::uuid, 'SIGNUP_CREDIT', 13000.00, 13000.00, 'Fixture');
+
+select lives_ok($$ select pg_temp.price(100.00) $$, 'the price returns to 100.00');
+
+select is(
+  (select p.status from pg_temp.place('22222222-2222-2222-2222-222222222222', 'SELL', 'MARKET', 'MIS', 100) p),
+  'COMPLETE'::public.order_status,
+  'the short opens, leaving just enough cash for a one-share opening leg later'
+);
+
+select lives_ok($$ select pg_temp.price(250.00) $$, 'the price triples against it');
+
+select is(
+  (select p.status from pg_temp.place('22222222-2222-2222-2222-222222222222', 'BUY', 'MARKET', 'MIS', 101) p),
+  'COMPLETE'::public.order_status,
+  '§6: a fill crossing zero into a capped loss still completes — it does not abort on the CHECK'
+);
+
+select is(pg_temp.cash('22222222-2222-2222-2222-222222222222'), 0.00::numeric,
+  'cash floors at exactly zero across the crossing, never below');
+
+select is(
+  (select net_quantity from public.positions
+    where user_id = '22222222-2222-2222-2222-222222222222'::uuid and symbol = 'RELIANCE'),
+  1,
+  '§8: the opening leg survives the capping — the flip leaves a long of 1, not nothing'
+);
+
+select results_eq(
+  $$ select type::text, amount from public.fund_ledger
+      where user_id = '22222222-2222-2222-2222-222222222222'::uuid
+        and type in ('BUY_DEBIT', 'SIMULATION_ADJUSTMENT', 'REALISED_PNL') order by created_at $$,
+  $$ values ('BUY_DEBIT',             -250.00::numeric),
+            ('SIMULATION_ADJUSTMENT', 2267.08::numeric),
+            ('REALISED_PNL',        -15000.00::numeric) $$,
+  '§7: the purchase is paid for FIRST, and the simulator absorbs only what is left uncovered'
+);
+
+select is(
+  (select sum(amount) from public.fund_ledger
+    where user_id = '22222222-2222-2222-2222-222222222222'::uuid),
+  0.00::numeric,
+  '§12.1: available_cash still equals the sum of the ledger across a capped crossing'
 );
 
 select finish();
