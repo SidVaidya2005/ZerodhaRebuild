@@ -100,57 +100,54 @@ async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
   if (demandError) throw demandError
 
   const symbols = (demanded ?? []).map((row: { symbol: string }) => row.symbol)
-  if (symbols.length === 0) {
-    return {
-      ok: true,
-      refreshed: 0,
-      provider: null,
-      matched: 0,
-      faulted: 0,
-      squared: 0,
-      at: now.toISOString(),
+
+  // **An empty batch skips the upsert and nothing else.** Both of these used to
+  // return early, which took the two sweeps below with them — and neither sweep
+  // needs a fresh quote to do real work. §5 keeps a quote fillable for
+  // `QUOTE_STALE_AFTER_MS`, so the matcher can still fill against the previous
+  // tick's prices, and `square_off_mis` is the case that actually bites: a
+  // provider hiccup across the 15:20–15:30 window would leave every MIS position
+  // open overnight, against §10 and identity 7, for want of a price it was not
+  // going to use anyway. Skipping work the tick cannot do is right; skipping work
+  // it can is what this avoids.
+  let refreshed = 0
+  let provider: string | null = null
+
+  if (symbols.length > 0) {
+    const anchors = await loadAnchors(supabase, symbols)
+    const service = createQuoteService({
+      // Yahoo is deferred to the end of the project, so the simulator is the whole
+      // chain today. The seam is what matters: a real provider goes in front of it
+      // without changing anything here.
+      providers: [createSimulatorProvider({ anchors })],
+    })
+
+    const fetched = await service.getQuotes(symbols)
+
+    if (fetched.quotes.length > 0) {
+      const { error: upsertError } = await supabase.from('quotes').upsert(
+        fetched.quotes.map((quote) => ({
+          symbol: quote.symbol,
+          ltp: quote.ltp,
+          prev_close: quote.prevClose,
+          day_open: quote.dayOpen,
+          day_high: quote.dayHigh,
+          day_low: quote.dayLow,
+          volume: quote.volume,
+          provider: fetched.provider,
+          // Null for SIMULATOR, which has no upstream clock. The CHECK constraint on
+          // `quotes` enforces that only the simulator may omit it.
+          provider_ts: quote.providerTs?.toISOString() ?? null,
+          fetched_at: now.toISOString(),
+        })),
+        { onConflict: 'symbol' }
+      )
+      if (upsertError) throw upsertError
+
+      refreshed = fetched.quotes.length
+      provider = fetched.provider
     }
   }
-
-  const anchors = await loadAnchors(supabase, symbols)
-  const service = createQuoteService({
-    // Yahoo is deferred to the end of the project, so the simulator is the whole
-    // chain today. The seam is what matters: a real provider goes in front of it
-    // without changing anything here.
-    providers: [createSimulatorProvider({ anchors })],
-  })
-
-  const { quotes, provider } = await service.getQuotes(symbols)
-  if (quotes.length === 0) {
-    return {
-      ok: true,
-      refreshed: 0,
-      provider: null,
-      matched: 0,
-      faulted: 0,
-      squared: 0,
-      at: now.toISOString(),
-    }
-  }
-
-  const { error: upsertError } = await supabase.from('quotes').upsert(
-    quotes.map((quote) => ({
-      symbol: quote.symbol,
-      ltp: quote.ltp,
-      prev_close: quote.prevClose,
-      day_open: quote.dayOpen,
-      day_high: quote.dayHigh,
-      day_low: quote.dayLow,
-      volume: quote.volume,
-      provider,
-      // Null for SIMULATOR, which has no upstream clock. The CHECK constraint on
-      // `quotes` enforces that only the simulator may omit it.
-      provider_ts: quote.providerTs?.toISOString() ?? null,
-      fetched_at: now.toISOString(),
-    })),
-    { onConflict: 'symbol' }
-  )
-  if (upsertError) throw upsertError
 
   // Strictly after the upsert. The matcher prices off `quotes`, so running it
   // first would match this tick's orders against last tick's prices — and a
@@ -171,7 +168,7 @@ async function tick(supabase: SupabaseClient, now: Date): Promise<TickResult> {
 
   return {
     ok: true,
-    refreshed: quotes.length,
+    refreshed,
     provider,
     matched: run.filled,
     // Surfaced rather than logged only: a fault is an order the matcher could
