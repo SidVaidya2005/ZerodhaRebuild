@@ -10,7 +10,7 @@
 -- suite whose result depends on the hour it runs is worse than no suite. The
 -- stub is created inside the transaction and the rollback removes it.
 begin;
-select plan(29);
+select plan(33);
 
 insert into auth.users (id) values
   ('11111111-1111-1111-1111-111111111111'),
@@ -246,6 +246,45 @@ select ok(
 select ok(
   not has_function_privilege('anon', 'public.modify_order(uuid, integer, numeric)', 'execute'),
   'and not by anon, whose key ships in the browser bundle');
+
+-- ── G. A CNC sell cannot be raised beyond the holding (§8) ──────────────────
+--
+-- Found by the Phase 4 checkpoint review. `place_order` refuses these terms with
+-- NO_HOLDING, and `reserve_margin` reserves nothing for a CNC sell — so a modify
+-- was the one way to get an over-sized delivery sell resting on the book, silent
+-- until `execute_order` re-checked at a fill that might be days away.
+--
+-- **Falsifiability:** drop the pre-flight from `modify_order` and the NO_HOLDING
+-- assertion below returns `true` with the order resting at 10000 shares against
+-- a holding of 10.
+
+insert into public.holdings (user_id, symbol, quantity, average_price)
+values ('11111111-1111-1111-1111-111111111111'::uuid, 'RELIANCE', 10, 100.00)
+  on conflict (user_id, symbol) do update
+    set quantity = excluded.quantity, average_price = excluded.average_price;
+
+create temporary table t_sell on commit drop as
+  select pg_temp.rest('11111111-1111-1111-1111-111111111111', 'SELL', 10, 200.00) as id;
+
+select is(
+  (select status from public.orders where id = (select id from t_sell)),
+  'OPEN'::public.order_status,
+  'a delivery sell of the whole holding rests, priced above the market');
+
+select is(
+  (select m.reason from pg_temp.modify('11111111-1111-1111-1111-111111111111',
+                                       (select id from t_sell), 10000, 200.00) m),
+  'NO_HOLDING',
+  '§8: raising it beyond the holding is refused at modify, as it would be at placement');
+
+select is(
+  pg_temp.qty((select id from t_sell)), 10,
+  'and the order keeps its original quantity');
+
+select ok(
+  (select m.ok from pg_temp.modify('11111111-1111-1111-1111-111111111111',
+                                   (select id from t_sell), 4, 200.00) m),
+  'lowering it within the holding is still allowed');
 
 select finish();
 rollback;
