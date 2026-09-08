@@ -6,7 +6,6 @@ import { useShallow } from 'zustand/react/shallow'
 import type { Provenance, QuoteProviderName } from '@shared/provenance.ts'
 
 import { anchorProvenance } from '@/lib/market/screen-provenance'
-import type { HoldingRow } from '@/lib/portfolio/types'
 import { useQuoteStore } from '@/lib/stores/quote-store'
 
 /**
@@ -28,7 +27,15 @@ import { useQuoteStore } from '@/lib/stores/quote-store'
 
 export type PriceMap = Record<string, number | null>
 
-export function useHoldingPrices(holdings: HoldingRow[]): {
+/**
+ * Anything with a symbol.
+ *
+ * Both hooks read nothing else, so they serve F30's holdings and F31's
+ * positions from one implementation rather than a near-duplicate per table.
+ */
+type SymbolBearing = { symbol: string }
+
+export function useHoldingPrices(holdings: readonly SymbolBearing[]): {
   anchors: PriceMap
   prevCloses: PriceMap
 } {
@@ -81,7 +88,7 @@ export function useHoldingPrices(holdings: HoldingRow[]): {
  * falls back to `serverProvenance`, per the F20 constraint that names F30.
  */
 export function useHoldingProvenance(
-  holdings: HoldingRow[],
+  holdings: readonly SymbolBearing[],
   now: Date
 ): Record<string, Provenance> {
   const symbols = holdings.map((holding) => holding.symbol).join(',')

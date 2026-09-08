@@ -41,19 +41,43 @@ Delivery holdings, priced and live. No migration and no new SQL: F21's
 
 ### 31 Positions page
 
-
+The intraday counterpart to F30. Unlike it, this one needs a migration: F21 built
+`portfolio_holdings` and `portfolio_summary` but no positions equivalent, so the arithmetic has
+nowhere to live yet. Two `security_invoker` views supply it, and the page selects and narrows.
 
 **UI:**
 
-- MIS positions with net quantity (negative for shorts), average price, LTP, unrealised and realised P&L.
-- Exit button per position; a banner showing time remaining until auto square-off.
-- Empty state.
+- Columns: instrument, net quantity (negative for shorts), average price, LTP, unrealised P&L, realised P&L, collateral — P&L coloured by sign with an explicit +/−, so colour never carries it alone.
+- **Collateral is `positions.blocked_margin`, em dash for longs.** A short blocks real cash and no screen explains why until F32 ships.
+- `<tfoot>` totals under the columns they total: unrealised, realised, collateral.
+- Every column sortable, client-side, persisted nowhere. Default symbol ascending; money columns default to descending. `aria-sort` on the header.
+- Per-row Exit opens the layout's single ticket pre-filled MIS MARKET for the whole position — `SELL net_quantity` for a long, `BUY |net_quantity|` for a short.
+- A banner counting down to the 15:20 square-off, and an empty state distinct from the dashboard's.
+- Aggregate provenance line and the unpriced disclosure, as F21's tiles and F30's table do.
+
+**Logic:**
+
+- **`portfolio_positions`** — `positions ⋈ instruments`, `left join quotes` so an unpriced position still appears. **Unrealised P&L is one signed expression for both directions**: `net_quantity × (ltp − average_price)`. A short of 100 at ₹99.70 against an LTP of ₹90 gives `−100 × −9.70 = +970`, agreeing with §9's `(average_price − exit_price) × quantity`; a `case` on direction would be two formulas free to drift.
+- **`entry_reference_price` is not selected.** Identity 12 makes it collateral-only and `average_price` the P&L figure, so leaving it out of the view makes crossing them impossible on this page rather than forbidden.
+- **`portfolio_positions_summary`** — driven from `funds`, so an account with no positions still returns a row and the page can tell an empty portfolio from a failed read. Carries `position_count` and `unpriced_count` through `count(col) filter`, since `count(*)` would report the left-joined phantom.
+- **Exit goes through `place_order`, never through a collateral function.** `execute_order` takes `orders → funds → positions`; `recompute_position_collateral` inverts the last pair and is safe only because `execute_order` already holds both. A direct call from here is the ABBA cycle `constraints.md` names F31 as the likely source of.
+- No new margin arithmetic: `src/lib/trading/margin.ts` is already position-aware and proven equal to the engine at tier 4, so a covering buy reserves only its charges (§6).
+- The whole row jumps on the anchor, LTP included — `anchorProvenance()` for its claim, `serverProvenance` as the fallback (F20). Rows sort on restated values; an unpriced position sorts last in both directions.
+- The countdown reuses `MarketStatusPill`'s shape — `holidays: string[]` plus `serverNow`, the same pure `marketStatusAt`, a client timer. Server-rendering it would be wrong within a minute.
+- The scroll wrapper gets a positioned ancestor, so this table does not become the third instance of the `sr-only` escape measured on `/orders` and `/holdings`.
+- `OrderChannel` is mounted: a full exit deletes the row (§8), and positions are server state that never enters Zustand.
 
 **Verify:**
 
-- An intraday buy appears here and not in Holdings; a CNC buy does the opposite.
-- Exiting a position writes the closing trade and the realised P&L matches a hand calculation.
-- A short position shows negative quantity and P&L that moves opposite to price.
+- An intraday buy appears here and not in Holdings; a CNC buy does the opposite — tier 2 in `06-portfolio.sql`, asserting each view returns exactly its own row. `pnpm test:db`
+- Exiting writes the closing trade, `trades.realised_pnl` matches §9 by hand, and the position row is **deleted** — tier 2 over both a long exit and a short cover, since either assertion alone passes on a build where the exit silently failed.
+- Unrealised P&L is correct in both directions and a short's moves opposite to price — tier 1 over `recomputePosition` against hand figures, plus a tier-2 assertion that the view agrees with the same fixture.
+- A short shows negative quantity and non-zero collateral; a long shows an em dash there — tier 1 on the value mapping, confirmed in the browser.
+- Footer totals equal the sum of the rows — tier 1, `recomputePositionsSummary` against the sum of `recomputePosition`, both sides pinned to hand figures.
+- `entry_reference_price` reaches no component — `grep -rn 'entry_reference_price' src/` returns nothing under `components/`.
+- The scroll region is focusable and labelled at 375px and the page does not scroll sideways — browser, measuring `document.body.scrollWidth` against `clientWidth`, the check that caught 521px on `/holdings`.
+- Provenance is present in the **server-rendered** HTML, not only after hydration (F20). Browser.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### 32 Funds page
 

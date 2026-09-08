@@ -273,14 +273,16 @@ Pruning runs once daily inside `market-tick`.
 
 ### Portfolio views
 
-Three `security_invoker` views, added in F21. None carries a predicate of its own — RLS on the
-underlying table is the boundary, reached through `security_invoker`, which is the correction F18
-made to `watchlist_rows`.
+Five `security_invoker` views — three added in F21, two by F31. None carries a predicate of its own —
+RLS on the underlying table is the boundary, reached through `security_invoker`, which is the
+correction F18 made to `watchlist_rows`.
 
 | View | Grain | Notes |
 | ---- | ----- | ----- |
 | `portfolio_holdings` | One row per holding | `holdings` ⋈ `instruments` ⋈ `quotes`, left-joined on quotes so an unpriced holding still appears with null valuation. Carries `invested`, `market_value`, `unrealised_pnl`, `day_pnl` and the three provenance columns |
 | `portfolio_summary` | One row per user | The dashboard tiles. Driven from `funds` so a never-traded account still produces a row. `unpriced_count` is what stops the sums silently omitting an unpriced holding |
+| `portfolio_positions` | One row per position | `positions` ⋈ `instruments` ⋈ `quotes`, left-joined on quotes so an unpriced position still appears. Carries `unrealised_pnl` as one signed expression covering both directions, plus `realised_pnl`, `blocked_margin` and the three provenance columns. **Excludes `entry_reference_price`**, so §12.11's two averages cannot be crossed on screen (F31) |
+| `portfolio_positions_summary` | One row per user | The positions footer. Driven from `funds` so an account holding none still produces a row; `unpriced_count` stops the sums silently omitting one (F31) |
 | `market_composite` | One row | Equal-weighted mean day change across every priced active instrument, with advances/declines and `universe_size`. **A breadth statistic, never an index** — it reports raw provenance inputs rather than a source, because freshness is derived at read time |
 
 ### `watchlist_items`

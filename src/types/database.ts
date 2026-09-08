@@ -658,6 +658,61 @@ export type Database = {
           },
         ]
       }
+      portfolio_positions: {
+        Row: {
+          average_price: number | null
+          blocked_margin: number | null
+          exchange: string | null
+          fetched_at: string | null
+          ltp: number | null
+          name: string | null
+          net_quantity: number | null
+          opened_at: string | null
+          prev_close: number | null
+          product: Database["public"]["Enums"]["product_type"] | null
+          provider: Database["public"]["Enums"]["quote_provider"] | null
+          provider_ts: string | null
+          realised_pnl: number | null
+          symbol: string | null
+          unrealised_pnl: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "positions_symbol_fkey"
+            columns: ["symbol"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["symbol"]
+          },
+          {
+            foreignKeyName: "positions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_positions_summary: {
+        Row: {
+          blocked_margin: number | null
+          position_count: number | null
+          realised_pnl: number | null
+          unpriced_count: number | null
+          unrealised_pnl: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funds_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_summary: {
         Row: {
           available_cash: number | null

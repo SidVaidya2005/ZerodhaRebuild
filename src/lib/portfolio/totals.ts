@@ -34,10 +34,18 @@ export type PriceMap = Record<string, number | null>
  * The caller passes anchors, never interpolated values — see this module's
  * header. There is no `ltp` in scope here at all, which is the point.
  */
-function anchorFor(holding: HoldingRow, anchors: PriceMap): number | null {
-  const anchor = anchors[holding.symbol]
+export function anchorPrice(
+  symbol: string,
+  serverLtp: number | null,
+  anchors: PriceMap
+): number | null {
+  const anchor = anchors[symbol]
   if (anchor !== undefined && anchor !== null && Number.isFinite(anchor)) return anchor
-  return holding.ltp
+  return serverLtp
+}
+
+function anchorFor(holding: HoldingRow, anchors: PriceMap): number | null {
+  return anchorPrice(holding.symbol, holding.ltp, anchors)
 }
 
 function prevCloseFor(holding: HoldingRow, prevCloses: PriceMap): number | null {

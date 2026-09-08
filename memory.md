@@ -5,6 +5,7 @@
 ## In flight
 
 - **F26 — market-buy toast, the last item before the Phase 4 checkpoint.** Not blocked on a decision: it needs a live session, and 2026-09-08 is a trading day (session 09:15–15:30 IST). Plan: at 09:15 reset the account, then a CNC market buy for the toast and its no-reload arrival in Holdings.
+- **F31 — built and green on every non-browser gate, not ticked.** Three browser items need a live MIS position: the short's signed quantity and collateral column, server-rendered provenance, and the 375px scroll region. An MIS buy in the same 09:15 window opens one. The tier-2 exit assertions were deliberately *not* written — `10-orders.sql` already proves the long close, the short cover and deletion at zero, and F31 adds no mutation path of its own.
 
 ## Tried and rejected
 
