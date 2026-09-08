@@ -18,9 +18,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 4 checkpoint work, done out of order — Phase 5 was opened early because F27, F28 and F30 all looked blocked on market hours, and the checkpoint review is what unblocked them. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
-**Last completed:** The Phase 4 code review and its fixes (`4.00.08`–`4.00.13`). Six findings: five fixed, one recorded. **27 and 28 are now ticked** — every browser item closed live. The unblocker was giving `market-tick` the `session_at` seam every other layer already had, so the session gate can be driven instead of waited for; a limit filled at ₹2,111.45 against a ₹3,000 limit, the row moved Open → Executed with no reload, and the 15:20 sweep ran in production for the first time on F29's corrected lock order
-**In progress:** 30 Holdings page — **three and a half of four browser items pass**: server-rendered provenance, a tick moving row and footer together, Exit prefilled Sell/CNC/qty 11, `aria-sort` flipping, and the scroll region measured correct at 375px (343 containing 880, focusable, labelled). The only gap is F25's focus-return, which a hidden tab structurally cannot judge — it never fires `animationend`, so the dialog stays mounted at `data-state="closed"`. It needs a **visible, foregrounded** browser window, not market hours. F26's market-buy toast is the other open item: the `session_at` seam overrides the *tick's* gate, not `place_order`'s Postgres `market_state`
-**Next:** Close F26's market-buy item and F30's two gaps in a visible window, then the Phase 4 checkpoint itself. Carry into Phase 5: the `sr-only`-escapes-its-scroll-region hazard applies to every table F31, F33 and F34 add, and the cross-user lock-order question is now filed beside the `40P01` counter split under F29 in `build-plan/phase-4.md`
+**Last completed:** **30 Holdings page — all four browser items now pass.** F25's focus-return was closed in a genuinely visible window: Exit opens the ticket, Escape **unmounts** it (no lingering `data-state="closed"`), and `document.activeElement` returns to the Exit button carrying `aria-label="Sell all 11 shares of TCS"`, `navEntries` still 1. Tiers re-run green at the same commit — typecheck, lint, 335 tier-1, 20/20 pgTAP files, 36 parity
+**In progress:** F26's market-buy toast, the one item left before the Phase 4 checkpoint. It was never blocked on a decision: **`place_order` needs a real session and today is a trading day** — Tuesday 2026-09-08, not in `nse-holidays.json`, session 09:15–15:30 IST. `pg_cron` job 1 is active on `* 3-10 * * 1-5` and its last eight runs all succeeded, so the pipeline is alive. No `market_state` stub is needed and none was written; tier 4 proves it
+**Next:** At 09:15 IST, reset the account (it still carries Sunday-dated verification rows: ₹76,737.96 cash, 8 orders, 4 trades, TCS ×11), then place a CNC market buy for F26's toast and its no-reload arrival in Holdings. Then the Phase 4 checkpoint. Carry into Phase 5: the `sr-only`-escapes-its-scroll-region hazard applies to every table F31, F33 and F34 add, and the cross-user lock-order question is filed beside the `40P01` counter split under F29 in `build-plan/phase-4.md`
 
 ---
 
@@ -73,7 +73,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ### Phase 5 — Portfolio Pages
 
-- [ ] 30 Holdings page
+- [x] 30 Holdings page
 - [ ] 31 Positions page
 - [ ] 32 Funds page
 - [ ] 33 Stock detail page
