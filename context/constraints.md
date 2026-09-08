@@ -103,6 +103,8 @@ the shape of the code that implements it.
 - **A rejection closes the ticket.** The row is already filed as `REJECTED`; leaving the dialog open would imply it is still editable, and each retry would file another order. F25's inline `failure` state becomes unreachable and goes with it. (F26)
 - **A rejection is `ok:false` with `code` set to the reason; a fault is the only thing that is not a normal return.** Every caller then uses the one failure branch it already has, and `code-standards.md`'s toast-on-failure rule applies unchanged. (F26)
 - **The limit price is a `Controller` mapping empty to `null` at the field**, because an uncontrolled `type="number"` input has no single "empty" value: `''`, `null`, `undefined` and `NaN` all reach the schema depending on whether the user or `setValue` wrote last, and `Number(null)` is 0 — so a user who typed nothing was told their price must exceed zero. (F25)
+- **The Orders page lists today's orders plus every `OPEN` order, whatever its age.** A strict today filter drops a Friday limit order from the terminal on Monday while it is still holding margin, and F34 covers completed *trades* rather than orders — so a cancelled order from last week would have no surface at all. The open-order exemption is what makes the date filter safe. (F27)
+
 ## Testing
 
 - **Tier 3 commits into the production database.** It cannot be avoided — proving two connections cannot both fill an order requires the first to commit. Three guards are mandatory: `ALLOW_RACE_TESTS` must be set or `pnpm test:race` exits, seeded rows carry a recognisable prefix, and `afterEach` cleanup runs on failure too. A crashed process can still strand rows; that is the accepted residual risk. (1.00.03)

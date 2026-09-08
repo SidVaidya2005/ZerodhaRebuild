@@ -609,6 +609,53 @@ export type Database = {
       }
     }
     Views: {
+      funds_overview: {
+        Row: {
+          available_cash: number | null
+          holding_count: number | null
+          ledger_count: number | null
+          opening_balance: number | null
+          order_count: number | null
+          position_count: number | null
+          realised_pnl: number | null
+          trade_count: number | null
+          used_margin: number | null
+          user_id: string | null
+        }
+        Insert: {
+          available_cash?: number | null
+          holding_count?: never
+          ledger_count?: never
+          opening_balance?: number | null
+          order_count?: never
+          position_count?: never
+          realised_pnl?: never
+          trade_count?: never
+          used_margin?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          available_cash?: number | null
+          holding_count?: never
+          ledger_count?: never
+          opening_balance?: number | null
+          order_count?: never
+          position_count?: never
+          realised_pnl?: never
+          trade_count?: never
+          used_margin?: number | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funds_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       market_composite: {
         Row: {
           advances: number | null

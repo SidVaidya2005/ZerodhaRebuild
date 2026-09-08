@@ -273,9 +273,10 @@ Pruning runs once daily inside `market-tick`.
 
 ### Portfolio views
 
-Five `security_invoker` views — three added in F21, two by F31. None carries a predicate of its own —
-RLS on the underlying table is the boundary, reached through `security_invoker`, which is the
-correction F18 made to `watchlist_rows`.
+Six `security_invoker` views — three added in F21, two by F31, one by F32. None carries a security
+predicate of its own — RLS on the underlying table is the boundary, reached through
+`security_invoker`, which is the correction F18 made to `watchlist_rows`. `funds_overview`'s
+correlated `where user_id = f.user_id` clauses are subquery **correlation**, not that predicate.
 
 | View | Grain | Notes |
 | ---- | ----- | ----- |
@@ -283,6 +284,7 @@ correction F18 made to `watchlist_rows`.
 | `portfolio_summary` | One row per user | The dashboard tiles. Driven from `funds` so a never-traded account still produces a row. `unpriced_count` is what stops the sums silently omitting an unpriced holding |
 | `portfolio_positions` | One row per position | `positions` ⋈ `instruments` ⋈ `quotes`, left-joined on quotes so an unpriced position still appears. Carries `unrealised_pnl` as one signed expression covering both directions, plus `realised_pnl`, `blocked_margin` and the three provenance columns. **Excludes `entry_reference_price`**, so §12.11's two averages cannot be crossed on screen (F31) |
 | `portfolio_positions_summary` | One row per user | The positions footer. Driven from `funds` so an account holding none still produces a row; `unpriced_count` stops the sums silently omitting one (F31) |
+| `funds_overview` | One row per user | The Funds cards plus the five counts its reset dialog names. `realised_pnl` is §9's closing-leg figure only, which is what lets the page read **no quotes** and therefore carry no provenance (F32) |
 | `market_composite` | One row | Equal-weighted mean day change across every priced active instrument, with advances/declines and `universe_size`. **A breadth statistic, never an index** — it reports raw provenance inputs rather than a source, because freshness is derived at read time |
 
 ### `watchlist_items`

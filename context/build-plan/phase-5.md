@@ -81,25 +81,35 @@ nowhere to live yet. Two `security_invoker` views supply it, and the page select
 
 ### 32 Funds page
 
-
+The cash side of the account. One new view and one Server Action; no new money SQL, because
+`reset_account()` already exists, is `security definer`, derives its user from `auth.uid()` and is
+already granted to `authenticated`.
 
 **UI:**
 
-- Cards: available cash, used margin, opening balance, total P&L.
-- Ledger table with type, amount, running balance, related order, and timestamp; paginated and filterable by type.
-- "Reset account" with a confirmation dialog spelling out exactly what is destroyed.
+- Cards: available cash, used margin, opening balance, **realised P&L**.
+- **Realised only — `Σ trades.realised_pnl`, closed legs net of their closing charges (§9).** This keeps Funds a cash page that reads no quotes at all, so it needs no provenance disclosure, no anchor plumbing and no unpriced-count. Unrealised already has two homes in Dashboard and Holdings, and §9 is explicit that the two answer different questions.
+- Ledger table: type, amount, running balance, related order, timestamp. Server-paginated and filterable by type through `searchParams`, so the view is shareable and back-button correct.
+- "Reset account" behind a confirmation dialog naming exactly what is destroyed — with counts read from the database, not estimated — and what survives.
 
 **Logic:**
 
-- `resetAccount` Server Action calling the `reset_account` database function.
+- **`funds_overview`** — `security_invoker`, driven from `funds` so a never-traded account still returns a row. Carries the three `funds` columns, the realised-P&L sum, and the five counts the dialog names. The alternative is seven round trips and a money sum computed outside Postgres. Its `where user_id = f.user_id` clauses are subquery **correlation**, not the hand-written security predicate F18 removed from `watchlist_rows`.
+- `resetAccount` Server Action calls `reset_account`, then `revalidateTerminal()` — a reset moves cash and margin, which the terminal chrome renders on every page. No redirect: the user watches Funds return to the opening state.
+- **The dialog is a self-contained component, because F35 mounts the same control** and its Verify requires the two behave identically. Page-local markup would guarantee a second copy.
+- Ledger reads order `created_at desc, id desc` before `.range()` — `.range()` is 0-based inclusive and needs a companion order or the page boundaries are non-deterministic. The related order arrives through the `orders(symbol, side, product)` embed; `fund_ledger` has a single FK to `orders`, so no disambiguating hint is needed.
+- Invalid `?type=` or `?page=` falls back to defaults. A hand-edited URL must not produce an error boundary.
+- The scroll wrapper is positioned, focusable and labelled, as F31's is.
 
 **Verify:**
 
-- Every trade produces a matching ledger entry; the count matches the trade count.
-- `balance_after` on the newest entry equals `funds.available_cash` exactly.
-- `used_margin` equals `Σ orders.blocked_margin` over `OPEN` orders plus `Σ positions.blocked_margin`, checked after a randomised sequence of placements, fills, partial covers and cancels.
-- Reset restores the post-signup state exactly: orders, trades, holdings, positions and all ledger rows deleted, cash back to `OPENING_BALANCE`, `used_margin` zero, and a single fresh `SIGNUP_CREDIT` row — per `trading-contract.md` §11.
-- The confirmation dialog is required — no path resets without it.
+- Realised P&L equals `Σ trades.realised_pnl` and the five counts match their tables — tier 2, new suite, against a hand-built fixture; plus a never-traded account returning a zeroed row rather than none. `pnpm test:db`
+- The view is caller-scoped, proven by the `security_invoker = off` falsification that made F18's lesson stick — tier 2.
+- Pagination and filtering are correct at the boundaries — tier 1: page 1 → `range(0, 49)`, page 2 → `range(50, 99)`, `?page=0` and `?page=abc` clamp to 1, an unknown `?type=` falls back to unfiltered. `pnpm test`
+- No path resets without the dialog — browser: the page exposes no form or button calling `resetAccount` outside the dialog's confirm.
+- Reset returns the account to the post-signup state **through the UI** — browser, end to end: the cards read ₹1,00,000 / ₹0 / ₹1,00,000 and the ledger holds exactly one `SIGNUP_CREDIT`.
+- **Already proven, cited rather than rewritten:** §11's database guarantee is `10-orders.sql` section L (everything wiped, one fresh `SIGNUP_CREDIT`, balance restored, watchlist untouched, no other account affected); identity 3 is `09-margin-identities.sql`; §12.2's `balance_after` currency is `10-orders.sql:107`. A second copy of a passing assertion is not coverage.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### 33 Stock detail page
 

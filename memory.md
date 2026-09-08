@@ -14,6 +14,8 @@
 - Dispatching a synthetic `pointerdown/…/click` to open the order ticket — captures a null focus trigger, because Chromium focuses a button only on a trusted mousedown. Promoted to `constraints.md`.
 - Trusting `supabase functions deploy` to typecheck — it does not without Docker; it warns and uploads regardless.
 
+- **F32 — built and green on every non-browser gate, not ticked.** One browser item left: the reset dialog's rendered counts, which need an unoccluded window. Doing the 09:15 reset through the new UI closes both that and F32's end-to-end criterion.
+
 ## Open questions
 
-- **The account reset is agreed but not yet run.** It carries Sunday-dated verification rows (₹76,737.96 cash, 8 orders, 4 trades, TCS ×11). Scheduled for today after 09:15, ahead of the market buy — still needs the go-ahead, since `reset_account()` has no UI until F32/F35 and would go via RPC.
+- **The account reset is agreed but not yet run.** It carries Sunday-dated verification rows (₹76,737.96 cash, 8 orders, 4 trades, TCS ×11). Scheduled for today after 09:15, ahead of the market buy — still needs the go-ahead. **No longer an RPC**: F32 shipped the dialog, so it is now a button on `/funds`.
