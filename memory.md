@@ -4,18 +4,17 @@
 
 ## In flight
 
-- **F26 — market-buy toast, the last item before the Phase 4 checkpoint.** Not blocked on a decision: it needs a live session, and 2026-09-08 is a trading day (session 09:15–15:30 IST). Plan: at 09:15 reset the account, then a CNC market buy for the toast and its no-reload arrival in Holdings.
-- **F31 — built and green on every non-browser gate, not ticked.** Three browser items need a live MIS position: the short's signed quantity and collateral column, server-rendered provenance, and the 375px scroll region. An MIS buy in the same 09:15 window opens one. The tier-2 exit assertions were deliberately *not* written — `10-orders.sql` already proves the long close, the short cover and deletion at zero, and F31 adds no mutation path of its own.
+- Nothing mid-feature. F31 and F32 are ticked and committed; the next act is the **Phase 4 checkpoint**, whose first three steps are real work, not record-keeping.
+- The `pnpm dev` server does not survive unattended; restart it before any browser verification.
+- Two live MIS positions (ITC +20, INFY −3) were open at 14:20 IST on 2026-09-09 and will have been auto-squared at 15:20. If the checkpoint wants live identity-7 evidence, `trades.is_auto_squareoff` and `cron.job_run_details` hold it — but `net._http_response` keeps only ~6 hours.
 
 ## Tried and rejected
 
-- Stubbing `market_state` to force a fill — **moot**, and never done. Nobody had checked the calendar; the item only ever wanted the next trading day, which its own Verify block says.
-- Giving `place_order` a `p_at` to mirror the tick seam — rejected on security: it is granted to `authenticated`, so it would let any signed-in user trade outside market hours.
-- Dispatching a synthetic `pointerdown/…/click` to open the order ticket — captures a null focus trigger, because Chromium focuses a button only on a trusted mousedown. Promoted to `constraints.md`.
-- Trusting `supabase functions deploy` to typecheck — it does not without Docker; it warns and uploads regardless.
-
-- **F32 — built and green on every non-browser gate, not ticked.** One browser item left: the reset dialog's rendered counts, which need an unoccluded window. Doing the 09:15 reset through the new UI closes both that and F32's end-to-end criterion.
+- Stubbing `market_state` to force a fill — **moot**, and never done. The item only ever wanted the next trading day, which its own Verify block says. Check whether a blocker is still real before designing around it.
+- Giving `place_order` a `p_at` seam — rejected on security: it is granted to `authenticated`, so it would let any signed-in user trade outside market hours.
+- Hiding the provenance badge or the theme toggle to fit 375px — rejected: the badge carries the honesty summary, and the toggle is the only theme control on mobile (`AvatarMenu` has none). The wordmark went instead.
+- Clicking a watchlist B/S button by CSS coordinate — landed on the correct element and did nothing; the same button clicked **by element ref** worked. Prefer refs to coordinates in this app.
 
 ## Open questions
 
-- **The account reset is agreed but not yet run.** It carries Sunday-dated verification rows (₹76,737.96 cash, 8 orders, 4 trades, TCS ×11). Scheduled for today after 09:15, ahead of the market buy — still needs the go-ahead. **No longer an RPC**: F32 shipped the dialog, so it is now a button on `/funds`.
+- None. The mobile-navigation gap found this session is confirmed, not open — it is filed in `constraints.md` under Accessibility and assigned to F37. It has not been added to `build-plan/phase-6.md`, which is `architect`'s to shape.
