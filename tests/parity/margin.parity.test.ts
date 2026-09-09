@@ -243,5 +243,11 @@ describe('the ticket estimates what the engine reserves', () => {
     }
 
     expect(mismatches, `seed ${SEED}`).toEqual([])
-  })
+    // 120 sequential round trips to a remote ap-south-1 database is ~30s of
+    // pure latency, which is exactly Vitest's default budget — so this test
+    // failed or passed on network jitter rather than on agreement, observed
+    // both ways within three consecutive runs at the Phase 4 checkpoint. The
+    // budget is what was wrong, not the test: a timeout here should mean
+    // something is hung, never that the link was slow today.
+  }, 120_000)
 })
