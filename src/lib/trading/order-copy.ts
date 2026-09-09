@@ -102,15 +102,24 @@ export function orderPlacedMessage(order: PlacedOrder): string {
 
 /**
  * `modify_order`'s reasons — `trading-contract.md` §4, and a closed set for the
- * same reason `REJECTION_CODES` is one. A modify declines in four distinct ways
+ * same reason `REJECTION_CODES` is one. A modify declines in six distinct ways
  * and only one of them is about money, so collapsing them into a bare `false`
  * would leave the user guessing which.
+ *
+ * `NO_HOLDING` was added to `modify_order` by the CNC-sell pre-flight in
+ * `20260906110000` and asserted by `12-modify-order.sql`, but not here — so it
+ * fell through `toModifyCode` to `UNKNOWN` and the user raising a resting CNC
+ * sell above their holding was told only "that change did not go through",
+ * forever. `order-copy.test.ts` could not catch it: it iterates this array, so a
+ * missing member is invisible to it. Keep this set equal to the reasons in
+ * `modify_order`'s own COMMENT.
  */
 export const MODIFY_REASONS = [
   'NOT_FOUND',
   'NOT_OPEN',
   'NOT_MODIFIABLE',
   'INVALID_QUANTITY',
+  'NO_HOLDING',
   'INSUFFICIENT_FUNDS',
 ] as const
 
@@ -134,6 +143,7 @@ export const MODIFY_ERROR_COPY: Readonly<Record<OrderMutationCode, string>> = {
   NOT_OPEN: 'That order has already been filled or cancelled, so it can no longer be changed.',
   NOT_MODIFIABLE: 'Only the quantity and limit price of an open limit order can be changed.',
   INVALID_QUANTITY: 'That quantity is not a whole number of shares.',
+  NO_HOLDING: 'You do not hold enough of that to sell. A CNC sell can only sell what you own.',
   INSUFFICIENT_FUNDS:
     'Not enough funds for the new terms. The order is unchanged and still working at its original ones.',
   VALIDATION_ERROR: 'Check the new order details.',

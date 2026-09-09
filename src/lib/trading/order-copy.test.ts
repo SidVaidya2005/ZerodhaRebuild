@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -118,6 +120,37 @@ describe('modify copy', () => {
     for (const reason of MODIFY_REASONS) {
       expect(MODIFY_ERROR_COPY[reason]).toBeTruthy()
     }
+  })
+
+  /**
+   * The test above cannot catch the drift its own comment describes, because it
+   * iterates `MODIFY_REASONS` — a reason present in SQL and absent here is
+   * invisible to it. That is not hypothetical: `NO_HOLDING` shipped in
+   * `20260906110000`, was asserted by `12-modify-order.sql`, and still reached
+   * users as "that change did not go through" until the Phase 4 checkpoint.
+   *
+   * So this one reads the other side. It parses the reason literals out of the
+   * newest migration that defines `modify_order` and demands set equality, which
+   * fails in the direction that actually hurts: SQL gained a reason, TypeScript
+   * did not.
+   */
+  it('knows exactly the reasons the live modify_order can return', () => {
+    const dir = 'supabase/migrations'
+    const defining = readdirSync(dir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort()
+      .filter((f) =>
+        /create or replace function public\.modify_order/i.test(readFileSync(`${dir}/${f}`, 'utf8'))
+      )
+
+    expect(defining.length, 'no migration defines modify_order').toBeGreaterThan(0)
+
+    const sql = readFileSync(`${dir}/${defining[defining.length - 1]}`, 'utf8')
+    const inSql = new Set(
+      [...sql.matchAll(/select\s+false\s*,\s*'([A-Z_]+)'::text/g)].map((m) => m[1])
+    )
+
+    expect([...inSql].sort()).toEqual([...MODIFY_REASONS].sort())
   })
 
   it('degrades an unknown reason to UNKNOWN rather than rendering it', () => {
