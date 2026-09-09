@@ -42,7 +42,7 @@ Charges are computed per executed order, on turnover = `quantity * price`.
 | GST | 18% of (brokerage + exchange + SEBI + `dp_base`) | same | same | same |
 | DP charge (`dp_base`) | — | ₹13.00 flat per scrip | — | — |
 
-**Source: <https://zerodha.com/charges/>, confirmed 2026-08-21, re-confirmed 2026-08-22 at the start of Phase 4 with every rate unchanged.** Statutory components (STT, stamp
+**Source: <https://zerodha.com/charges/>, confirmed 2026-08-21, re-confirmed 2026-08-22 at the start of Phase 4 and 2026-09-09 during Phase 5 — every rate unchanged on all three checks, and the ₹15.34-inclusive and GST-presentation notes below re-confirmed with it.** Statutory components (STT, stamp
 duty, the SEBI fee, exchange transaction charges, GST) are set by regulators and the exchange, not by
 a broker, and change by circular — **re-check this table at the start of each phase that touches
 money, and on any Union Budget**. The exchange transaction rate has already moved once (0.00297% →
@@ -191,6 +191,12 @@ Instead, when a cover or square-off would drive `available_cash` below zero:
 - Cash debited is capped at what the account holds: `min(loss, blocked_margin + available_cash − closing_charges)`. `available_cash` floors at zero and `CHECK (available_cash >= 0)` is never relaxed.
 - The uncovered remainder is written as a **`SIMULATION_ADJUSTMENT`** credit, so `available_cash = Σ ledger` still holds and the divergence is auditable rather than hidden.
 - **`trades.realised_pnl` records the true, uncapped loss**, so Reports stay honest even though the cash effect was capped.
+
+**This guarantee is about covers and square-offs, not about any order containing a closing leg.** Those
+carry no opening leg, so nothing in them can be refused. A fill that crosses zero does carry one, and §1
+makes fills all-or-nothing — so an opening leg that cannot be collateralised rejects the whole order,
+closing portion included. Nothing is stranded: the position is still open and still closable by an order
+that opens no fresh exposure. (Phase 4 checkpoint)
 
 The cost: reported cash diverges from a real broker's in this case, because a real broker issues a margin
 call and pursues the balance. That is out of scope for a simulator holding no real money, and it must be

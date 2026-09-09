@@ -4,17 +4,18 @@
 
 ## In flight
 
-- Nothing mid-feature. F31 and F32 are ticked and committed; the next act is the **Phase 4 checkpoint**, whose first three steps are real work, not record-keeping.
+- **Phase 4 checkpoint is part-run** — state and remaining steps are in `progress-tracker.md` Current Status. Two things block it, both on the 15:20 sweep: tier 3's square-off suites and identities 7/9/10.
+- **Six files uncommitted** (tip `5.31.02`): the `NO_HOLDING` fix + its new SQL-reading drift guard in `order-copy.{ts,test.ts}`, the 120s budget on `margin.parity.test.ts`, and doc edits to `constraints.md`, `library-docs.md`, `trading-contract.md`.
+- The always-read budget passes at **~39,926 / 40,000** — only ~74 tokens of headroom, so the next constraint bullet will likely fail `pnpm context:cost`.
 - The `pnpm dev` server does not survive unattended; restart it before any browser verification.
-- Two live MIS positions (ITC +20, INFY −3) were open at 14:20 IST on 2026-09-09 and will have been auto-squared at 15:20. If the checkpoint wants live identity-7 evidence, `trades.is_auto_squareoff` and `cron.job_run_details` hold it — but `net._http_response` keeps only ~6 hours.
 
 ## Tried and rejected
 
-- Stubbing `market_state` to force a fill — **moot**, and never done. The item only ever wanted the next trading day, which its own Verify block says. Check whether a blocker is still real before designing around it.
-- Giving `place_order` a `p_at` seam — rejected on security: it is granted to `authenticated`, so it would let any signed-in user trade outside market hours.
-- Hiding the provenance badge or the theme toggle to fit 375px — rejected: the badge carries the honesty summary, and the toggle is the only theme control on mobile (`AvatarMenu` has none). The wordmark went instead.
-- Clicking a watchlist B/S button by CSS coordinate — landed on the correct element and did nothing; the same button clicked **by element ref** worked. Prefer refs to coordinates in this app.
+- **Making `execute_order` never reject a flip's closing leg — impossible, do not retry.** It requires filling the close and rejecting the open, i.e. a partial fill, which §1 forbids. The contract only ever guaranteed pure covers and square-offs; §6 now says so.
+- Giving `place_order` a `p_at` seam — rejected on security: it is granted to `authenticated`, so any signed-in user could trade outside market hours.
+- Hiding the provenance badge or theme toggle to fit 375px — the badge carries the honesty summary and the toggle is the only theme control below `lg`. The wordmark went instead.
+- Clicking a watchlist B/S button by CSS coordinate — hits the right element and does nothing; clicking **by element ref** works.
 
 ## Open questions
 
-- None. The mobile-navigation gap found this session is confirmed, not open — it is filed in `constraints.md` under Accessibility and assigned to F37. It has not been added to `build-plan/phase-6.md`, which is `architect`'s to shape.
+- **Fix the flip's spurious rejection?** On a fill crossing zero, `transfer_margin_to_position` tests the shortfall against `available_cash` *before* the closing leg's `SELL_CREDIT` is posted, so a flip whose own proceeds would cover it is rejected anyway. Fix is to hoist the SELL closing settlement above the reservation retirement — traced and safe, but it needs a migration reproducing ~400 lines of `execute_order`, changes ledger row ordering on every SELL close (defensible under §7), and wants new tier-2 flip coverage. Undecided.

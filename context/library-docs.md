@@ -179,6 +179,7 @@ return () => {
 - **Always filter server-side.** Subscribing to a whole table and filtering in the callback still has every row delivered to and authorized for every subscriber, which defeats the demand-driven model the quote pipeline is justified by. Rebuild the channel when the visible symbol set changes.
 - Postgres Changes authorizes per event per subscriber and does not scale indefinitely. It is the right choice at this project's size; if the symbol set or user count grows, move to Realtime Broadcast rather than widening the filter.
 - Always `supabase.removeChannel(channel)` in the effect cleanup; unremoved channels leak across navigations and hit the free-tier concurrent connection cap.
+- **Re-checked against Context7 at the Phase 4 checkpoint (2026-09-09): the raw `symbol=in.(…)` filter string above is still current and documented.** Supabase has since *added* a builder form, `postgresChangesFilter().in('symbol', [...])`, alongside it — an addition, not a replacement, so the code needs no change. The supported operator set is wider than this file implies: `eq, neq, lt, lte, gt, gte, in, like, ilike, is, match, imatch, isdistinct`, any of them negatable with `not.`, and commas combining conditions as AND.
 - Regenerate `src/types/database.ts` with `pnpm supabase gen types typescript --linked > src/types/database.ts` after every migration.
 
 ---
