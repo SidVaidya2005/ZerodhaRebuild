@@ -57,9 +57,15 @@ export function TopNav({
             <main>, not a nav item — see the layout. */}
         <WatchlistSheet rows={watchlist} universe={universe} />
 
+        {/* The wordmark is the one element here that carries no function, so it
+            is what gives way below `sm`: at 375px the burger, pill, badge,
+            toggle and avatar need 333 of the 347px available, and the wordmark's
+            109px is what pushed the bar to 466 and scrolled every terminal page
+            sideways. Hiding it keeps the market-status pill and the provenance
+            badge — which the honesty guarantee depends on — at full size. */}
         <Link
           href="/dashboard"
-          className="shrink-0 font-bold text-body text-brand sm:text-title-sm"
+          className="hidden shrink-0 font-bold text-body text-brand sm:block sm:text-title-sm"
         >
           ZerodhaRebuild
         </Link>

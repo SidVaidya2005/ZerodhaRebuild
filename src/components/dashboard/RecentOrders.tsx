@@ -41,12 +41,18 @@ export function RecentOrders({ orders }: { orders: RecentOrder[] }) {
   // overflows, and a scroll container that cannot be focused leaves keyboard
   // users unable to reach the columns off the right edge. Lighthouse does not
   // catch this — axe does.
+  //
+  // `relative` is load-bearing, not cosmetic: the `sr-only` caption below is
+  // `position: absolute`, so without a positioned ancestor it resolves against
+  // the initial containing block and escapes this `overflow-x-auto` region.
+  // This table is narrow enough that it does not currently drag the page
+  // sideways, but /holdings and /orders both did — same omission, same fix.
   return (
     <div
       role="region"
       aria-label="Recent orders, scrollable"
       tabIndex={0}
-      className="overflow-x-auto rounded-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+      className="relative overflow-x-auto rounded-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
     >
       <table className="w-full min-w-[520px] text-body-sm">
         <caption className="sr-only">Your most recent orders, newest first.</caption>

@@ -40,12 +40,17 @@ export function OrdersTable({ orders, label }: { orders: OrderRow[]; label: stri
   // Focusable and labelled: below ~720px this table overflows, and a scroll
   // container that cannot be focused leaves keyboard users unable to reach the
   // columns past the right edge. Lighthouse does not audit this; axe does.
+  //
+  // `relative` is load-bearing, not cosmetic: `.sr-only` is `position: absolute`,
+  // so without a positioned ancestor the caption and the "Actions" header escape
+  // this `overflow-x-auto` region and drag the whole page sideways. Measured at
+  // 365px here at the Phase 4 checkpoint.
   return (
     <div
       role="region"
       aria-label={`${label} orders, scrollable`}
       tabIndex={0}
-      className="overflow-x-auto rounded-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+      className="relative overflow-x-auto rounded-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
     >
       <table className="w-full min-w-[720px] text-body-sm">
         <caption className="sr-only">{label} orders, newest first.</caption>

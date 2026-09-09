@@ -123,12 +123,18 @@ export function HoldingsTable({ holdings, summary }: HoldingsTableProps) {
       {/* Focusable and labelled: this table overflows well before 375px, and a
           scroll container that cannot be focused leaves keyboard users unable to
           reach the columns past the right edge. Lighthouse does not audit this;
-          axe does. */}
+          axe does.
+
+          `relative` is load-bearing, not cosmetic: `.sr-only` is
+          `position: absolute`, so without a positioned ancestor the caption and
+          the "Actions" header resolve against the initial containing block,
+          escape this `overflow-x-auto` region entirely, and drag the whole page
+          sideways — measured at 525px here. */}
       <div
         role="region"
         aria-label="Holdings, scrollable"
         tabIndex={0}
-        className="overflow-x-auto rounded-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+        className="relative overflow-x-auto rounded-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
       >
         <table className="w-full min-w-[880px] text-body-sm">
           <caption className="sr-only">
