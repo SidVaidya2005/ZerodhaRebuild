@@ -67,7 +67,17 @@ begin
         v_cover := 1 + floor(random() * abs(v_position.net_quantity))::integer;
         v_new_quantity := v_position.net_quantity + v_cover;
 
-        perform public.recompute_position_collateral(v_user, v_symbol, v_new_quantity);
+        -- The cover is an order like any other, and the release is stamped with
+        -- it: without an order id on that row §12.9 cannot be evaluated for a
+        -- short cover at all. (Phase 4 checkpoint)
+        insert into public.orders
+          (user_id, symbol, side, order_type, product, quantity, limit_price, status,
+           filled_quantity, average_price)
+        values (v_user, v_symbol, 'BUY', 'LIMIT', 'MIS', v_cover, v_price, 'COMPLETE',
+                v_cover, v_price)
+        returning id into v_order_id;
+
+        perform public.recompute_position_collateral(v_user, v_symbol, v_new_quantity, v_order_id);
 
         if v_new_quantity = 0 then
           delete from public.positions

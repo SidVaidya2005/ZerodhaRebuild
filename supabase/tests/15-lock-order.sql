@@ -80,7 +80,7 @@ select is(
 );
 
 select is(
-  pg_temp.lock_sequence('public.recompute_position_collateral(uuid,text,integer)'),
+  pg_temp.lock_sequence('public.recompute_position_collateral(uuid,text,integer,uuid)'),
   array['positions', 'funds'],
   'recompute_position_collateral still inverts positions/funds — callers must already hold the funds row'
 );

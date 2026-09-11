@@ -903,6 +903,7 @@ export type Database = {
       recompute_position_collateral: {
         Args: {
           p_new_net_quantity: number
+          p_order_id: string
           p_symbol: string
           p_user_id: string
         }

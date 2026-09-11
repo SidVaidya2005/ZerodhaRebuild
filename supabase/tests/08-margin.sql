@@ -11,7 +11,7 @@
 -- collateral. Both are arithmetic errors that produce a plausible number, and
 -- neither would ever look wrong on screen.
 begin;
-select plan(60);
+select plan(61);
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -373,8 +373,13 @@ select is(
 -- Covering 100 of the 200 leaves a short of 100, whose collateral is 12005.06
 -- (computed in section D). Released = 24010.11 - 12005.06 = 12005.05.
 
+-- The cover is an order, and §12.9 requires the release to name it.
+insert into public.orders (id, user_id, symbol, side, order_type, product, quantity, limit_price)
+values ('00000000-0000-0000-0000-0000000000f1'::uuid, '11111111-1111-1111-1111-111111111111'::uuid, 'RELIANCE', 'BUY', 'LIMIT', 'MIS', 100, 100.00);
+
 select is(
-  public.recompute_position_collateral('11111111-1111-1111-1111-111111111111'::uuid, 'RELIANCE', -100),
+  public.recompute_position_collateral('11111111-1111-1111-1111-111111111111'::uuid, 'RELIANCE', -100,
+                                       '00000000-0000-0000-0000-0000000000f1'::uuid),
   12005.05::numeric,
   'covering half releases half the collateral, not zero and not all of it'
 );
@@ -393,10 +398,24 @@ select results_eq(
   'a cover DOES write a ledger row — unlike entry, the cash genuinely comes back'
 );
 
+-- §12.9 reads "the sum of every ledger row referencing its orders ... equals the
+-- net change in available_cash". Before the Phase 4 checkpoint this row carried
+-- no order_id, so a short cover's collateral release referenced nothing and the
+-- identity was unevaluable — off by the whole collateral, while the long beside
+-- it reconciled exactly.
+select is(
+  (select order_id from public.fund_ledger
+    where user_id = '11111111-1111-1111-1111-111111111111'::uuid
+    order by created_at desc limit 1),
+  '00000000-0000-0000-0000-0000000000f1'::uuid,
+  'and that row names the order that caused it, without which §12.9 cannot be evaluated'
+);
+
 update public.positions set net_quantity = -100 where user_id = '11111111-1111-1111-1111-111111111111'::uuid;
 
 select is(
-  public.recompute_position_collateral('11111111-1111-1111-1111-111111111111'::uuid, 'RELIANCE', 0),
+  public.recompute_position_collateral('11111111-1111-1111-1111-111111111111'::uuid, 'RELIANCE', 0,
+                                       '00000000-0000-0000-0000-0000000000f1'::uuid),
   12005.06::numeric,
   'a full cover releases everything'
 );
