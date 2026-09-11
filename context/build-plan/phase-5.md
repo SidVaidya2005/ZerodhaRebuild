@@ -113,30 +113,46 @@ already granted to `authenticated`.
 
 ### 33 Stock detail page
 
-
+The first page that draws a chart, and the feature that finally builds the candle pipeline F15 and
+F16 both deferred to it. Four UI ranges over three stored intervals, cached in `candles` with
+per-interval TTLs in `candle_sync`, and a retention job of its own. **Yahoo is still deferred to the
+end of the project (F14)**, so the chain ships simulator-only behind a `CandleProvider` seam Yahoo
+drops into later — no Yahoo candle parser is written here, and `library-docs.md`'s unverified
+response-shape TODO stays open.
 
 **UI:**
 
-- Header: symbol, name, LTP, day change, market status.
-- Candlestick chart with 1D / 1W / 1M / 1Y range switching.
-- OHLC, volume, 52-week high and low.
-- Buy and sell buttons opening the ticket; the user's current holding in this symbol, if any.
+- Header: symbol, name, LTP, day change, market status. The LTP is the store's anchor described by `anchorProvenance()`, never `provenanceOf` (F30), with `serverProvenance(row, now)` as the SSR fallback — `provenance={live ? … : null}` renders every price as an em dash in the fetched HTML, and hydration hides it (F20).
+- Candlestick chart with 1D / 1W / 1M / 1Y switching through a `?range=` search param, so each range is a server render and the URL is shareable and back-button correct.
+- OHLC, volume, and a 52-week high and low **derived from the stored `ONE_DAY` series** — `quotes` has no 52-week columns, Yahoo is not live, and `range=1y` spans exactly that window, so this costs no schema change and no second fetch.
+- Buy and sell buttons calling `openTicket({ symbol, side })`; the ticket is mounted once in the terminal layout and every call site gets a button, never its own dialog. The user's current holding or position in this symbol, if any.
+- A symbol not in `instruments` is `notFound()`, not an echoed heading.
 
 **Logic:**
 
-- `getCandles(symbol, range)` server-side: map range to interval, serve from `candles` when `candle_sync` is fresh, otherwise fetch through the candle provider chain, upsert, and stamp `candle_sync`.
-- 1M and 1Y windowed from the one `ONE_DAY` series rather than fetched separately.
-- On provider failure, serve the cached rows with their true age surfaced; never an empty chart, never fabricated candles inside a real series.
-- The chart component receives plain serialisable data and resolved theme colours.
+- `getCandles(symbol, range)` server-side in `src/lib/market/candles/service.ts`: map range to interval, serve from `candles` when `candle_sync` is fresh, otherwise generate, upsert, and stamp `candle_sync`.
+- **It runs through `createAdminClient()`.** `candles` and `candle_sync` grant nothing to `authenticated` and carry no write policy — F10 made the service role the only writer deliberately. This is `admin.ts`'s first caller since F01, so its `server-only` guard is finally load-bearing.
+- 1M and 1Y are two windows over the one `ONE_DAY` series, windowed in memory rather than fetched separately.
+- **Simulated candles are deterministic, seeded from `(symbol, interval, ts)`.** Any given candle regenerates byte-identical, so the upsert is idempotent and a TTL refresh appends without rewriting history — a chart that redraws its own past on every visit is fabricated data that contradicts itself. The daily series is anchored so its last close lands on `quotes.prev_close`, the same anchor the live quote simulator walks from (F16), with `instruments.prev_close` as the cold-start fallback; the chart and the header therefore cannot disagree.
+- **No token bucket and no circuit breaker.** F15 already established that a limiter in front of a local simulator caps nothing; both arrive with Yahoo. `architecture/patterns.md` promised them on this path and is corrected rather than satisfied with dead code.
+- On provider failure with rows present, serve the cached rows with their true age surfaced; never an empty chart, never a fabricated candle inside a real series.
+- The chart component receives plain serialisable data and resolved theme colours, and **draws once per server render** — `setData()`, not a live-growing last candle. The `FIVE_MIN` TTL means the series is at best five minutes fresh, so a ticking rightmost bar would imply precision the pipeline does not have; it also keeps a canvas clear of F19's trap, where subscribing to the quote store re-renders a component ~60x/s through the interpolation window. The header LTP still ticks.
+- Canvas cannot read CSS variables: `--color-up` and `--color-down` are resolved once in a `'use client'` wrapper and re-applied with `series.applyOptions()` when `next-themes` changes, or a chart built under dark tokens keeps them after a switch to light.
+- **Retention is `prune_candles()` on its own `pg_cron` schedule**, not a call inside `market-tick`. Retention is pure data work with no HTTP dependency; as SQL it is testable at tier 2 rather than only by deploying and waiting for a tick, and it stops F33 depending on an F16 deliberately parked until the end of the project. `code-standards/boundary-patterns.md` showed the opposite and is corrected in the same change.
 
 **Verify:**
 
-- The chart renders for ten different symbols with no console errors.
-- Switching between 1M and 1Y issues **no** new upstream request — both window the same cached daily series.
+- The chart renders for ten different symbols with no console errors — browser, console clean.
+- Switching between 1M and 1Y issues **no** new upstream request — both window the same cached daily series; `candle_sync.fetched_at` for `ONE_DAY` is unchanged after toggling both ways.
 - A second visit inside the TTL issues no upstream request at all; `candle_sync.fetched_at` is unchanged.
 - With the provider forced to fail and cached rows present, the chart still renders and shows the data's real age.
-- Navigating away and back leaves no leaked canvas — `chart.remove()` confirmed in cleanup.
-- A symbol with no available history shows an explanatory empty state, not a broken chart.
+- Navigating away and back leaves no leaked canvas — `chart.remove()` confirmed in cleanup, canvas count stable across five round trips in DevTools.
+- A symbol with no available history shows an explanatory empty state, not a broken chart; a symbol not in `instruments` is a 404.
+- History is stable: generating the same `(symbol, interval, ts)` twice is deep-equal, and a refetch after a day appends only. `pnpm test`
+- Retention keeps exactly the right window per interval and leaves the other two untouched — `18-candles.sql`. `pnpm test:db`
+- The page does not scroll sideways at 375px — `documentElement.scrollWidth === clientWidth` measured **on the page**, not on the chart container (F31, F30).
+- The SSR price is not an em dash — `curl` the route and read the HTML; hydration hides this (F20).
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### 34 Reports and trade history
 

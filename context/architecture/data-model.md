@@ -177,7 +177,7 @@ of dailies once satisfies both.
 TTLs, from `constants.ts`: `FIVE_MIN` refreshes every 5 minutes during a session and not at all outside
 one; `THIRTY_MIN` every 30 minutes during a session; `ONE_DAY` once per trading day after close.
 Retention: `FIVE_MIN` keeps the current trading day, `THIRTY_MIN` five trading days, `ONE_DAY` 400 days.
-Pruning runs once daily inside `market-tick`.
+Pruning runs once daily via `prune_candles()` on its own `pg_cron` schedule (F33), not inside `market-tick`.
 
 ### `symbol_demand`
 

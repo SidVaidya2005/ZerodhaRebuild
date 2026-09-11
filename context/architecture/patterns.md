@@ -93,8 +93,9 @@ Stock detail page (Server Component)
         ├─ map range → interval  (1D→FIVE_MIN, 1W→THIRTY_MIN, 1M/1Y→ONE_DAY)
         ├─ candle_sync fresh for (symbol, interval)?  → read candles, done
         └─ stale or missing:
-              ├─ token-bucket limiter + circuit breaker (shared with quotes)
-              ├─ CandleProvider chain → Yahoo → simulator
+              ├─ CandleProvider chain → simulator  (Yahoo arrives with the
+              │    limiter and circuit breaker; F15 established that a bucket
+              │    in front of a local simulator caps nothing)
               ├─ upsert candles, update candle_sync (fetched_at, provider)
               └─ on total failure: serve the stale rows we already have,
                  badged with their real age — never an empty chart, never a fabricated one

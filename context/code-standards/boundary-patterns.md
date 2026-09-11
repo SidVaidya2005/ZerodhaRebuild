@@ -159,8 +159,10 @@ Deno.serve(async (req) => {
     // rather than calling functions that do not exist yet.
     await supabase.rpc('match_open_orders')
     await supabase.rpc('square_off_mis')
-    // F33's, with the candle pipeline it prunes.
-    await pruneCandlesOncePerDay(supabase)
+    // Candle retention is NOT here. F33 put it in `prune_candles()` on its own
+    // pg_cron schedule: retention has no HTTP dependency, as SQL it is tier-2
+    // testable, and hanging it off this function would have made F33 depend on
+    // an F16 deliberately parked until the end of the project.
 
     return Response.json({ ok: true, refreshed: quotes.length })
   } catch (error) {
