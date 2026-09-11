@@ -75,7 +75,7 @@ Order ticket (Client Component)
               │     │    a short writes back the collateral and
               │     │    entry_reference_price the transfer returned
               │     ├─ a fill that reduces a short →
-              │     │    recompute_position_collateral(user, symbol, new_qty),
+              │     │    recompute_position_collateral(user, symbol, new_qty, order),
               │     │    BEFORE the new quantity is written
               │     ├─ update funds (available_cash, used_margin)
               │     ├─ insert fund_ledger rows
