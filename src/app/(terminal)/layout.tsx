@@ -5,10 +5,12 @@ import { TopNav } from '@/components/terminal/TopNav'
 import { OrderTicket } from '@/components/terminal/OrderTicket'
 import { QuoteChannel } from '@/components/terminal/QuoteChannel'
 import { TerminalClock } from '@/components/terminal/TerminalClock'
+import { ThemeSync } from '@/components/terminal/ThemeSync'
 import { WatchlistRail } from '@/components/terminal/WatchlistSidebar'
 import { Toaster } from '@/components/ui/sonner'
 import { LOGIN_PATH } from '@/lib/auth/routes'
 import { loadHolidays } from '@/lib/market/market-hours'
+import { isTheme, type Theme } from '@/lib/profile/theme'
 import { createClient } from '@/lib/supabase/server'
 import { placeOrder } from '@/server/actions/orders'
 import type { MarketComposite } from '@/lib/portfolio/types'
@@ -75,7 +77,7 @@ export default async function TerminalLayout({ children }: { children: ReactNode
     { data: held, error: heldError },
     { data: composite, error: compositeError },
   ] = await Promise.all([
-    supabase.from('profiles').select('client_id, full_name').single(),
+    supabase.from('profiles').select('client_id, full_name, theme').single(),
     supabase.from('funds').select('available_cash').single(),
     loadHolidays(supabase),
     // One round trip for the panel, with the change already computed. The view
@@ -114,6 +116,12 @@ export default async function TerminalLayout({ children }: { children: ReactNode
       )
       .maybeSingle(),
   ])
+
+  // Narrowed rather than asserted: the column is `text` with a CHECK behind it,
+  // so Postgres guarantees the value but the generated type does not. Falling
+  // back to the column's own default keeps a failed read from flipping the
+  // terminal to light.
+  const storedTheme: Theme = isTheme(profile?.theme) ? profile.theme : 'dark'
 
   // Prefer the profile the bootstrap wrote, then Google's claim, then the email.
   // The shell must always be able to say who is acting.
@@ -191,6 +199,12 @@ export default async function TerminalLayout({ children }: { children: ReactNode
           well as the content, because the badge lives in the nav and the prices
           it summarises live below it — they must read the same instant. */}
       <TerminalClock serverNow={serverNow}>
+        {/* Applies the account's stored theme, so the choice follows the user
+            rather than the browser. Renders nothing. Mounted here rather than on
+            `/settings` because it must run wherever the terminal is entered —
+            and `profiles.theme` is already being read one query above. */}
+        <ThemeSync stored={storedTheme} />
+
         <TopNav
           name={name}
           email={user.email ?? ''}

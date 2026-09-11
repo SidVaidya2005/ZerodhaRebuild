@@ -1,6 +1,5 @@
 import Link from 'next/link'
 
-import { ThemeToggle } from '@/components/ThemeToggle'
 import type { UniverseEntry, WatchlistRow } from '@/lib/watchlist/schemas'
 
 import { AvatarMenu } from './AvatarMenu'
@@ -8,6 +7,7 @@ import type { MarketComposite } from '@/lib/portfolio/types'
 
 import { DataSourceBadge } from './DataSourceBadge'
 import { FundsSummary } from './FundsSummary'
+import { PersistedThemeToggle } from '@/components/terminal/PersistedThemeToggle'
 import { IndexStrip } from './IndexStrip'
 import { MarketStatusPill } from './MarketStatusPill'
 import { TERMINAL_NAV_LINKS } from './nav-links'
@@ -90,7 +90,9 @@ export function TopNav({
               nothing while no price is on screen. */}
           <DataSourceBadge />
           <FundsSummary availableCash={availableCash} />
-          <ThemeToggle />
+          {/* The persisting wrapper, not the bare toggle: a change here must
+              reach the account, or `ThemeSync` reverts it on the next load. */}
+          <PersistedThemeToggle />
           <AvatarMenu name={name} email={email} clientId={clientId} />
         </div>
       </div>

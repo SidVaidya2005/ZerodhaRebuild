@@ -67,18 +67,23 @@ select is_empty(
   'user A reads none of user B''s profile — the policy filters it away'
 );
 
-select is_empty(
+-- Stronger than it was, and the assertion moved with it. This used to be
+-- is_empty() — RLS filtered the row away and the statement updated nothing.
+-- F35 narrowed the grant to `update (theme)`, so no role can write full_name at
+-- all now, on any row, and the refusal comes before the policy is consulted.
+select throws_ok(
   $$update public.profiles set full_name = 'stolen'
-     where id = '22222222-2222-2222-2222-222222222222'
-     returning id$$,
-  'user A cannot rename user B'
+     where id = '22222222-2222-2222-2222-222222222222'$$,
+  '42501',
+  null,
+  'user A cannot rename user B — and since F35, cannot rename anyone including themselves'
 );
 
 select isnt_empty(
   $$update public.profiles set theme = 'light'
      where id = '11111111-1111-1111-1111-111111111111'
      returning id$$,
-  'user A can change their own theme — feature 35 depends on this'
+  'user A can change their own theme — the one column F35 leaves open'
 );
 
 -- No INSERT grant: a user who could write their own profile row could choose
