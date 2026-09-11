@@ -9,7 +9,7 @@
 -- on the day and hour it runs is worse than no suite. The stub is created inside
 -- the transaction and the rollback removes it.
 begin;
-select plan(87);
+select plan(107);
 
 insert into auth.users (id) values
   ('11111111-1111-1111-1111-111111111111'),
@@ -751,6 +751,176 @@ select is(
   0.00::numeric,
   '§12.1: available_cash still equals the sum of the ledger across a capped crossing'
 );
+
+-- ── O. A flip funded by its own sale (Phase 4 checkpoint) ───────────────────
+--
+-- `transfer_margin_to_position` tests the collateral shortfall against
+-- `available_cash`, and until the checkpoint `execute_order` called it BEFORE
+-- posting the closing leg's SELL_CREDIT. A SELL crossing zero was therefore
+-- measured against a balance that excluded the proceeds of the very sale being
+-- executed, and a flip whose own sale covered the shortfall five times over was
+-- rejected INSUFFICIENT_FUNDS.
+--
+-- Reaching it needs a gap-up: §6 reserves a limit order against its limit_price
+-- and §5 fills a limit sell at the observed price, which is at or ABOVE it, so
+-- only a sell filling above its limit can need more collateral than it reserved.
+-- At the limit, delta is zero and the bug is invisible — which is why section G,
+-- a MARKET flip, passed throughout.
+--
+-- Cyd holds an MIS long of 10 @ 100.00 and rests a LIMIT SELL of 20 @ 100.00
+-- while the market is at 90.00. Shorting excess = 20 − 10 = 10.
+--   reserved   = short_collateral(10, 100.00) + charges(20 @ 100.00)
+--              = 1200.51 + 1.28 = 1201.79        → cash 1300.00 − 1201.79 = 98.21
+-- The price then gaps to 120.00 and it fills there.
+--   required   = short_collateral(10, 120.00) + charges(20 @ 120.00)
+--              = 1440.60 + 1.53 = 1442.13
+--   delta      = 1442.13 − 1201.79 = 240.34, against 98.21 of cash
+--   proceeds   = 10 × 120.00 = 1200.00, posted first, so the delta is affordable
+--   closing share of charges = round(1.53 × 10 / 20, 2) = 0.77; opening = 0.76
+--   realised   = (120.00 − 100.00) × 10 − 0.77 = 199.23
+--   new short average = (1200.00 − 0.76) / 10 = 119.924 → 119.92
+--   cash 98.21 + 1200.00 − 240.34 + 1.53 − 1.53 = 1057.87;  used_margin 1440.60
+
+create or replace function public.market_state(p_at timestamptz default now())
+returns public.market_session_state language sql stable
+as $$ select 'OPEN'::public.market_session_state $$;
+
+insert into auth.users (id) values ('33333333-3333-3333-3333-333333333333');
+
+update public.funds set available_cash = 1300.00, used_margin = 0
+ where user_id = '33333333-3333-3333-3333-333333333333'::uuid;
+delete from public.fund_ledger where user_id = '33333333-3333-3333-3333-333333333333'::uuid;
+insert into public.fund_ledger (user_id, type, amount, balance_after, note)
+values ('33333333-3333-3333-3333-333333333333'::uuid, 'SIGNUP_CREDIT', 1300.00, 1300.00, 'Fixture');
+
+-- A fixture long, so the arithmetic above is about the flip and not about how
+-- the long was acquired. §12.12: a long carries no collateral.
+insert into public.positions
+  (user_id, symbol, product, net_quantity, average_price, entry_reference_price,
+   blocked_margin, realised_pnl)
+values ('33333333-3333-3333-3333-333333333333'::uuid, 'RELIANCE', 'MIS', 10, 100.00, null, 0, 0);
+
+select lives_ok($$ select pg_temp.price(90.00) $$, 'the market sits below the limit');
+
+select is(
+  (select p.status from pg_temp.place('33333333-3333-3333-3333-333333333333', 'SELL', 'LIMIT', 'MIS', 20, 100.00) p),
+  'OPEN'::public.order_status,
+  'the limit sell rests rather than filling at 90.00'
+);
+
+select is(pg_temp.cash('33333333-3333-3333-3333-333333333333'), 98.21::numeric,
+  'and it reserved 1201.79 against its LIMIT price, leaving 98.21');
+
+select lives_ok($$ select pg_temp.price(120.00) $$, 'the price gaps above the limit');
+
+select lives_ok(
+  $$ select public.execute_order(
+       (select id from public.orders
+         where user_id = '33333333-3333-3333-3333-333333333333'::uuid and status = 'OPEN')) $$,
+  'the gap-up fill runs');
+
+select is(
+  (select status from public.orders
+    where user_id = '33333333-3333-3333-3333-333333333333'::uuid),
+  'COMPLETE'::public.order_status,
+  'the flip FILLS: 240.34 more collateral than it reserved, and its own sale pays for it'
+);
+
+select results_eq(
+  $$ select net_quantity, average_price, entry_reference_price, blocked_margin
+       from public.positions where user_id = '33333333-3333-3333-3333-333333333333'::uuid $$,
+  $$ values (-10, 119.92::numeric, 120.00::numeric, 1440.60::numeric) $$,
+  'the long of 10 becomes a short of 10 collateralised at the fill price, not the limit'
+);
+
+select is(
+  (select realised_pnl from public.trades
+    where user_id = '33333333-3333-3333-3333-333333333333'::uuid),
+  199.23::numeric,
+  'the closing leg realises against its 10/20 share of the charges, 0.77'
+);
+
+select is(pg_temp.cash('33333333-3333-3333-3333-333333333333'), 1057.87::numeric,
+  '§12.1: cash reconciles across the whole flip');
+
+select is(pg_temp.used('33333333-3333-3333-3333-333333333333'), 1440.60::numeric,
+  '§12.3: used_margin equals the position collateral, with no order still holding any');
+
+-- ── P. A flip the sale genuinely cannot fund writes NOTHING ─────────────────
+--
+-- The narrow guarantee from the checkpoint still binds: §1 forbids partial
+-- fills, so an opening leg that cannot be collateralised rejects the whole
+-- order, closing portion included. What must not survive is the SELL_CREDIT —
+-- posting the proceeds before the shortfall is known means a refused flip would
+-- otherwise leave cash in the ledger for a sale that never happened, and
+-- identity 1 would hold over a fiction. The subtransaction is what prevents it.
+--
+-- Dev holds an MIS long of 1 and rests a LIMIT SELL of 20 @ 100.00 at 90.00.
+-- Shorting excess = 19.
+--   reserved = short_collateral(19, 100.00) + 1.28 = 2280.96 + 1.28 = 2282.24
+--              → cash 2300.00 − 2282.24 = 17.76
+--   required = short_collateral(19, 120.00) + 1.53 = 2737.14 + 1.53 = 2738.67
+--   delta    = 456.43, against 17.76 of cash and only 1 × 120.00 of proceeds
+
+insert into auth.users (id) values ('44444444-4444-4444-4444-444444444444');
+
+update public.funds set available_cash = 2300.00, used_margin = 0
+ where user_id = '44444444-4444-4444-4444-444444444444'::uuid;
+delete from public.fund_ledger where user_id = '44444444-4444-4444-4444-444444444444'::uuid;
+insert into public.fund_ledger (user_id, type, amount, balance_after, note)
+values ('44444444-4444-4444-4444-444444444444'::uuid, 'SIGNUP_CREDIT', 2300.00, 2300.00, 'Fixture');
+
+insert into public.positions
+  (user_id, symbol, product, net_quantity, average_price, entry_reference_price,
+   blocked_margin, realised_pnl)
+values ('44444444-4444-4444-4444-444444444444'::uuid, 'RELIANCE', 'MIS', 1, 100.00, null, 0, 0);
+
+select lives_ok($$ select pg_temp.price(90.00) $$, 'the market drops below the limit again');
+
+select is(
+  (select p.status from pg_temp.place('44444444-4444-4444-4444-444444444444', 'SELL', 'LIMIT', 'MIS', 20, 100.00) p),
+  'OPEN'::public.order_status,
+  'the second limit sell rests too'
+);
+
+select lives_ok($$ select pg_temp.price(120.00) $$, 'and the same gap-up arrives');
+
+select lives_ok(
+  $$ select public.execute_order(
+       (select id from public.orders
+         where user_id = '44444444-4444-4444-4444-444444444444'::uuid and status = 'OPEN')) $$,
+  'the fill runs');
+
+select results_eq(
+  $$ select status::text, rejection_reason from public.orders
+      where user_id = '44444444-4444-4444-4444-444444444444'::uuid $$,
+  $$ values ('REJECTED', 'INSUFFICIENT_FUNDS') $$,
+  '456.43 of collateral against 17.76 of cash and 120.00 of proceeds is still a rejection'
+);
+
+select is_empty(
+  $$ select 1 from public.fund_ledger
+      where user_id = '44444444-4444-4444-4444-444444444444'::uuid and type = 'SELL_CREDIT' $$,
+  'and the SELL_CREDIT is rolled back with it — no proceeds for a sale that never happened'
+);
+
+select is_empty(
+  $$ select 1 from public.trades
+      where user_id = '44444444-4444-4444-4444-444444444444'::uuid $$,
+  'no trade row either');
+
+select results_eq(
+  $$ select net_quantity, average_price, blocked_margin
+       from public.positions where user_id = '44444444-4444-4444-4444-444444444444'::uuid $$,
+  $$ values (1, 100.00::numeric, 0.00::numeric) $$,
+  '§1: the fill is all-or-nothing, so the long it would have closed is untouched'
+);
+
+select is(pg_temp.cash('44444444-4444-4444-4444-444444444444'), 2300.00::numeric,
+  'the whole reservation comes back');
+
+select is(pg_temp.used('44444444-4444-4444-4444-444444444444'), 0.00::numeric,
+  'and nothing is left blocked');
 
 select finish();
 rollback;
