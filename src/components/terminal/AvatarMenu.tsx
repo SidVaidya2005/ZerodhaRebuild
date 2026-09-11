@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { initials } from '@/lib/profile/initials'
 import { signOut } from '@/server/actions/auth'
 
 /**
@@ -30,12 +31,6 @@ type AvatarMenuProps = {
   name: string
   email: string
   clientId: string | null
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2)
-  const letters = parts.map((part) => part[0] ?? '').join('')
-  return letters.toUpperCase() || '?'
 }
 
 export function AvatarMenu({ name, email, clientId }: AvatarMenuProps) {
