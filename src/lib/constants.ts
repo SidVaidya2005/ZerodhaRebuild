@@ -104,6 +104,45 @@ export const DP_CHARGE_INCLUSIVE = 15.34
  */
 export const SHORT_MARGIN_BUFFER = 0.2
 
+/* ── Candles ────────────────────────────────────────────────────────────────
+ *
+ * Freshness and retention for the stock-detail chart (F33). These are *not*
+ * re-exported from `_shared`: nothing Deno-side reads candles — the retention
+ * job is `prune_candles()` in Postgres, not a call inside `market-tick`.
+ *
+ * `prune_candles()` carries its own copy of the retention windows, because a
+ * `pg_cron` job cannot import TypeScript. `18-candles.sql` asserts the SQL
+ * against these literals, which is what stops the two drifting.
+ */
+
+/**
+ * How long a stored series stays fresh, per interval, in milliseconds.
+ *
+ * The two intraday intervals are only refreshed **during a session** — outside
+ * one the market has produced no new candles, so a TTL that expired overnight
+ * would re-fetch an unchanged day on every visit. `ONE_DAY` is the opposite: it
+ * refreshes once per trading day, after the close that completes it.
+ */
+export const CANDLE_TTL_MS = {
+  FIVE_MIN: 5 * 60 * 1000,
+  THIRTY_MIN: 30 * 60 * 1000,
+  ONE_DAY: 24 * 60 * 60 * 1000,
+} as const
+
+/**
+ * How much history each interval keeps, in days, before `prune_candles()`
+ * deletes it.
+ *
+ * 400 rather than 365 for the daily series: the 52-week high and low are
+ * derived from exactly that series, so a window of precisely a year would let a
+ * prune race the read and shorten the range it is supposed to cover.
+ */
+export const CANDLE_RETENTION_DAYS = {
+  FIVE_MIN: 1,
+  THIRTY_MIN: 5,
+  ONE_DAY: 400,
+} as const
+
 /* ── Market, quote and simulator values ─────────────────────────────────────
  *
  * Defined in `supabase/functions/_shared/market-constants.ts` and re-exported
