@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 }
 
 /**
- * Today's orders, plus every open order whatever its age.
+ * Today's order activity, plus every open order whatever its age.
  *
  * **The open-order exemption is what makes the date filter safe.** A limit order
  * placed on Friday is still working on Monday and still holding margin; a strict
@@ -48,7 +48,15 @@ export default async function OrdersPage() {
       )
       // Comma-separated conditions inside one `.or()` are an OR; a second
       // `.or()` would AND with this one. RLS scopes the rows to the caller.
-      .or(`status.eq.OPEN,placed_at.gte.${dayStart}`)
+      //
+      // `executed_at` is the third condition because the first two lose an order
+      // at the exact moment it stops being open: one placed before today that
+      // fills, cancels or rejects today is neither `OPEN` nor placed today, so it
+      // dropped off the page entirely rather than moving to Executed. Every
+      // terminal transition stamps `executed_at` — `execute_order` on a fill and
+      // on each rejection, `cancel_order` on a cancel — so one condition covers
+      // all three. (Phase 4 checkpoint)
+      .or(`status.eq.OPEN,placed_at.gte.${dayStart},executed_at.gte.${dayStart}`)
       .order('placed_at', { ascending: false }),
   ])
 
@@ -85,7 +93,7 @@ export default async function OrdersPage() {
     <div className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6">
       <h1 className="text-title text-ink">Orders</h1>
       <p className="mt-1 text-body-sm text-muted">
-        Today&rsquo;s orders, and every order still open.
+        Today&rsquo;s activity, and every order still open.
       </p>
 
       {/* Renders nothing. Moves the row between tabs when the tick fills it. */}
