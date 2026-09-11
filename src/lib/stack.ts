@@ -158,8 +158,8 @@ export const STACK: readonly StackEntry[] = [
   {
     layer: 'Price charts',
     pkg: 'lightweight-charts',
-    version: null,
-    status: 'planned',
+    version: '5.2.1',
+    status: 'installed',
     purpose: 'Candlestick chart on the stock detail page.',
   },
   {
