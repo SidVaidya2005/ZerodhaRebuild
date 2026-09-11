@@ -407,6 +407,7 @@ const plex = IBM_Plex_Sans({
 - Never create `tailwind.config.js`. Any request to "add a colour to the config" means adding a token under `@theme` in `globals.css`.
 - `@import "tailwindcss"` replaces the three `@tailwind` directives; never write `@tailwind base`.
 - **Dark is the base theme, not a variant.** The dark values live on bare `:root` via `@theme`, and `.light` overrides them. `next-themes` runs with `attribute="class"` and `defaultTheme="dark"`. Because of this inversion there is a `light:` variant and **no `dark:` variant** — components must not write `dark:` colour utilities. They use tokens, and the tokens flip.
+- **`next-themes` accepts no server-supplied theme.** Its injected script reads `localStorage` and `setTheme` is the only write path, so a theme stored per *account* has to be applied client-side after mount — `ThemeSync` does this once per full load. `unoptimized` on `next/image` likewise returns before the default loader runs, which is why `ProfileAvatar` does not set it: the `remotePatterns` allowlist is only checked inside that loader. (F35)
 - Every colour in a component comes from a `--color-*` token (`bg-surface`, `text-muted`, `border-hairline`). **No raw hex in `className`, ever** — the theme swap depends entirely on tokens.
 - **Fixed semantic mappings, identical across the whole app:** gain / up-tick is `text-up`, loss / down-tick is `text-down`, and the primary action of any screen is `bg-brand text-on-brand`. Never repurpose `--color-up` or `--color-down` for decoration, category encoding, or a non-price meaning.
 - **One accent only.** There is no secondary brand colour. If a design seems to need one, it needs hierarchy instead — surface elevation, muted text, or a hairline.
@@ -851,6 +852,7 @@ export function PriceChart({ candles }: { candles: CandleData[] }) {
 - Set `autoSize: true` rather than wiring a manual `ResizeObserver`; the library handles it.
 - The container needs an explicit height class — the chart fills its parent and renders nothing in a zero-height box.
 - `time` is unix **seconds** for intraday and `'YYYY-MM-DD'` strings for daily. Mixing the two in one series silently drops points.
+- **Shift both forms into IST at the render boundary.** The library has no time-zone support and treats every value as UTC — its own docs prescribe shifting the data — so an NSE session drew an axis reading 03:45–10:00 in a browser that was itself in `Asia/Calcutta`. The shifted value is a wall-clock instant for labels only; the true UTC instant stays in `candles.ts`. (F33)
 - Theme colours are passed in as resolved values from a `'use client'` wrapper that reads `next-themes` and calls `getComputedStyle(document.documentElement).getPropertyValue('--color-up')` — the chart draws to canvas and cannot resolve CSS variables itself.
 - Re-create or re-apply options when the theme toggles; a chart built under dark tokens keeps them after a switch to light otherwise.
 - Candles use `--color-up` and `--color-down` — this is the one place those tokens are load-bearing rather than semantic decoration.

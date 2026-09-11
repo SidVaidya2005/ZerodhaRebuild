@@ -18,9 +18,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 5 — Portfolio Pages. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
-**Last completed:** **F33 Stock detail.** The candle pipeline F15 and F16 both deferred here: a `CandleProvider` seam, a deterministic simulator seeded per bar, `getCandles` with per-interval TTLs, and `prune_candles()` on its own `pg_cron`. Plus `lightweight-charts` 5.2.1 and the page. Yahoo candles are still unwritten behind the seam, and `library-docs.md`'s response-shape TODO is deliberately open
-**In progress:** **F34 Reports and trade history**, planned and confirmed — built in two slices: the history table with its filters and summary, then the CSV export on top of a filter already proven correct. Always-read budget ~39.8k/40k
-**Next:** **F35 Profile and settings**
+**Last completed:** **F34 Reports and trade history**, in two commits — the history table with its filters and P&L summary (`5.34.01`), then the CSV export (`5.34.02`). `trade_history` and `traded_symbols` views, `reports_summary`, and `/reports/export` as the third route handler. All gates green: 485 tier-1, 24 pgTAP files with `19-reports.sql` at 16/16, 36 parity, lint/typecheck/format/build clean, verified signed in against direct SQL
+**In progress:** **F35 Profile and settings**, planned and confirmed — two commits: the page, then theme persistence (a narrowed `update (theme)` grant, a Server Action, and a client sync). Always-read budget is at its limit, so F35 must evict rather than add
+**Next:** the **Phase 5 checkpoint**, which closes the phase
 
 ---
 
@@ -77,7 +77,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 - [x] 31 Positions page
 - [x] 32 Funds page
 - [x] 33 Stock detail page
-- [ ] 34 Reports and trade history
+- [x] 34 Reports and trade history
 - [ ] 35 Profile and settings
 - [ ] Phase checkpoint — verify Phase 5 — Portfolio Pages is stable before starting the next phase
 
@@ -94,6 +94,10 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
+- **A preference that must follow the account is applied client-side, because `next-themes` accepts no server value.** Its injected script reads `localStorage` and `setTheme` is the only write path (confirmed against Context7), so the terminal layout passes `profiles.theme` down and a client component calls `setTheme` once per full load. That leaves the library sole owner of the class *and* the storage key; the price is one frame of the wrong theme on a browser that has never seen this account, inside the terminal only. A blocking script would remove that frame by hand-writing a key the library owns and racing its hydration. (F35)
+
+- **Both terminal toggles persist, the marketing one cannot, and the `profiles` grant narrows in the same change.** Reading a session in the public header would force dynamic rendering on every marketing page (F12), so `SiteHeader` stays `localStorage`-only — and if the top-bar toggle did not persist, the layout's stored value would silently revert it on the next full load. F35 is also the first feature to write `profiles`, so it is where `grant select, update` narrows to `update (theme)`, which today still lets a user rewrite their own `client_id` by direct PostgREST call. (F35)
+
 - **A read that produces a file is a route handler, not a Server Action.** `/reports/export` becomes the third entry on `code-standards.md`'s closed two-handler list, amended in the same change rather than left contradicting the code. The Server Action rule governs *mutations*; routing a CSV through one would cost a `'use client'` Blob dance, a JS-only download, and the whole export squeezed through an action payload — to protect a rule it does not break. (F34)
 
 - **A date filter compares a `date` column the view computes, so no caller does timezone arithmetic.** `trade_history.traded_on` is `(traded_at at time zone 'Asia/Kolkata')::date`. F33 lost a session to the mirror image of this — Lightweight Charts treating every instant as UTC — and a dated page is where it recurs: the boundary is one `at time zone` away from silently filing a 23:45 IST trade on the previous day. (F34)
@@ -109,7 +113,3 @@ Any AI agent reading this should immediately know what is done, what is in progr
 - **A ledger row that names no order cannot be reconciled, and §12.9 counts exactly those rows.** `recompute_position_collateral` took no order id, so a short cover's collateral release referenced nothing: the INFY short summed to −4708.62 against a true cash effect of −18.19, while the long beside it reconciled to the paisa. The cash was never wrong, only unattributable — and the contract already named `MARGIN_RELEASE` among the rows that must be counted, so the implementation was the loser and was fixed. A signature change means a drop, which discards the ACL Supabase then re-grants. (Phase 4 checkpoint)
 
 - **A page that filters on placement loses a row the moment it transitions.** `/orders` listed `status=OPEN` or `placed_at` today, and an order placed earlier that filled today matched neither — so it vanished rather than moving to Executed. `executed_at` is stamped by every terminal transition, so one condition closes the fill, cancel and reject variants together. The lesson generalises to every dated page Phase 5 still has to build. (Phase 4 checkpoint)
-
-- **The closing-leg guarantee covers pure covers and square-offs, not any order containing a closing leg.** A flip cannot honour it: §1 forbids partial fills, so an uncollateralisable opening leg rejects the whole order. `execute_order`'s comment claimed otherwise; §6 now states the narrow rule, and F29's pure-cover fix still stands beneath it. (Phase 4 checkpoint)
-
-- **A table's scroll region can be entirely correct while its page still scrolls sideways, so the assertion belongs to the page, not the component.** F31's region was focusable, labelled and `relative` — and `/positions` still overflowed 94px, because the shared `TopNav` did; meanwhile `/holdings` overflowed 525px because F30's wrapper never received the `relative` the constraint had already mandated, and F30's own 375px item had been scoped to the region rather than the page. One component-level check passed on four pages that were all broken. Measure `documentElement.scrollWidth` against `clientWidth` **per page**, and re-measure every page after touching shared chrome. (F31, F30, F27)

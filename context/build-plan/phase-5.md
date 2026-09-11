@@ -201,21 +201,39 @@ derived from live prices, which brings provenance with it.
 
 ### 35 Profile and settings
 
-
+The account's own page: who is signed in, the one preference that follows the account rather than the
+browser, and the two irreversible acts — reset and sign out. Small in surface and almost entirely
+read-only; the single piece of new machinery is theme persistence, which is also the only write path
+this project has ever opened onto `profiles`.
 
 **UI:**
 
-- Google name, email, avatar, and the simulated client ID.
-- Light/dark theme toggle persisted to `profiles.theme`.
-- Account reset, duplicated here from Funds.
-- Sign out.
+- Google avatar, name and email, with the simulated client ID beside them. The avatar is `next/image` against `lh3.googleusercontent.com`, falling back to the existing `initials()` monogram when the URL is absent.
+- A light/dark control that persists to `profiles.theme`, with the failure said out loud: if the write fails the theme still changed locally, and a silent failure would misreport it as saved.
+- Account reset, mounting `ResetAccountDialog` unchanged — built self-contained at F32 *for* this feature, so identical behaviour is structural rather than a matter of matching copy.
+- Sign out as a real `<form>` posting to `signOut`, the F07B no-JS standard the `AvatarMenu` already follows.
+
+**Logic:**
+
+- **Name, email and avatar come from the live session; only `client_id` comes from Postgres.** The bootstrap trigger fires on insert only (F13), so `profiles.full_name` and `avatar_url` freeze at signup and would show a stale name after the user changes it at Google. Reading `user.user_metadata` needs no migration and no sync write path.
+- **The `update` grant narrows to `update (theme)`.** `grant select, update on public.profiles` currently lets any authenticated user rewrite their own `client_id`, `full_name` and `avatar_url` by direct PostgREST call. This is the feature that first writes the table, so it is where the grant stops exceeding what a role needs (F07B).
+- **The stored theme is applied with `setTheme` in an effect, not a blocking script.** `next-themes` takes no server-supplied value — its injected script reads `localStorage` and `setTheme` is the only write path (confirmed against Context7) — so calling `setTheme` leaves that library sole owner of both the class and the storage key. The cost is one frame of the wrong theme on a browser that has never seen this account, inside the terminal only; a blocking script would remove that frame at the price of hand-writing a key the library owns and racing its hydration.
+- **Both terminal toggles persist; the marketing one does not.** `TopNav`'s toggle and the Settings control share one write path, passed down as a Server Action prop. `SiteHeader`'s stays `localStorage`-only, because reading a session there would force dynamic rendering on every public page and break the session-free `(marketing)` boundary (F12). Without this the layout's stored value would silently revert a top-bar toggle on the next full load.
+- **A theme write does not revalidate.** `revalidateTerminal()` exists for writes that move server-rendered numbers; the client has already applied the theme itself, so revalidating six routes would buy nothing.
+- The action takes the standard shape — `input: unknown`, Zod-parsed, `ActionResult<null>` — unlike `resetAccount`, which has no input, and the auth actions, which end in a redirect.
 
 **Verify:**
 
-- The theme choice survives sign-out and sign-in on a different browser.
-- The client ID matches the one issued at bootstrap.
-- Reset from here behaves identically to reset from Funds.
-
+- `authenticated` can update `theme` and nothing else — `has_column_privilege(…, 'client_id', 'update')` is false and `'theme'` is true. `pnpm test:db`
+- An invalid theme is unstorable, and one user cannot write another's — the `profiles_theme_allowed` CHECK rejects `'blue'`, and an update under `set local role authenticated` cannot cross users. `pnpm test:db`
+- The schema accepts exactly two values. `pnpm test`
+- **The choice survives a different browser** — toggle on `/settings`, confirm the row by direct SQL, then load the terminal in a clean profile and read `documentElement.className` before touching anything. This is the criterion the whole feature exists to meet.
+- The top-bar toggle is not reverted: toggle in `TopNav`, navigate to another terminal page, hard-reload, and the theme holds — browser.
+- Marketing is unaffected: `/` still toggles with no session and no network write — browser.
+- The client ID matches the one issued at bootstrap — compare the rendered value against `select client_id from profiles`.
+- Reset from here behaves identically to reset from Funds — same component, so confirm the counts render and a reset returns cash to the opening balance.
+- The page does not scroll sideways at 375px — `documentElement.scrollWidth === clientWidth` measured on `/settings` itself (F31, F30).
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and `pnpm format:check` all exit zero.
 ### Phase checkpoint
 
 Every page in `project-overview.md` exists and is wired to real data. Walk the full journey from signup to a closed position and confirm every number reconciles.
