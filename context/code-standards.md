@@ -36,7 +36,7 @@ drift across sessions.
 - Server Components are the default. Add `'use client'` only when the component needs state, effects, browser APIs, or the Zustand quote store — and push it as far down the tree as possible.
 - Route groups carry the layout split: `(marketing)` for public pages, `(terminal)` for authenticated ones. A page belongs to exactly one group.
 - Data for a page is fetched in that page's Server Component. Client Components receive data through props and never fetch their own initial state.
-- **All mutations go through Server Actions in `src/server/actions/`.** Route handlers exist only for `/auth/callback` and `/api/health`.
+- **All mutations go through Server Actions in `src/server/actions/`.** Route handlers exist only for `/auth/callback`, `/api/health`, and `/reports/export` — the last being a *read that produces a file*, which the mutation rule does not govern and which a Server Action could only serve through a client-side Blob, losing the native download and no-JS operation (F34).
 - **Exactly two exceptions, and no others may be added without updating this list:**
   1. **Supabase Auth SDK calls from the browser** — `signInWithOAuth`, `signOut`. These are the auth provider's own client flow; routing them through a Server Action would break the OAuth redirect.
   2. **`touch_symbol_demand(symbols[])`** — the client RPC that marks which symbols are on screen. It takes no user-supplied state beyond a symbol list, derives the caller from `auth.uid()`, upserts `last_requested_at` only, and is called at most once per subscription change (not per tick). It exists as an RPC because it fires on every watchlist render and a Server Action round trip would be wasteful for a write that touches no user-owned data.

@@ -5,7 +5,7 @@ import { ReportsFilter } from '@/components/terminal/ReportsFilter'
 import { ReportsSummaryCards } from '@/components/terminal/ReportsSummaryCards'
 import { TradeHistoryTable } from '@/components/terminal/TradeHistoryTable'
 import { compositeSource } from '@/lib/market/screen-provenance'
-import { parseReportsQuery, reportsPresets, toRange } from '@/lib/reports/query'
+import { exportHref, parseReportsQuery, reportsPresets, toRange } from '@/lib/reports/query'
 import { TRADE_HISTORY_COLUMNS, toTradeRow } from '@/lib/reports/rows'
 import type { ReportsSummary, UnrealisedSummary } from '@/lib/reports/types'
 import { createClient } from '@/lib/supabase/server'
@@ -166,13 +166,26 @@ export default async function ReportsPage({
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6">
-      <div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-title text-ink">Reports</h1>
           <p className="mt-1 text-body-sm text-muted">
             Every completed trade, what it cost, and the profit it realised.
           </p>
         </div>
+
+        {/* A plain anchor, not `next/link`: the target is a route handler that
+            returns a file, and a client navigation to it would replace the page
+            rather than download. */}
+        {summary.tradeCount > 0 && (
+          <a
+            href={exportHref(query)}
+            className="rounded-xs border border-hairline px-3 py-2 text-body-sm text-ink hover:bg-surface-elevated focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+          >
+            Export CSV
+            <span className="sr-only"> — downloads every trade matching the current filters</span>
+          </a>
+        )}
       </div>
 
       {/* Renders nothing. Re-renders this page when a fill writes a trade. */}
