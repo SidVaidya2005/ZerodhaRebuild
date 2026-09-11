@@ -32,6 +32,18 @@ export type MarketStatus = {
   istDate: string
 }
 
+/**
+ * The IST calendar date an instant falls on, as `YYYY-MM-DD`.
+ *
+ * `marketStatusAt` already returns this, but needs the holiday calendar to do
+ * it; a date-range preset has no opinion about whether NSE traded that day, so
+ * requiring one would mean loading the calendar to answer a question it does not
+ * bear on.
+ */
+export function istDateOf(at: Date): string {
+  return toIst(at).date
+}
+
 /** A set of `YYYY-MM-DD` IST dates NSE is closed, from `market_holidays`. */
 export type HolidaySet = ReadonlySet<string>
 
@@ -60,7 +72,15 @@ function fromIst(date: string, minutes: number): Date {
   return new Date(Date.parse(`${date}T00:00:00Z`) + (minutes - IST_OFFSET_MINUTES) * MS_PER_MINUTE)
 }
 
-function addDays(date: string, days: number): string {
+/**
+ * A `YYYY-MM-DD` IST date shifted by whole days.
+ *
+ * Exported so F34's date-range presets are built from the one notion of IST in
+ * this codebase rather than a second copy of calendar arithmetic. Safe against
+ * DST by construction: India has observed none since 1945, which is the same
+ * assumption `toIst` rests on and `market-hours.test.ts` checks.
+ */
+export function shiftIstDate(date: string, days: number): string {
   return new Date(Date.parse(`${date}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10)
 }
 
@@ -94,7 +114,7 @@ function nextTradingDay(date: string, holidays: HolidaySet): string {
   // Bounded rather than `while (true)`: a calendar seeded with a year of
   // consecutive closures would otherwise hang the request instead of failing.
   for (let offset = 1; offset <= 30; offset += 1) {
-    const candidate = addDays(date, offset)
+    const candidate = shiftIstDate(date, offset)
     if (isTradingDay(candidate, holidays)) return candidate
   }
   throw new Error('MARKET_CALENDAR_EXHAUSTED: no trading day within 30 days')

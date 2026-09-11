@@ -156,20 +156,48 @@ response-shape TODO stays open.
 
 ### 34 Reports and trade history
 
-
+The completed-trade statement, and the first read surface that filters on a **date**. Two shippable
+slices: the history table with its filters and summary, then the CSV export on top of a filter
+already proven correct. It reuses F32's ledger shape almost verbatim — URL-driven filter, plain-link
+pager, Server Component throughout — and adds the one thing Funds deliberately refused: a figure
+derived from live prices, which brings provenance with it.
 
 **UI:**
 
-- Completed trades with date-range and symbol filters.
-- Realised P&L summary, and unrealised P&L for open holdings.
-- Per-trade charge breakdown expandable from the row.
-- CSV export of the filtered set.
+- Completed trades, newest first, 50 to a page. Scroll region carries `relative`, `role="region"`, `tabIndex={0}` and an `sr-only` caption (F27, F30, F31, F05).
+- Filters as a no-JS `<form method="get">` — two `<input type="date">` plus a symbol `<select>` populated from `traded_symbols` — beside preset links (This month / Last 30 days / This FY). Every view has a URL; changing any filter returns to page 1, because page 4 of everything is rarely page 4 of one symbol (F32).
+- Summary cards: realised P&L and total charges **over the filtered set**, both from Postgres; unrealised P&L on open CNC holdings beside them.
+- **Unrealised is holdings-only, and the page says so**, linking `/positions`. F21's split, and MIS is flat after 15:20, so the gap exists only intraday and is disclosed rather than hidden. `unpriced_count` is disclosed with it, or the total silently omits an unpriced holding (F21, F31).
+- Per-trade `charge_breakdown` expandable from the row as a native `<details>`/`<summary>` — no JavaScript, and keyboard and screen-reader behaviour come from the browser rather than being hand-written and audited at F38 (F07).
+- An auto square-off is marked as one, so a 15:20 exit is distinguishable from a user exit (§10).
+- CSV export as a plain `<a href>` — not `next/link`, which would attempt a client navigation to a non-page route.
+
+**Logic:**
+
+- `trade_history` view, `security_invoker`: `trades` ⋈ `orders` ⋈ `instruments`, one row per trade, with `value` (`quantity * price`) computed in SQL.
+- **`traded_on` is a `date` column on the view**, `(traded_at at time zone 'Asia/Kolkata')::date`, so the range filter is a `date` comparison and no caller does timezone arithmetic. F33 lost a session to exactly that trap in the other direction, and a date filter is where it recurs.
+- `reports_summary(p_from, p_to, p_symbol)` — `stable`, invoker rights so RLS scopes it — returns the filtered `trade_count`, `realised_pnl`, `charges_total`, `buy_value` and `sell_value`. **The totals span a set the page only ever shows one page of**, so summing the page in TypeScript would be both wrong and against `CLAUDE.md`'s money rule.
+- **The filter is written once for the rows.** PostgREST's `count: 'exact'` returns the row count under the same clause the rows came from, which then cross-checks the function's own `trade_count` — two independently derived counts that must agree (F32's pattern, extended).
+- `traded_symbols` view (`select distinct user_id, symbol from trades`) feeds the filter's `<select>`, so the vocabulary is what the user actually traded and a typo cannot produce an empty page.
+- `parseReportsQuery` falls back **per field**, as `parseLedgerQuery` does: a hand-edited `?page=0` or a `from` later than `to` renders page 1 unfiltered rather than an error boundary or an empty page that reads as an empty account.
+- Both views and the function `revoke ... from anon, authenticated` and grant back to `authenticated` only — naming all three roles, since `revoke ... from public` leaves Supabase's direct grants standing (F13). No `anon` grant: the publishable key ships in the browser bundle (F10).
+- **CSV ships as a GET route handler at `/reports/export`, not a Server Action.** It is a read, so the Server-Action-for-mutations rule does not bind it; `code-standards.md`'s two-handler list does, and that sentence is amended to name this third handler in the same change rather than left contradicting the code. Buys a native browser download, a bookmarkable URL, and no-JS operation.
+- The handler applies the same filter with **no** `.range()` — the export covers the filtered set, not the page — and returns 401 when `getUser()` is null. RLS would return an empty set, and an empty CSV reads as "no trades" rather than "not signed in".
+- `toCsv` is pure and tier-1 tested: RFC 4180 quoting, CRLF, a UTF-8 BOM, and money written as raw `numeric` strings so the file is machine-readable.
+- `OrderChannel` is mounted, as on Holdings and Funds: a fill writes a trade, and trades are server state that never enters Zustand (F27).
 
 **Verify:**
 
-- Realised P&L totals equal the sum of `trades.realised_pnl` over the filtered range.
-- Filters narrow the set correctly, verified against a direct SQL count.
-- The exported CSV row count matches what is on screen.
+- Realised P&L equals `Σ trades.realised_pnl` over the filtered range — `19-reports.sql` asserts the function against a direct sum under the same filter. `pnpm test:db`
+- Filters narrow the set correctly at both IST day boundaries — a trade at 00:05 and one at 23:45 IST each land on their own `traded_on` and are excluded from the neighbouring days. `pnpm test:db`
+- Neither view nor the function is reachable by `anon`, and a second user's trades are invisible through both — grant assertions plus an RLS falsification. `pnpm test:db`
+- Bad querystring degrades rather than erroring: `?from=abc&page=0&symbol=NOPE` renders page 1 unfiltered, no error boundary — browser.
+- Per-field fallback, range boundaries and href round-tripping. `pnpm test`
+- CSV quoting survives a field containing a comma, a quote and a newline; an empty set yields the header alone. `pnpm test`
+- The exported CSV row count equals the filtered total in the pager — filter, read "N trades", download, `wc -l` minus the header, then a direct SQL count over the same filter. **Not** the row count on screen, which is one page of it.
+- The page does not scroll sideways at 375px — `documentElement.scrollWidth === clientWidth` measured **on `/reports` itself**, not on the table's scroll region (F31, F30).
+- The unrealised figure carries honest provenance and discloses what is unpriced and what is excluded — read the **fetched** HTML, not the hydrated DOM (F20).
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### 35 Profile and settings
 

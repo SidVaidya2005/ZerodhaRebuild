@@ -14,12 +14,14 @@
 
 export {
   getMarketStatus,
+  istDateOf,
   istDayStart,
   isTradingDay,
   isTradingSession,
   isTradingSessionAt,
   loadHolidays,
   marketStatusAt,
+  shiftIstDate,
   type HolidayReader,
   type HolidaySet,
   type MarketState,

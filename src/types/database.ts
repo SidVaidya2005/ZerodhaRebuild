@@ -782,6 +782,74 @@ export type Database = {
           },
         ]
       }
+      trade_history: {
+        Row: {
+          charge_breakdown: Json | null
+          charges: number | null
+          exchange: string | null
+          id: string | null
+          is_auto_squareoff: boolean | null
+          name: string | null
+          order_id: string | null
+          order_type: Database["public"]["Enums"]["order_type"] | null
+          price: number | null
+          product: Database["public"]["Enums"]["product_type"] | null
+          quantity: number | null
+          realised_pnl: number | null
+          side: Database["public"]["Enums"]["order_side"] | null
+          symbol: string | null
+          traded_at: string | null
+          traded_on: string | null
+          user_id: string | null
+          value: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trades_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trades_symbol_fkey"
+            columns: ["symbol"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["symbol"]
+          },
+          {
+            foreignKeyName: "trades_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      traded_symbols: {
+        Row: {
+          name: string | null
+          symbol: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trades_symbol_fkey"
+            columns: ["symbol"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["symbol"]
+          },
+          {
+            foreignKeyName: "trades_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       watchlist_rows: {
         Row: {
           change: number | null
@@ -900,6 +968,13 @@ export type Database = {
         }
         Returns: number
       }
+      prune_candles: {
+        Args: never
+        Returns: {
+          bar_interval: Database["public"]["Enums"]["candle_interval"]
+          deleted: number
+        }[]
+      }
       recompute_position_collateral: {
         Args: {
           p_new_net_quantity: number
@@ -911,6 +986,16 @@ export type Database = {
       }
       release_margin: { Args: { p_order_id: string }; Returns: number }
       remove_watchlist_item: { Args: { p_symbol: string }; Returns: number }
+      reports_summary: {
+        Args: { p_from?: string; p_symbol?: string; p_to?: string }
+        Returns: {
+          buy_value: number
+          charges_total: number
+          realised_pnl: number
+          sell_value: number
+          trade_count: number
+        }[]
+      }
       reserve_margin: { Args: { p_order_id: string }; Returns: boolean }
       reset_account: { Args: never; Returns: undefined }
       roll_previous_close: {

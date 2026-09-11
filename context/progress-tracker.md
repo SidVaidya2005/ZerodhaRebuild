@@ -18,9 +18,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 5 — Portfolio Pages. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
-**Last completed:** **F33 Stock detail.** The candle pipeline F15 and F16 both deferred here: a `CandleProvider` seam, a deterministic simulator seeded per bar, `getCandles` with per-interval TTLs, and `prune_candles()` on its own `pg_cron`. Plus `lightweight-charts` 5.2.1 and the page. All gates green — `pnpm test` 433, `pnpm test:db` 23 files (`18-candles.sql` 14/14), 36 parity, lint/typecheck/format/build clean — and every Verify item confirmed in a signed-in browser
-**In progress:** Nothing. Always-read budget ~39.8k/40k
-**Next:** **F34 Reports and trade history.** One thing F33 leaves behind: Yahoo candles are still unwritten behind the seam, and `library-docs.md`'s unverified candle-response-shape TODO is deliberately still open
+**Last completed:** **F33 Stock detail.** The candle pipeline F15 and F16 both deferred here: a `CandleProvider` seam, a deterministic simulator seeded per bar, `getCandles` with per-interval TTLs, and `prune_candles()` on its own `pg_cron`. Plus `lightweight-charts` 5.2.1 and the page. Yahoo candles are still unwritten behind the seam, and `library-docs.md`'s response-shape TODO is deliberately open
+**In progress:** **F34 Reports and trade history**, planned and confirmed — built in two slices: the history table with its filters and summary, then the CSV export on top of a filter already proven correct. Always-read budget ~39.8k/40k
+**Next:** **F35 Profile and settings**
 
 ---
 
@@ -94,6 +94,10 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
+- **A read that produces a file is a route handler, not a Server Action.** `/reports/export` becomes the third entry on `code-standards.md`'s closed two-handler list, amended in the same change rather than left contradicting the code. The Server Action rule governs *mutations*; routing a CSV through one would cost a `'use client'` Blob dance, a JS-only download, and the whole export squeezed through an action payload — to protect a rule it does not break. (F34)
+
+- **A date filter compares a `date` column the view computes, so no caller does timezone arithmetic.** `trade_history.traded_on` is `(traded_at at time zone 'Asia/Kolkata')::date`. F33 lost a session to the mirror image of this — Lightweight Charts treating every instant as UTC — and a dated page is where it recurs: the boundary is one `at time zone` away from silently filing a 23:45 IST trade on the previous day. (F34)
+
 - **A simulated series must be reproducible, or the chart rewrites its own past.** F33's candles are seeded from `(symbol, interval, ts)`, so any candle regenerates byte-identical and a TTL refresh appends without overwriting; the daily series is anchored to `quotes.prev_close`, the same anchor the live quote simulator walks from, so the chart and the header cannot contradict each other. A free-running walk would show a different year of history on every visit — fabricated data that disagrees with itself, which is the thing the provenance rules exist to prevent. (F33)
 
 - **Retention is `prune_candles()` on its own `pg_cron`, not a call inside `market-tick`.** `boundary-patterns.md` put it in the tick handler, but that host is F16 — deliberately parked until the end of the project — and a prune living there can only be verified by deploying and waiting. As SQL it is pure data work with no HTTP dependency and is testable at tier 2. The losing document is corrected in the same change. (F33)
@@ -109,8 +113,3 @@ Any AI agent reading this should immediately know what is done, what is in progr
 - **The closing-leg guarantee covers pure covers and square-offs, not any order containing a closing leg.** A flip cannot honour it: §1 forbids partial fills, so an uncollateralisable opening leg rejects the whole order. `execute_order`'s comment claimed otherwise; §6 now states the narrow rule, and F29's pure-cover fix still stands beneath it. (Phase 4 checkpoint)
 
 - **A table's scroll region can be entirely correct while its page still scrolls sideways, so the assertion belongs to the page, not the component.** F31's region was focusable, labelled and `relative` — and `/positions` still overflowed 94px, because the shared `TopNav` did; meanwhile `/holdings` overflowed 525px because F30's wrapper never received the `relative` the constraint had already mandated, and F30's own 375px item had been scoped to the region rather than the page. One component-level check passed on four pages that were all broken. Measure `documentElement.scrollWidth` against `clientWidth` **per page**, and re-measure every page after touching shared chrome. (F31, F30, F27)
-
-- **Funds shows realised P&L only, and therefore reads no prices at all.** `Σ trades.realised_pnl` — closed legs net of their closing charges (§9). Including unrealised would drag live quotes onto the page and with them provenance disclosure, the anchor rule and the unpriced-count problem, to restate a figure Dashboard and Holdings already carry; §9 is explicit that realised and unrealised answer different questions. The page being quote-free is a property worth protecting, not an accident. `funds_overview` supplies the sum and the five counts the reset dialog names, so no money figure is computed outside Postgres. (F32)
-
-- **The Edge Function gets the same testing seam every other layer already has.** `market_state(p_at)` and `square_off_mis(p_at)` both take a timestamp so their boundaries are testable; `market-tick` took none, which is what queued seven verification items behind a weekday 09:15–15:30 window and made the 15:20 square-off a once-a-day shot. `session_at` in the request body overrides the session gate and the square-off boundary **only** — `now` still stamps every recorded timestamp, so `fetched_at` stays true and §5's staleness window keeps meaning what it says. Read after the secret check, so it is exactly as restricted as the Vault credential, and answered with `sessionOverride: true` so an overridden run is never mistaken for a real one in `net._http_response`. **It does not open `place_order`**, whose gate is Postgres `market_state`. (Phase 4 checkpoint)
-
