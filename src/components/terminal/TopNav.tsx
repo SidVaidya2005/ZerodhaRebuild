@@ -72,7 +72,14 @@ export function TopNav({
 
         <IndexStrip composite={composite} />
 
-        <nav aria-label="Terminal" className="ml-auto hidden items-center gap-5 lg:flex">
+        {/* `xl`, not `lg`. The six links need 404px and the right-hand cluster
+            442px, so between 1024 and ~1226 the bar overflowed by up to 202px
+            and every terminal page scrolled sideways — pre-existing, and
+            invisible because F37's own `**Verify:**` line named 375, 768 and
+            1440 and this band sits between the last two. Below `xl` the sheet
+            carries these links instead, which is why raising the breakpoint is
+            now an option at all. (F37) */}
+        <nav aria-label="Terminal" className="ml-auto hidden items-center gap-5 xl:flex">
           {TERMINAL_NAV_LINKS.map((link) => (
             <Link
               key={link.href}
@@ -84,7 +91,7 @@ export function TopNav({
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3 lg:ml-0">
+        <div className="ml-auto flex items-center gap-3 xl:ml-0">
           <MarketStatusPill holidays={holidays} serverNow={serverNow} />
           {/* Where the prices came from, beside when the market is open. Renders
               nothing while no price is on screen. */}
