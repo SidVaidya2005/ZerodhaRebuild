@@ -34,7 +34,7 @@ error thrown by the root layout itself.
 
 - Throttled to Slow 3G, every terminal route shows a skeleton rather than a blank frame. Read `document.visibilityState` before believing the result — a backgrounded tab freezes animations and makes this unjudgeable rather than failing (`constraints/verification.md`).
 - Forcing a query failure renders the boundary, and its retry recovers the page once the failure is reverted. **Falsified first**: the same forced failure renders the *empty state* on the pre-F36 code, which is the defect this feature closes.
-- A brand-new account — `reset_account()` from `/settings` — sees a purposeful empty state on all six surfaces.
+- A brand-new account sees a purposeful empty state on the four surfaces that *are* empty for it — holdings, positions, orders and reports. **Two of the six cannot be empty for a new account, and the original wording was wrong:** bootstrap seeds a default watchlist (F13) and every account carries a `SIGNUP_CREDIT` row, so the watchlist and the ledger are non-empty by construction. Their empty states exist and are correct, but are reached by a user who empties them, not by a new account. Check all six exist; expect four to render.
 - `find src/app/\(terminal\) -name error.tsx | wc -l` is 8 and `-name loading.tsx` is 9, so the `code-standards.md` rule is structurally true rather than asserted.
 - `pnpm test`, `typecheck`, `lint`, `format:check` and `build` all green.
 

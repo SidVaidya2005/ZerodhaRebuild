@@ -17,10 +17,10 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Current Status
 
-**Phase:** Phase 6 — Polish & Ship. No numbered feature started yet; `constraints.md` was split into a core plus reference halves first (6.00.02). Phase 5 is closed and compacted. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
-**Last completed:** the **Phase 5 checkpoint**. All four tiers green (516 tier-1 / 25 pgTAP files / 10 race / 36 parity) plus lint, typecheck, format and build. The phase-diff review's **seven findings were all fixed**, each with a test falsified against the code it replaced, and §11 reset was finally proven from `/settings` — closing Phase 5's last open `**Verify:**` line. Phase 5 is compacted; **every Phase 5 feature and the checkpoint are ticked**
-**In progress:** **F36 States, skeletons, and error boundaries** — planned via `/architect`, plan recorded in `build-plan/phase-6.md`
-**Next:** **Phase 6 F36 States, skeletons, and error boundaries**, which also owns the missing `loading.tsx`/`error.tsx` across all eight terminal segments — `code-standards.md` states the rule and records that F36 is where it becomes true. Two items are filed for Phase 6 and not yet started: `text-brand`'s 1.37:1 contrast on light (F38) and the 768–1024px terminal having no page navigation (F37). **Before F39 deploys**, either Yahoo lands or `/` and `/about` are reconciled — every price badges `SIMULATED` today. **One finding is open from the split:** `trading-contract.md` §13's money sweep has never covered `constraints.md`, so `constraints/trading.md`'s charge and margin rationale sits outside it
+**Phase:** Phase 6 — Polish & Ship, F36 done and F37 next. `constraints.md` was split into a core plus reference halves first (6.00.02), so the always-read set has room again. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
+**Last completed:** **F36 States, skeletons, and error boundaries.** Nine `loading.tsx`, eight `error.tsx` and `global-error.tsx` — plus the change that made the boundaries mean anything: seven pages and the terminal layout now log **and throw** on a failed read instead of falling through to the empty state, so an empty state means empty and a boundary means broken. Boundaries call `retry()`, not `reset()`. All three `**Verify:**` lines were checked in a real browser against a rebuilt server, and one was **corrected** — a brand-new account cannot see an empty watchlist or ledger, because bootstrap seeds one and every account carries a `SIGNUP_CREDIT` row
+**In progress:** Nothing
+**Next:** **F37 Responsive pass**, which already has two measured items waiting: `/orders` and `/holdings` scroll sideways from an `sr-only` label escaping its scroll region *and* the terminal header overflowing by 104px, and the 768–1024px terminal has no page navigation at all. **Before F39 deploys**, either Yahoo lands or `/` and `/about` are reconciled — every price badges `SIMULATED` today. **One finding is open from 6.00.02:** `trading-contract.md` §13's money sweep has never covered `constraints.md`, so `constraints/trading.md`'s charge and margin rationale sits outside it
 
 ---
 
@@ -83,7 +83,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ### Phase 6 — Polish & Ship
 
-- [ ] 36 States, skeletons, and error boundaries
+- [x] 36 States, skeletons, and error boundaries
 - [ ] 37 Responsive pass
 - [ ] 38 Accessibility pass
 - [ ] 39 Deploy
