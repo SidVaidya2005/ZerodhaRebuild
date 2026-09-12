@@ -120,8 +120,13 @@ export const SHORT_MARGIN_BUFFER = 0.2
  *
  * The two intraday intervals are only refreshed **during a session** — outside
  * one the market has produced no new candles, so a TTL that expired overnight
- * would re-fetch an unchanged day on every visit. `ONE_DAY` is the opposite: it
- * refreshes once per trading day, after the close that completes it.
+ * would re-fetch an unchanged day on every visit.
+ *
+ * **`ONE_DAY` is not decided by a TTL at all.** It refreshes once the next
+ * session opens, which `isFresh` reads off `lastTradingDate` rather than off an
+ * age; the key below survives only so `CANDLE_TTL_MS[interval]` stays total over
+ * `CandleInterval`. Reading it for the daily series is what kept yesterday's
+ * bars fresh until 15:35 today. (Phase 5 checkpoint)
  */
 export const CANDLE_TTL_MS = {
   FIVE_MIN: 5 * 60 * 1000,
@@ -142,6 +147,18 @@ export const CANDLE_RETENTION_DAYS = {
   THIRTY_MIN: 5,
   ONE_DAY: 400,
 } as const
+
+/**
+ * How far back a daily series must reach before its extremes may be called a
+ * 52-week range.
+ *
+ * A count of bars cannot express this — a holiday-heavy year prints fewer than
+ * 250 sessions — so the test is the **span** the series covers. 300 days sits
+ * clear of both a short calendar year and the one-month window that was being
+ * mislabelled, while still refusing a recently listed symbol that genuinely has
+ * no year of history. (Phase 5 checkpoint)
+ */
+export const FIFTY_TWO_WEEK_MIN_SPAN_DAYS = 300
 
 /* ── Market, quote and simulator values ─────────────────────────────────────
  *

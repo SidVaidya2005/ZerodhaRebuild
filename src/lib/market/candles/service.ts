@@ -15,6 +15,7 @@ import {
   type CandleRange,
   type ProviderCandle,
 } from './types'
+import { windowSeries } from './window'
 
 /**
  * The candle read path.
@@ -127,14 +128,18 @@ async function refresh(
     supabase.from('quotes').select('ltp, prev_close').eq('symbol', symbol).maybeSingle(),
   ])
 
-  // The same preference `loadAnchors` makes in `market-tick` (F16): the rolled
-  // close beats the bhavcopy seed, because reading the seed is what trapped every
-  // simulated price within 5% of the day the universe was seeded. The seed is
-  // still the fallback — on a cold start it is the only close there is.
-  const endClose =
-    interval === 'ONE_DAY'
-      ? (quote?.prev_close ?? instrument?.prev_close ?? null)
-      : (quote?.ltp ?? quote?.prev_close ?? instrument?.prev_close ?? null)
+  // The last bar closes on the price the page is showing, whatever the interval.
+  // `ONE_DAY` used to take `prev_close` here, but `candleSlots` includes today
+  // once the session has opened — so the forming bar was today's and it closed
+  // at *yesterday's* close, which is precisely the chart-contradicts-header case
+  // the F33 anchor rule exists to prevent. (Phase 5 checkpoint)
+  //
+  // Below `ltp`, the same preference `loadAnchors` makes in `market-tick` (F16):
+  // the rolled close beats the bhavcopy seed, because reading the seed is what
+  // trapped every simulated price within 5% of the day the universe was seeded.
+  // The seed is still the last fallback — on a cold start it is the only close
+  // there is.
+  const endClose = quote?.ltp ?? quote?.prev_close ?? instrument?.prev_close ?? null
 
   // **The append-only rule.** Every slot already stored is left alone; only the
   // ones after it, plus the bar still forming, are generated. The forming bar is
@@ -212,16 +217,6 @@ async function refresh(
   return null
 }
 
-/** The last `days` trading days of a stored series. 1M and 1Y differ only here. */
-function window(
-  candles: ProviderCandle[],
-  interval: CandleInterval,
-  days: number
-): ProviderCandle[] {
-  if (interval !== 'ONE_DAY') return candles
-  return candles.slice(-days)
-}
-
 export type GetCandlesOptions = {
   /** Injected by tests so every TTL boundary is reachable without waiting. */
   now?: Date
@@ -253,7 +248,7 @@ export async function getCandles(
     const stored = await readStored(supabase, symbol, interval)
     return {
       interval,
-      candles: window(stored, interval, RANGE_TRADING_DAYS[range]),
+      candles: windowSeries(stored, interval, RANGE_TRADING_DAYS[range]),
       provider: null,
       fetchedAt: null,
       isStale: true,
@@ -270,6 +265,11 @@ export async function getCandles(
   const fetchedAt = sync ? new Date(sync.fetched_at) : null
   let provider = (sync?.provider as QuoteProviderName | undefined) ?? null
   let stale = false
+  // Only a refresh that actually wrote rows may claim `at` as the fetch time.
+  // Reporting `at` for a series served straight from cache over-claims freshness
+  // — the one direction this codebase's provenance rules forbid. (Phase 5
+  // checkpoint)
+  let refreshedAt: Date | null = null
 
   let stored = await readStored(supabase, symbol, interval)
 
@@ -278,6 +278,7 @@ export async function getCandles(
     if (result) {
       provider = result.provider
       stored = result.candles
+      refreshedAt = at
     } else {
       // Every provider declined. Serve what we have with its true age — never an
       // empty chart when stale rows exist, and never a fabricated bar to fill
@@ -288,9 +289,9 @@ export async function getCandles(
 
   return {
     interval,
-    candles: window(stored, interval, RANGE_TRADING_DAYS[range]),
+    candles: windowSeries(stored, interval, RANGE_TRADING_DAYS[range]),
     provider,
-    fetchedAt: stale || provider === null ? fetchedAt : at,
+    fetchedAt: refreshedAt ?? fetchedAt,
     isStale: stale,
   }
 }

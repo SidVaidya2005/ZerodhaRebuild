@@ -1,7 +1,7 @@
 import { CANDLE_TTL_MS } from '@/lib/constants'
 import { isTradingSessionAt, type HolidaySet } from '@shared/market-hours.ts'
 
-import { istDate } from './slots'
+import { istDate, lastTradingDate } from './slots'
 import type { CandleInterval } from './types'
 
 /**
@@ -23,10 +23,20 @@ export function isFresh(
   if (age < 0) return true
 
   if (interval === 'ONE_DAY') {
-    // Once per trading day. The comparison is on the IST date rather than on a
-    // 24-hour age, so a series fetched at 15:35 is still fresh at 09:00 the next
-    // morning — before the open there is no new daily bar to have.
-    return istDate(fetchedAt) === istDate(at) || age < CANDLE_TTL_MS.ONE_DAY
+    // Once per trading day, and the test is **whether a newer daily bar can
+    // exist yet** — not an age. `lastTradingDate` is the most recent session to
+    // have opened, so a series fetched at or after it is holding every bar there
+    // is: fetched 15:35 yesterday is still fresh at 09:00 today, and goes stale
+    // the moment today's open arrives.
+    //
+    // An `age < CANDLE_TTL_MS.ONE_DAY` disjunct used to sit here and silently
+    // reinstated the 24-hour rule this comment disclaims — it kept yesterday's
+    // series "fresh" until 15:35 today, so today's bar was never generated and
+    // `StockStats` rendered yesterday's OHLC beside a live header price. (Phase
+    // 5 checkpoint)
+    const last = lastTradingDate(at, holidays)
+    if (last === null) return true
+    return istDate(fetchedAt) >= last
   }
 
   // The two intraday intervals only go stale **during a session**. Outside one

@@ -65,6 +65,30 @@ describe('daily', () => {
       isFresh('ONE_DAY', ist('2026-01-13', 15 * 60 + 35), ist('2026-01-14', 9 * 60), NONE)
     ).toBe(true)
   })
+
+  it('goes stale the moment the next open arrives, not 24 hours later', () => {
+    // The regression this suite could not see: only day+2 was covered, so a
+    // `|| age < CANDLE_TTL_MS.ONE_DAY` disjunct kept a 15:35 fetch "fresh" until
+    // 15:35 the following day. Today's bar was therefore never generated, and
+    // StockStats rendered yesterday's OHLC beside a live header price.
+    const fetched = ist('2026-01-13', 15 * 60 + 35)
+    expect(isFresh('ONE_DAY', fetched, ist('2026-01-14', 9 * 60 + 20), NONE)).toBe(false)
+    expect(isFresh('ONE_DAY', fetched, ist('2026-01-14', 11 * 60), NONE)).toBe(false)
+  })
+
+  it('stays fresh across a weekend, however old it gets', () => {
+    // Friday's series is complete until Monday opens. An age-based rule went
+    // stale on Saturday and re-fetched an unchanged Friday on every visit.
+    expect(isFresh('ONE_DAY', ist('2026-01-09', 16 * 60), ist('2026-01-11', 12 * 60), NONE)).toBe(
+      true
+    )
+  })
+
+  it('stays fresh on a published closure', () => {
+    expect(
+      isFresh('ONE_DAY', ist('2026-01-23', 16 * 60), ist('2026-01-26', 12 * 60), HOLIDAYS)
+    ).toBe(true)
+  })
 })
 
 describe('a clock that went backwards', () => {
