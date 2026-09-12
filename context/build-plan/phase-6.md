@@ -6,19 +6,37 @@
 
 ### 36 States, skeletons, and error boundaries
 
-
+Every terminal route streams a skeleton while its data loads and catches a failed read with a
+boundary whose retry actually refetches. The enabling change is that the six terminal pages and the
+terminal layout **stop swallowing read failures**: today each logs the error and falls through to the
+empty state, so a broken query and an empty account render the same pixels — the pages' own comments
+name this ("exactly how a broken read hides behind a plausible empty state"). After this, an empty
+state means empty and a boundary means broken. `global-error.tsx` closes the last uncaught case, an
+error thrown by the root layout itself.
 
 **UI:**
 
-- A `loading.tsx` skeleton for every data-loading route segment, shaped like the content it replaces.
-- An `error.tsx` with retry for every terminal segment.
-- Reviewed empty states across watchlist, holdings, positions, orders, ledger, and reports.
+- A `loading.tsx` skeleton for every data-loading route segment, shaped like the content it replaces — the eight `(terminal)` segments plus `(terminal)/loading.tsx` for the shell. Marketing pages are statically rendered and fetch nothing, so they get none.
+- Skeletons compose from shared primitives in `src/components/terminal/skeletons/` (`PageSkeleton`, `TableSkeleton`, `SummaryCardsSkeleton`) over the existing `components/ui/skeleton.tsx`, rather than eight bespoke copies that drift from the pages they mirror. No new dependency.
+- An `error.tsx` for every terminal segment, each a thin `'use client'` wrapper over one shared `TerminalErrorBoundary` so the per-segment rule costs eight small files rather than eight copies.
+- `src/app/global-error.tsx`, which replaces the root layout entirely and therefore declares its own `<html>`/`<body>` and imports `globals.css` itself. It cannot reach the `next/font` variables or the `next-themes` class the root layout sets, so it renders in the dark palette — correct here, since the tokens are dark-by-default on `:root` and `.light` is the override.
+- Reviewed empty states across watchlist, holdings, positions, orders, ledger, and reports. **Largely already present** — `LedgerTable`, `TradeHistoryTable` and `WatchlistSidebar` carry them including past-the-end branches, and Dashboard, Holdings and Positions have components — so this is a review plus filling the Orders gap, not six new components.
+
+**Logic:**
+
+- The six terminal pages and `(terminal)/layout.tsx` log the read error as they do today and then **throw**, so the boundary catches it.
+- **A layout's own `error.tsx` does not catch its own throw**, so a failed watchlist or universe read surfaces at the *root* boundary as a chrome-less full-page error rather than a terminal-shaped one. Accepted: the sidebar is part of the shell, so a shell that cannot load is not a working terminal.
+- `stocks/[symbol]` keeps `notFound()` for an unknown symbol; only its read *failures* throw.
+- **Boundaries use `retry`, not `reset`.** Verified against Context7: Next.js passes `error`, `reset` **and** `retry`; `retry()` calls `router.refresh()` internally *and* resets the boundary, while `reset()` only resets it — so on a page whose server-side read failed, `reset` re-renders the same failed payload and ships a retry button that visibly does nothing. `src/app/error.tsx` currently uses `reset` and is corrected in the same change.
+- `code-standards.md`'s loading/error rule stops saying "not yet true, and F36 owns it"; `library-docs.md`'s Next.js 16 section gains the `error.tsx` props finding, which it does not currently cover.
 
 **Verify:**
 
-- Throttled to Slow 3G, every terminal route shows a skeleton rather than a blank frame.
-- Forcing a query failure renders the boundary with a working retry.
-- A brand-new account sees a purposeful empty state on all six surfaces.
+- Throttled to Slow 3G, every terminal route shows a skeleton rather than a blank frame. Read `document.visibilityState` before believing the result — a backgrounded tab freezes animations and makes this unjudgeable rather than failing (`constraints/verification.md`).
+- Forcing a query failure renders the boundary, and its retry recovers the page once the failure is reverted. **Falsified first**: the same forced failure renders the *empty state* on the pre-F36 code, which is the defect this feature closes.
+- A brand-new account — `reset_account()` from `/settings` — sees a purposeful empty state on all six surfaces.
+- `find src/app/\(terminal\) -name error.tsx | wc -l` is 8 and `-name loading.tsx` is 9, so the `code-standards.md` rule is structurally true rather than asserted.
+- `pnpm test`, `typecheck`, `lint`, `format:check` and `build` all green.
 
 ### 37 Responsive pass
 
