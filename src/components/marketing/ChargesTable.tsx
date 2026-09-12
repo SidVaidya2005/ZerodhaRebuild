@@ -100,7 +100,7 @@ export function ChargesTable() {
         role="region"
         aria-label="Charges by component and product"
         tabIndex={0}
-        className="overflow-x-auto rounded-xl border border-hairline focus-visible:ring-2 focus-visible:ring-info/50 focus-visible:outline-none"
+        className="relative overflow-x-auto rounded-xl border border-hairline focus-visible:ring-2 focus-visible:ring-info/50 focus-visible:outline-none"
       >
         <table className="w-full min-w-[46rem] border-collapse text-left">
           <caption className="sr-only">

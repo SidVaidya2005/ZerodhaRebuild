@@ -22,7 +22,7 @@ export function StackTable() {
         role="region"
         aria-label="Technology stack"
         tabIndex={0}
-        className="overflow-x-auto rounded-xl border border-hairline focus-visible:ring-2 focus-visible:ring-info/50 focus-visible:outline-none"
+        className="relative overflow-x-auto rounded-xl border border-hairline focus-visible:ring-2 focus-visible:ring-info/50 focus-visible:outline-none"
       >
         <table className="w-full min-w-[42rem] border-collapse text-left">
           <caption className="sr-only">
