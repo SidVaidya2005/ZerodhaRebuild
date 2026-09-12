@@ -14,7 +14,7 @@ actually triggers.
 **Always, in this order** — start with the tracker, because what it names resolves every trigger below:
 
 1. **`context/progress-tracker.md`** — what's done, in progress, and next. **The session's brief.**
-2. **`context/constraints.md`** — what still binds from past work. Read before any decision that might conflict with it.
+2. **`context/constraints.md`** — what still binds from past work. Read before any decision that might conflict with it. It is a **core plus reference halves**: seven topics live in `context/constraints/` and are triggered below, never read at session start.
 3. **`context/project-overview.md`** — what the product is, who it's for, what's in and out of scope.
 4. **`context/architecture.md`** — stack, system boundaries, quote provenance, auth, and the **invariants you must never violate**. The data model and the golden patterns are in `architecture/`, on demand.
 5. **`context/code-standards.md`** — the rules every change must follow. The worked boundary patterns and the testing tiers are in `code-standards/`, on demand.
@@ -25,13 +25,16 @@ actually triggers.
 | Trigger | Read |
 | ------- | ---- |
 | Starting or continuing a numbered feature | **That feature's section only**, from `context/build-plan/phase-<n>.md`. Not the whole file, and never a phase you are not in |
-| Touching the schema, writing a migration, or adding a file | `context/architecture/data-model.md` — every table, view and column, and the folder structure |
+| Touching the schema, writing a migration, or adding a file | `context/architecture/data-model.md` — every table, view and column, and the folder structure — and `context/constraints/security.md` for the grant, revoke and CHECK traps |
 | Writing a Server Action, a Postgres function, a Supabase client, a subscription, or the Edge Function | `context/architecture/patterns.md` (the golden patterns and the data-flow diagrams) and `context/code-standards/boundary-patterns.md` (the rules those patterns obey) |
-| Writing or debugging a test in any tier | `context/code-standards/testing.md` |
+| Writing or debugging a test in any tier | `context/code-standards/testing.md` for the tiers themselves, and `context/constraints/testing.md` for the traps found running them |
 | Using any third-party library | The one relevant section of `context/library-docs.md` — after Context7, per the authority order below |
 | Building or restyling any UI | `context/DESIGN.md`. The tokens that actually ship are in `library-docs.md` → Tailwind, and they win where the two disagree |
 | Verifying in a real browser, or judging an automated check | `context/constraints/verification.md` — the traps that make a check report a false result rather than fail |
 | Running the Supabase CLI — a migration, a type regeneration, a function deploy | `context/constraints/supabase-cli.md` — the traps in this machine's CLI setup |
+| Touching money, an order, or a Postgres money function | `context/constraints/trading.md` — the charge and contract rationale, the order-entry rules, and the lock-order and concurrency rules |
+| Touching a surface that renders a price, the quote store, provenance, or a quote provider | `context/constraints/market-data.md` — the interpolation, provenance and provider traps |
+| Building or changing a public `(marketing)` page | `context/constraints/marketing.md` — what the public pages have already settled |
 | Reconstructing why one past feature went the way it did | That feature's entry in `context/build-journal.md`. **Never read this file at session start** |
 
 Every one of those files states its own rules; none of them restates an invariant. Where a reference
@@ -57,7 +60,7 @@ To read one feature without loading its whole phase:
 - **Ask before committing.** Never create a commit without explicit user approval, and never add coauthors unless the user explicitly requests them.
 - **Checkpoint every phase.** Before moving to the next phase, run the relevant verification commands, inspect the phase diff, check for obvious bugs/regressions, confirm code consistency, update `progress-tracker.md`, compact `build-journal.md` (see below), and record any follow-up work.
 - **Update `progress-tracker.md`** after every completed feature — tick the box, **overwrite** Current Status (never append to it; it holds only the latest state), and add the single most important decision to the top of "Key Decisions". That section holds the 10 most recent decisions, newest first — when adding an 11th, file the oldest under its topic in `context/constraints.md`.
-- **Keep `context/constraints.md` short.** It is read every session, so every line costs on every session — one or two sentences per bullet, stating the rule and the reason it exists. Worked examples, transcripts and the story of how it was found belong in `build-journal.md`.
+- **Keep `context/constraints.md` short.** It is read every session, so every line costs on every session — one or two sentences per bullet, stating the rule and the reason it exists. Worked examples, transcripts and the story of how it was found belong in `build-journal.md`. A constraint that binds only one kind of work belongs in the matching `context/constraints/` reference half, behind its trigger — not in the core.
 - **Append to `context/build-journal.md`** after each completed feature — a dated entry with the decisions made, gotchas hit, and verification results. **Never read this file at session start**; it grows for the life of the project. Open it only to reconstruct one specific feature's history.
 - **Compact `build-journal.md` at phase checkpoints**, never continuously — that file's own `How this file is maintained` section carries the procedure. Never remove a constraint that still binds.
 

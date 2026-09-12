@@ -1,0 +1,31 @@
+# Constraints — What the test tiers have already taught us
+
+> **Reference half of `context/constraints.md`.** Read **before writing or debugging a test in any
+> tier** — not at session start. Pairs with `code-standards/testing.md`, which defines the tiers
+> themselves; this file holds the traps found running them.
+
+
+- **Tier 4's margin parity re-implements `reserve_margin`'s branch selection in TypeScript rather than calling it**, sending only the arithmetic to Postgres — so a change to *which* branch nets against the position leaves the ticket wrong with parity green. `08-margin.sql` covers the function directly; the cross-language branch comparison is the gap. **Not fixed** (Phase 4 checkpoint).
+- **The full suite cannot pass while the account holds an open MIS position.** Tier 3's square-off suites abort by design — their pre-flight refuses to sweep real positions — so `pnpm test:all` needs a flat account or a closed market. (Phase 4 checkpoint)
+- **Check what tier 2 already proves before writing new assertions.** F31's exit and F32's reset were both already covered by `10-orders.sql`, so each cites that coverage rather than copying it. A second copy of a passing assertion is not coverage, and the two drift. (F31, F32)
+- **Tier 3 commits into the production database**, unavoidably: proving two connections cannot both fill an order requires the first to commit. Three guards are mandatory — `ALLOW_RACE_TESTS` set, a recognisable prefix on seeded rows, and `afterEach` cleanup that runs on failure too. A crashed process can still strand rows: accepted residual risk. (1.00.03)
+- **Through the pooler, find a blocked backend by pid, never by `pg_stat_activity.query`** — a `query ilike` poll timed out one run in three with the block plainly present, because the blocked backend's `query` still read `begin`. Capture the pid inside the transaction, which session mode pins, and poll `pg_blocking_pids($1)`. (F29)
+- **A tier-3 test that pre-locks a row to stage an interleaving is asserting a lock order too.** `squareoff.race.test.ts` staged on the position row; when the sweep's own order was corrected, the staging became the inversion and deadlocked. Stage on the first lock the function under test takes. (F29)
+- **A tier-3 pre-flight that excludes its own fixture symbol cannot see a stray from a crashed run**, and a stray makes the swept set multi-row so the staged interleaving is no longer the one being asserted about. Check before seeding, across every symbol. (F29)
+- **`supabase test db` requires Docker even with `--db-url`** — it connects to the remote database, then shells out to `pg_prove` in a container and dies with `LegacyDockerRunError`. Tier 2 runs through `scripts/run-pgtap.mts`, which reads pgTAP's TAP output back as text rows. (F09)
+- **The tier-2 runner must fail on a plan mismatch, not only on `not ok`.** A suite declaring `plan(2)` that runs one assertion has a bug; all three failure modes were observed failing before the runner was trusted. (F09)
+- **pgTAP is enabled by a tracked migration, never created ad hoc by the runner** — an untracked extension the tests silently depend on means a fresh database looks healthy right up until the suite runs. (F09)
+- **The tier-2 runner is a standalone TypeScript script**, run by `node scripts/run-pgtap.mts`. Keeping it out of Vitest means nothing about tier 2 can be picked up by `pnpm test`. (F09)
+- **Tier 3 is gated by `scripts/run-race.mts`, which decides before Vitest starts**, so an un-permitted run never imports `pg` at all. (F09)
+- **Prove a negative with a positive control.** A first attempt used `console.log` and saw nothing in *either* case, because Vitest suppresses it — an absence that looked like evidence and was not. (F09)
+- **A pgTAP assertion running as the owning role is not filtered by RLS**, so an unscoped query sees every real row in the database. Scope owner-role assertions to their fixture; assertions under `set local role authenticated` are safe because RLS scopes them. (F13)
+- **When the function under test is deliberately unscoped, the fixture must clear the world instead.** `select_demanded_symbols` asks what the whole system wants refreshed, so `04-market-tick` empties the demand tables outright. Safe only because the suite always rolls back. (F16)
+- **`market-tick`'s `session_at` override is read *after* the secret check**, so it is exactly as restricted as the Vault credential. It moves the session gate and square-off boundary only — `now` still stamps every row, the response carries `sessionOverride: true`, and `place_order` is unaffected. (Phase 4 checkpoint)
+- **Market-time logic takes its calendar as an argument so tier 1 can falsify it.** `marketStatusAt(at, holidays)` and `isTradingSessionAt(at, holidays)` are pure; the database-backed wrappers load the calendar and delegate. (F15)
+- **The market-hours core is shared, not duplicated, so the planned drift test was never written.** An Edge Function cannot import from `src/`, but the dependency runs the other way: the pure logic lives in `supabase/functions/_shared/`, read relatively by Deno and through `@shared/*` by the app. Removing the duplication removes the failure instead of policing it. (F16)
+- **Tier 1 runs in Vitest's node environment with no jsdom and no Testing Library** — neither is an approved dependency, and tier 1 is scoped to pure logic. Component behaviour is proven in the browser. (F01)
+- **`server-only` cannot be imported by Vitest** and is aliased to the package's own `empty.js` in `vitest.config.mts`. `next build` still resolves the throwing entry for client bundles, which is what the falsifiability check exercises. (F01)
+- **`fetch-reference-data.mts` treats any probe failure as "this symbol does not exist"**, so one transient Yahoo 5xx kills a ~5-minute 200-symbol run. Only 404 should be a verdict. **Not fixed** — the script is manual, rare and re-runnable. (F14)
+
+- **A tier-2 suite that empties a reference table must empty its dependants too.** Once F26 let the app write `orders`, the first real order turned `pnpm test:db` permanently red on `orders_symbol_fkey` — a test tier broken by using the product. The deletes roll back, so the fix is cheap. (F26)
+

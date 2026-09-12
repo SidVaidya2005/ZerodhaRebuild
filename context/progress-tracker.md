@@ -17,10 +17,10 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Current Status
 
-**Phase:** Phase 6 — Polish & Ship, not yet started. Phase 5 is closed and compacted. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
+**Phase:** Phase 6 — Polish & Ship. No numbered feature started yet; `constraints.md` was split into a core plus reference halves first (6.00.02). Phase 5 is closed and compacted. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
 **Last completed:** the **Phase 5 checkpoint**. All four tiers green (516 tier-1 / 25 pgTAP files / 10 race / 36 parity) plus lint, typecheck, format and build. The phase-diff review's **seven findings were all fixed**, each with a test falsified against the code it replaced, and §11 reset was finally proven from `/settings` — closing Phase 5's last open `**Verify:**` line. Phase 5 is compacted; **every Phase 5 feature and the checkpoint are ticked**
 **In progress:** Nothing
-**Next:** **Phase 6 F36 States, skeletons, and error boundaries**, which also owns the missing `loading.tsx`/`error.tsx` across all eight terminal segments — `code-standards.md` states the rule and records that F36 is where it becomes true. Two items are filed for Phase 6 and not yet started: `text-brand`'s 1.37:1 contrast on light (F38) and the 768–1024px terminal having no page navigation (F37). **Before F39 deploys**, either Yahoo lands or `/` and `/about` are reconciled — every price badges `SIMULATED` today
+**Next:** **Phase 6 F36 States, skeletons, and error boundaries**, which also owns the missing `loading.tsx`/`error.tsx` across all eight terminal segments — `code-standards.md` states the rule and records that F36 is where it becomes true. Two items are filed for Phase 6 and not yet started: `text-brand`'s 1.37:1 contrast on light (F38) and the 768–1024px terminal having no page navigation (F37). **Before F39 deploys**, either Yahoo lands or `/` and `/about` are reconciled — every price badges `SIMULATED` today. **One finding is open from the split:** `trading-contract.md` §13's money sweep has never covered `constraints.md`, so `constraints/trading.md`'s charge and margin rationale sits outside it
 
 ---
 
@@ -94,7 +94,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
-- **The always-read budget is saturated, and nothing scheduled relieves it.** This tracker claimed journal compaction would free it — it cannot: `build-journal.md` is on-demand and uncounted, and compaction *promotes into* the counted `constraints.md`. Fitting seven findings took ~20 constraints compressed and one dead bullet deleted, landing at 39,981 of 40,000, so the next feature must evict before it can add. The structural fix is splitting `constraints.md` into a core plus on-demand topic files, as `verification.md` already was — a `/review-context` job, not one to improvise at a checkpoint. (Phase 5 checkpoint)
+- **`constraints.md` is now a core plus reference halves, and the always-read set has room again.** Five topics that bind only one kind of work — money and the order engine, market data, testing, security, marketing — moved to `context/constraints/` behind triggers in `CLAUDE.md`, taking the always-read set from 39,770 to 31,807 of 40,000. Accessibility, theming, shadcn/ui and Next.js behaviour stayed, because Phase 6 is UI polish and they bind every change in it. Adding a constraint now means first asking which side of the line it belongs on. (6.00.02)
 
 - **A preference that must follow the account is applied client-side, because `next-themes` accepts no server value.** Its injected script reads `localStorage` and `setTheme` is the only write path (confirmed against Context7), so the terminal layout passes `profiles.theme` down and a client component calls `setTheme` once per full load. That leaves the library sole owner of the class *and* the storage key; the price is one frame of the wrong theme on a browser that has never seen this account, inside the terminal only. A blocking script would remove that frame by hand-writing a key the library owns and racing its hydration. (F35)
 

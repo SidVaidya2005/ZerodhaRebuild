@@ -41,6 +41,15 @@ At that phase's checkpoint, the whole phase collapses to:
 
 -->
 
+## Phase 6 — Polish & Ship
+
+### Chore — split `constraints.md` into a core plus reference halves (6.00.02)  *(2026-09-12)*
+- Decision: five topics moved down a tier behind triggers in `CLAUDE.md` — `constraints/trading.md` (charges rationale + order entry + database concurrency), `market-data.md` (live prices + quote providers), `testing.md`, `security.md`, `marketing.md`. Accessibility, theming, shadcn/ui, Next.js behaviour and the small always-binding topics stayed in the core, because Phase 6 is entirely UI polish and those bind every change in it.
+- Decision: `Next.js behaviour` stayed in the core specifically for F36 — its "a Server Component throw renders nothing server-side; the boundary appears on hydration" bullet is about the error boundaries F36 builds, and its PostgREST-pager bullet governs the empty states F36 reviews.
+- Gotcha: `context-cost.mts`'s duplicate-decision check read `constraints.md` **only**, so the moment a topic moved down a tier the check would have passed by looking in a file the decision had left — the silent-sweep-emptying failure, in the guard that exists to catch drift. It now reads the core plus every `constraints/*.md`, and was falsified by planting a known Key Decision in `constraints/trading.md`: the old shape passed, the new one fails.
+- Gotcha: `trading-contract.md` §13's money sweep covers `architecture/`, `code-standards/` and `build-plan/` but has **never** covered `constraints.md` — so `constraints/trading.md`'s 26 bullets of charge and margin rationale sit outside it. Pre-existing, unchanged by the move, and left as a finding rather than widening the money-authoritative document outside the approved scope.
+- Verified: byte accounting 52,168 B in = 17,540 B retained + 34,628 B moved, with all five destinations diffed byte-identical against the source ranges; always-read 39,770 → 31,807 tok of the 40,000 budget; both §13 sweeps hit 127 / 136 either side of the move; no dangling reference from `CLAUDE.md` or inside `context/`; secret scan clean.
+
 ## Phase 5 — Portfolio Pages *(compacted 2026-09-12 at the Phase 5 checkpoint)*
 
 Everything that still binds was promoted to `constraints.md` and `code-standards.md`; git history

@@ -20,7 +20,7 @@
  * Node 26 strips TypeScript natively, so this runs as `node scripts/context-cost.mts`
  * with no transpiler in the way — the same reason `run-pgtap.mts` is a plain script.
  */
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { exit } from 'node:process'
 
@@ -64,6 +64,11 @@ const ON_DEMAND = [
   'context/code-standards/testing.md',
   'context/constraints/verification.md',
   'context/constraints/supabase-cli.md',
+  'context/constraints/security.md',
+  'context/constraints/trading.md',
+  'context/constraints/testing.md',
+  'context/constraints/market-data.md',
+  'context/constraints/marketing.md',
   'context/library-docs.md',
   'context/DESIGN.md',
   'context/build-journal.md',
@@ -100,13 +105,23 @@ function report(label: string, files: readonly string[]): number {
 }
 
 /**
- * A decision lives in `progress-tracker.md` → Key Decisions *or* in `constraints.md`,
+ * A decision lives in `progress-tracker.md` → Key Decisions *or* in the constraints set,
  * never both. Matching on the opening clause is enough: bullets are rewritten when
  * they move, but the bolded first phrase is what carries the decision's identity.
+ *
+ * It reads the core **and every reference half** under `context/constraints/`. Keying on
+ * `constraints.md` alone would silently stop catching anything the moment a topic moved
+ * down a tier — the check would pass by looking in a file the decision had left.
  */
 function findDuplicatedDecisions(): string[] {
   const tracker = readFileSync(join(process.cwd(), 'context/progress-tracker.md'), 'utf8')
-  const constraints = readFileSync(join(process.cwd(), 'context/constraints.md'), 'utf8')
+  const constraintsDir = join(process.cwd(), 'context/constraints')
+  const constraints = [
+    readFileSync(join(process.cwd(), 'context/constraints.md'), 'utf8'),
+    ...readdirSync(constraintsDir)
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => readFileSync(join(constraintsDir, f), 'utf8')),
+  ].join('\n')
 
   // `indexOf` returning -1 would make `slice(-1)` a one-character string: no
   // bullet would match, and this would report "no duplicated decisions" forever
@@ -151,7 +166,7 @@ const duplicated = findDuplicatedDecisions()
 if (duplicated.length > 0) {
   failures.push(
     `${duplicated.length} decision(s) are in BOTH progress-tracker.md → Key Decisions and ` +
-      `constraints.md, so every session pays for them twice. Eviction is a move, not a copy:\n` +
+      `the constraints set, so every session pays for them twice. Eviction is a move, not a copy:\n` +
       duplicated.map((d) => `      - ${d}…`).join('\n')
   )
 }
