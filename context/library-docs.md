@@ -263,6 +263,32 @@ positions. It must not be callable by anyone who merely knows the URL.
 
 Version 16.3.1.
 
+### Error and loading boundaries
+
+**Checked against Context7, 2026-09-12 (F36).**
+
+`error.tsx` receives **three** props, not two — `error`, `reset` **and** `retry`:
+
+```tsx
+'use client' // error boundaries must be Client Components
+
+export default function ErrorPage({
+  error,
+  retry,
+}: {
+  error: Error & { digest?: string }
+  retry: () => void
+}) {
+  return <button onClick={() => retry()}>Try again</button>
+}
+```
+
+- **`reset()` only resets the boundary**; **`retry()` calls `router.refresh()` first, then resets.** For a segment whose *server-side* data read threw, `reset` re-renders the same failed payload — a retry button that visibly does nothing. Use `retry` wherever the failure came from the server, which in this project is everywhere.
+- A boundary catches errors in its **children**, never in its own segment's `layout.tsx`. A layout that throws is caught by the boundary *above* it — so `(terminal)/layout.tsx` throwing surfaces at `src/app/error.tsx`, with no terminal chrome.
+- `global-error.tsx` replaces the **root layout**, so it must declare its own `<html>` and `<body>` and import `globals.css` itself. It cannot reach `next/font` variables or any provider the root layout renders.
+- `loading.tsx` wraps the segment in a `<Suspense>` boundary automatically; each nested segment gets its own, so siblings stream independently.
+- During **static generation** an error caught by `error.tsx` is re-thrown by `handleISRError` and fails the build. It renders normally on a request or an ISR revalidation. Terminal routes are all dynamic, so this does not bite here — but it is why a boundary cannot be relied on to paper over a prerender failure.
+
 ### Proxy (formerly middleware)
 
 ```bash

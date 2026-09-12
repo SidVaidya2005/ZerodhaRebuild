@@ -46,7 +46,7 @@ drift across sessions.
 - Call `revalidatePath` for every route whose data a Server Action changed; list them explicitly rather than revalidating the layout.
 - Terminal pages are dynamic by default because they read the session. Marketing pages must stay statically renderable — never read `cookies()` in `(marketing)`.
 - Use `next/image` for all raster images and `next/font` for fonts. No `<img>` tags, no external font CDN links.
-- Every route segment that fetches data has a sibling `loading.tsx`; every terminal segment has an `error.tsx`. **Not yet true, and F36 owns it** — no terminal segment carries either file today. Stated here as the standard the phase must reach, not as a description of the tree; a new segment added before F36 does not have to invent its own fallback. (Phase 5 checkpoint)
+- Every route segment that fetches data has a sibling `loading.tsx`; every terminal segment has an `error.tsx`. True since F36: nine `loading.tsx` (the eight terminal segments plus a `(terminal)` group fallback, so a segment added later still streams something) and eight `error.tsx`. Marketing pages are statically rendered and fetch nothing, so they have neither. **A boundary's action is `retry`, never `reset`** — see Error Handling. (Phase 5 checkpoint, met at F36)
 
 ---
 
@@ -103,7 +103,7 @@ export function WatchlistRow({ instrument, onTrade }: WatchlistRowProps) {
 
 - Import order, separated by blank lines: React and Next → third-party packages → `@/` internal modules → types (`import type`).
 - Props types are declared directly above the component and named `<ComponentName>Props`.
-- Named exports only. No default exports except where Next.js requires them (`page.tsx`, `layout.tsx`, `error.tsx`, `not-found.tsx`).
+- Named exports only. No default exports except where Next.js requires them (`page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`, `global-error.tsx`, `not-found.tsx`).
 - `'use client'` is the first line of the file when present, before any import.
 - Early-return for loading and empty states rather than nesting the whole body in a conditional.
 - Small private helpers (`RowSkeleton` above) may live at the bottom of the same file; anything reused elsewhere moves to its own file.
@@ -117,7 +117,9 @@ export function WatchlistRow({ instrument, onTrade }: WatchlistRowProps) {
 - Never expose a Postgres error message, stack trace, connection string, or key in a UI string or an HTTP response body.
 - Failures in the quote pipeline degrade rather than throw: a dead provider trips its circuit and the chain falls through to the simulator.
 - Client Components surface action failures through a toast; they never render `error.message` from an unknown source.
-- Every terminal route segment has an `error.tsx` boundary with a retry affordance.
+- Every terminal route segment has an `error.tsx` boundary with a retry affordance. Each is a thin `'use client'` wrapper over `TerminalErrorBoundary`, which keeps the terminal chrome — the shell still works, one segment beneath it does not. The root boundary renders no chrome, for the opposite reason.
+- **A boundary calls `retry()`, not `reset()`.** Next.js passes `error`, `reset` and `retry`; `reset` only resets the boundary and re-renders the payload it already has, while `retry` calls `router.refresh()` first. Every read failure in this app is server-side, so `reset` alone ships a button that visibly does nothing. (F36)
+- **A failed page read is logged and then thrown**, through `throwOnReadError` — never logged and swallowed. A read that falls through to the empty state makes a broken query and an empty account render identically. The one exception is PostgREST's `PGRST103`, an offset past the end of a set, which the helper excludes so a stale bookmark reaches the table's own past-the-end branch rather than a boundary. (F36)
 
 ---
 
