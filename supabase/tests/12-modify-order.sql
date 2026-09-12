@@ -10,7 +10,7 @@
 -- suite whose result depends on the hour it runs is worse than no suite. The
 -- stub is created inside the transaction and the rollback removes it.
 begin;
-select plan(33);
+select plan(35);
 
 insert into auth.users (id) values
   ('11111111-1111-1111-1111-111111111111'),
@@ -285,6 +285,36 @@ select ok(
   (select m.ok from pg_temp.modify('11111111-1111-1111-1111-111111111111',
                                    (select id from t_sell), 4, 200.00) m),
   'lowering it within the holding is still allowed');
+
+-- ── G. The handler catches its own condition and nothing else ──────────────
+--
+-- **`P0001` is the default SQLSTATE for any bare `RAISE EXCEPTION`**, so a
+-- handler written as `when sqlstate 'P0001'` catches every such error raised
+-- anywhere inside its block — including ones from `release_margin`,
+-- `reserve_margin`, or a trigger on `orders` — and reports all of them to the
+-- user as `INSUFFICIENT_FUNDS`. Section D proves the shortfall path still
+-- works; these two prove it is the *only* thing that path can be reached by.
+--
+-- Asserted structurally, out of the live definition, for the same reason
+-- `15-lock-order.sql` reads lock order that way: the defect is invisible in any
+-- single call, and the only honest test of "does not over-catch" is that the
+-- over-catching code is not there. `execute_order` minted ZR001 at
+-- 20260911150000; this pins modify_order to the same private code.
+select is(
+  (select count(*)::int
+     from regexp_matches(
+       pg_get_functiondef('public.modify_order(uuid, integer, numeric)'::regprocedure),
+       'sqlstate\s+''P0001''', 'g')),
+  0,
+  'modify_order catches no P0001 — the default code for every bare RAISE');
+
+select is(
+  (select count(*)::int
+     from regexp_matches(
+       pg_get_functiondef('public.modify_order(uuid, integer, numeric)'::regprocedure),
+       'sqlstate\s+''ZR001''', 'g')),
+  1,
+  'it catches ZR001 instead, which only its own raise uses');
 
 select finish();
 rollback;
