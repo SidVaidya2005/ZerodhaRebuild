@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import type { FundsOverview } from '@/lib/funds/types'
 import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/server/actions/auth'
+import { throwOnReadError } from '@/lib/read-errors'
 
 export const metadata: Metadata = {
   title: 'Settings — ZerodhaRebuild',
@@ -51,10 +52,13 @@ export default async function SettingsPage() {
       .maybeSingle(),
   ])
 
-  // Logged, never thrown: a failed read here renders a plausible-looking page
-  // with an em dash where the client ID belongs, and that must not be silent.
-  if (profileError) console.error('[settings] profiles', profileError)
-  if (overviewError) console.error('[settings] funds_overview', overviewError)
+  // Logged and thrown, so `error.tsx` catches it. A failed read here used to
+  // render a plausible-looking page with an em dash where the client ID
+  // belongs — a wrong page rather than an honest failure. (F36)
+  throwOnReadError('settings', {
+    profiles: profileError,
+    funds_overview: overviewError,
+  })
 
   const overview: FundsOverview = {
     availableCash: Number(overviewRow?.available_cash ?? 0),

@@ -16,6 +16,7 @@ import { placeOrder } from '@/server/actions/orders'
 import type { MarketComposite } from '@/lib/portfolio/types'
 import type { ServerQuote } from '@/lib/stores/quote-store'
 import type { UniverseEntry, WatchlistRow } from '@/lib/watchlist/schemas'
+import { throwOnReadError } from '@/lib/read-errors'
 
 /**
  * Both the watchlist view and the holdings view carry the same five provenance
@@ -131,14 +132,21 @@ export default async function TerminalLayout({ children }: { children: ReactNode
     user.email ??
     'Account'
 
-  // A failed read here renders an empty watchlist, which is indistinguishable
-  // from a genuinely empty one — and that is exactly how a broken query hid
-  // behind a plausible empty state. Logged rather than thrown: the shell is
-  // still usable without the sidebar, but the failure must not be silent.
-  if (watchlistError) console.error('[terminal.layout] watchlist_rows', watchlistError)
-  if (universeError) console.error('[terminal.layout] instruments', universeError)
-  if (heldError) console.error('[terminal.layout] portfolio_holdings', heldError)
-  if (compositeError) console.error('[terminal.layout] market_composite', compositeError)
+  // A failed read here renders an empty watchlist, indistinguishable from a
+  // genuinely empty one, so it is logged and thrown like every page read. (F36)
+  //
+  // **This one surfaces at the *root* boundary, not a terminal-shaped one.** A
+  // layout's own `error.tsx` catches its children, never itself, so the nearest
+  // boundary above this throw is `src/app/error.tsx` and the user sees a
+  // chrome-less error page. That is the intended reading: the sidebar, the
+  // search universe and the index strip are the shell, and a shell that cannot
+  // load is not a working terminal to put chrome around.
+  throwOnReadError('terminal.layout', {
+    watchlist_rows: watchlistError,
+    instruments: universeError,
+    portfolio_holdings: heldError,
+    market_composite: compositeError,
+  })
 
   // Numbers cross PostgREST as JSON numbers, but every one of these is nullable
   // — a symbol with no quote row yet has no price at all — so each is narrowed

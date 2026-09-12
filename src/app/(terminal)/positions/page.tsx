@@ -7,6 +7,7 @@ import { SquareOffBanner } from '@/components/terminal/SquareOffBanner'
 import { loadHolidays } from '@/lib/market/market-hours'
 import type { PositionRow, PositionsSummary } from '@/lib/portfolio/types'
 import { createClient } from '@/lib/supabase/server'
+import { throwOnReadError } from '@/lib/read-errors'
 
 export const metadata: Metadata = {
   title: 'Positions — ZerodhaRebuild',
@@ -56,11 +57,13 @@ export default async function PositionsPage() {
     loadHolidays(supabase),
   ])
 
-  // Logged rather than thrown. An empty book and a failed query render
-  // identically, which is exactly how a broken read hides behind a plausible
-  // empty state — the failure must at least be visible in the server log.
-  if (positionsError) console.error('[positions] portfolio_positions', positionsError)
-  if (summaryError) console.error('[positions] portfolio_positions_summary', summaryError)
+  // Logged and thrown, so `error.tsx` catches it. An empty book and a failed
+  // query used to render identically — below this line, an empty state means
+  // the book is empty. (F36)
+  throwOnReadError('positions', {
+    portfolio_positions: positionsError,
+    portfolio_positions_summary: summaryError,
+  })
 
   // Each nullable figure is narrowed rather than coerced: a position with no
   // quote row has no valuation at all, and `Number(null)` is 0 — which would

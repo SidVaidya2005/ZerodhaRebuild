@@ -6,6 +6,7 @@ import { istDayStart } from '@/lib/market/market-hours'
 import { toRejectionCode } from '@/lib/trading/order-copy'
 import type { OrderRow } from '@/lib/trading/types'
 import { createClient } from '@/lib/supabase/server'
+import { throwOnReadError } from '@/lib/read-errors'
 
 export const metadata: Metadata = {
   title: 'Orders — ZerodhaRebuild',
@@ -60,10 +61,10 @@ export default async function OrdersPage() {
       .order('placed_at', { ascending: false }),
   ])
 
-  // Logged rather than thrown: an empty order book and a failed read render
-  // identically, and that is exactly how a broken query hides behind a plausible
-  // empty state.
-  if (error) console.error('[orders] orders', error)
+  // Logged and thrown, so `error.tsx` catches it. An empty order book and a
+  // failed read used to render identically — below this line, an empty tab
+  // means no orders in that state. (F36)
+  throwOnReadError('orders', { orders: error })
 
   const orders: OrderRow[] = (rows ?? []).map((row) => ({
     id: row.id,

@@ -9,6 +9,7 @@ import { exportHref, parseReportsQuery, reportsPresets, toRange } from '@/lib/re
 import { TRADE_HISTORY_COLUMNS, toTradeRow } from '@/lib/reports/rows'
 import type { ReportsSummary, UnrealisedSummary } from '@/lib/reports/types'
 import { createClient } from '@/lib/supabase/server'
+import { throwOnReadError } from '@/lib/read-errors'
 
 export const metadata: Metadata = {
   title: 'Reports — ZerodhaRebuild',
@@ -93,23 +94,26 @@ export default async function ReportsPage({
     supabase.from('portfolio_holdings').select('provider, provider_ts').not('ltp', 'is', null),
   ])
 
-  // Logged rather than thrown. An empty statement and a failed query render
-  // identically, which is exactly how a broken read hides behind a plausible
-  // empty state (F30, F32).
+  // An empty statement and a failed query used to render identically, which is
+  // exactly how a broken read hides behind a plausible empty state (F30, F32).
   //
   // **PGRST103 is expected, not a fault.** PostgREST refuses an offset past the
   // end of the set — a bookmarked `?page=3` that outlives its trades — and
   // returns null rows *and a null count*. That is why the pager's total comes
   // from `reports_summary` below rather than from this query: a total that
   // vanishes exactly when the page is out of range cannot tell "past the end"
-  // apart from "never traded".
-  if (historyError && historyError.code !== 'PGRST103') {
-    console.error('[reports] trade_history', historyError)
-  }
-  if (summaryError) console.error('[reports] reports_summary', summaryError)
-  if (symbolsError) console.error('[reports] traded_symbols', symbolsError)
-  if (portfolioError) console.error('[reports] portfolio_summary', portfolioError)
-  if (holdingsError) console.error('[reports] portfolio_holdings', holdingsError)
+  // apart from "never traded". `throwOnReadError` excludes that one code, so a
+  // stale bookmark still reaches `TradeHistoryTable`'s own past-the-end branch
+  // instead of an error boundary.
+  //
+  // Every other failure is logged and thrown, so `error.tsx` catches it. (F36)
+  throwOnReadError('reports', {
+    trade_history: historyError,
+    reports_summary: summaryError,
+    traded_symbols: symbolsError,
+    portfolio_summary: portfolioError,
+    portfolio_holdings: holdingsError,
+  })
 
   const trades = (tradeRows ?? []).map(toTradeRow)
 

@@ -5,6 +5,7 @@ import { HoldingsTable } from '@/components/terminal/HoldingsTable'
 import { OrderChannel } from '@/components/terminal/OrderChannel'
 import type { HoldingRow, PortfolioSummary } from '@/lib/portfolio/types'
 import { createClient } from '@/lib/supabase/server'
+import { throwOnReadError } from '@/lib/read-errors'
 
 export const metadata: Metadata = {
   title: 'Holdings — ZerodhaRebuild',
@@ -56,11 +57,14 @@ export default async function HoldingsPage() {
       .maybeSingle(),
   ])
 
-  // Logged rather than thrown. An empty portfolio and a failed query render
-  // identically, which is exactly how a broken read hides behind a plausible
-  // empty state — the failure must at least be visible in the server log.
-  if (holdingsError) console.error('[holdings] portfolio_holdings', holdingsError)
-  if (summaryError) console.error('[holdings] portfolio_summary', summaryError)
+  // Logged and thrown, so `error.tsx` catches it. An empty portfolio and a
+  // failed query used to render identically, which is exactly how a broken read
+  // hides behind a plausible empty state; below this line, an empty state means
+  // the account is empty. (F36)
+  throwOnReadError('holdings', {
+    portfolio_holdings: holdingsError,
+    portfolio_summary: summaryError,
+  })
 
   // Each nullable figure is narrowed rather than coerced: a holding with no
   // quote row has no market value at all, and `Number(null)` is 0 — which would

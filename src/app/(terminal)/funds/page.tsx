@@ -8,6 +8,7 @@ import { ResetAccountDialog } from '@/components/terminal/ResetAccountDialog'
 import { parseLedgerQuery, toRange } from '@/lib/funds/ledger'
 import type { FundsOverview, LedgerEntry } from '@/lib/funds/types'
 import { createClient } from '@/lib/supabase/server'
+import { throwOnReadError } from '@/lib/read-errors'
 
 export const metadata: Metadata = {
   title: 'Funds — ZerodhaRebuild',
@@ -80,12 +81,16 @@ export default async function FundsPage({
     ledgerTotalQuery,
   ])
 
-  // Logged rather than thrown. An empty ledger and a failed query render
-  // identically, which is exactly how a broken read hides behind a plausible
-  // empty state.
-  if (overviewError) console.error('[funds] funds_overview', overviewError)
-  if (ledgerError) console.error('[funds] fund_ledger', ledgerError)
-  if (ledgerTotalError) console.error('[funds] fund_ledger count', ledgerTotalError)
+  // Logged and thrown, so `error.tsx` catches it. An empty ledger and a failed
+  // query used to render identically — below this line, an empty ledger means
+  // no cash has moved. A page read past the end of the ledger is **not** a
+  // failure and does not throw; `LedgerTable` renders its own "past the end"
+  // branch for it. (F36)
+  throwOnReadError('funds', {
+    funds_overview: overviewError,
+    fund_ledger: ledgerError,
+    'fund_ledger count': ledgerTotalError,
+  })
 
   const overview: FundsOverview = {
     availableCash: Number(overviewRow?.available_cash ?? 0),

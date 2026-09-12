@@ -6,6 +6,7 @@ import { RecentOrders } from '@/components/dashboard/RecentOrders'
 import { SummaryCards } from '@/components/dashboard/SummaryCards'
 import type { HoldingRow, PortfolioSummary, RecentOrder } from '@/lib/portfolio/types'
 import { createClient } from '@/lib/supabase/server'
+import { throwOnReadError } from '@/lib/read-errors'
 
 export const metadata: Metadata = {
   title: 'Dashboard — ZerodhaRebuild',
@@ -59,12 +60,14 @@ export default async function DashboardPage() {
       .limit(RECENT_ORDER_LIMIT),
   ])
 
-  // Logged rather than thrown. An empty portfolio and a failed query render
-  // identically, which is exactly how a broken read hides behind a plausible
-  // empty state — the failure must at least be visible in the server log.
-  if (summaryError) console.error('[dashboard] portfolio_summary', summaryError)
-  if (holdingsError) console.error('[dashboard] portfolio_holdings', holdingsError)
-  if (ordersError) console.error('[dashboard] orders', ordersError)
+  // Logged and thrown, so `error.tsx` catches it. An empty portfolio and a
+  // failed query used to render identically — below this line, the empty state
+  // means the account is empty. (F36)
+  throwOnReadError('dashboard', {
+    portfolio_summary: summaryError,
+    portfolio_holdings: holdingsError,
+    orders: ordersError,
+  })
 
   const summary: PortfolioSummary = {
     availableCash: Number(summaryRow?.available_cash ?? 0),
