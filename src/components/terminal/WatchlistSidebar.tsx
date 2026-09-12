@@ -2,6 +2,7 @@
 
 import { ChevronDown, ChevronUp, LineChart, Menu, Plus, X } from 'lucide-react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 
@@ -23,6 +24,7 @@ import { useQuoteStore } from '@/lib/stores/quote-store'
 import { cn } from '@/lib/utils'
 
 import { PriceWithProvenance } from './PriceWithProvenance'
+import { TERMINAL_NAV_LINKS } from './nav-links'
 import { useNow } from './TerminalClock'
 import { searchUniverse } from '@/lib/watchlist/search'
 import type { UniverseEntry, WatchlistRow } from '@/lib/watchlist/schemas'
@@ -33,9 +35,15 @@ import { addToWatchlist, removeFromWatchlist, reorderWatchlist } from '@/server/
  * server rendered and they hold still until the next navigation.
  *
  * The panel is one component so the two breakpoints cannot diverge: the same
- * `<WatchlistPanel/>` renders inside a fixed rail at `md` and up, and inside a
+ * `<WatchlistPanel/>` renders inside a fixed rail at `lg` and up, and inside a
  * `Sheet` below it — `DESIGN.md` → Collapsing Strategy specifies a full-screen
  * sheet under 768px.
+ *
+ * **The sheet is the terminal's menu below `lg`, not only its watchlist (F37).**
+ * The header nav is `lg:flex` and the wordmark is hidden below `sm`, so before
+ * F37 not one of the six destinations was reachable under 1024px without typing
+ * a URL. Lowering the nav's own breakpoint was ruled out by measurement rather
+ * than taste: at 768px the header bar has ~106px spare and the nav needs 404px.
  *
  * **The two shells are exported separately because they live in different parts
  * of the page.** The rail is a column beside `<main>`; the sheet's trigger is a
@@ -93,6 +101,21 @@ function useSymbolDemand(symbols: string[]): void {
       if (error) console.error('[watchlist.touchSymbolDemand]', error)
     })
   }, [key])
+}
+
+/**
+ * The demand ping, mounted once by the terminal layout. Renders nothing.
+ *
+ * **Hoisted out of `WatchlistPanel` in F37.** The panel is mounted by both the
+ * rail and the sheet, so while the sheet was open the RPC fired twice for the
+ * same symbols — harmless, because it is idempotent, but it is a round trip
+ * bought for nothing and the constraint filed against F18 asked for this the
+ * next time F37 touched the file. One owner, so no future shell can add a
+ * third.
+ */
+export function WatchlistDemand({ symbols }: { symbols: string[] }) {
+  useSymbolDemand(symbols)
+  return null
 }
 
 type RowProps = {
@@ -243,8 +266,6 @@ function WatchlistPanel({ rows, universe }: PanelProps) {
   const [pending, startTransition] = useTransition()
   const [query, setQuery] = useState('')
 
-  useSymbolDemand(rows.map((row) => row.symbol))
-
   // Already-watched symbols are removed from the palette rather than shown and
   // rejected: the add would come back as a silent no-op, which reads as a bug.
   const watched = useMemo(() => new Set(rows.map((row) => row.symbol)), [rows])
@@ -267,8 +288,13 @@ function WatchlistPanel({ rows, universe }: PanelProps) {
     })
   }
 
+  // `min-h-0 flex-1` rather than `h-full`: inside the sheet this panel now has a
+  // sibling above it, and `h-full` would resolve against the whole sheet and
+  // push the rows off the bottom — the same failure the `Command` note below
+  // records. `flex-1` claims what is left instead, and `min-h-0` lets it shrink
+  // so the list's own `overflow-y-auto` is what scrolls. (F37)
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <p className="px-4 py-3 text-caption font-medium tracking-wide text-muted">Watchlist</p>
 
       {/* cmdk filters the preloaded universe in memory. 200 rows of symbol and
@@ -336,12 +362,20 @@ function WatchlistPanel({ rows, universe }: PanelProps) {
  * The desktop rail. Sticky beneath the 64px nav and the full height of what is
  * left, so a long watchlist scrolls inside the rail rather than taking the page
  * with it.
+ *
+ * **`lg` rather than `md` since F37.** At 768px this column took 288px of 768 —
+ * 37% of the viewport — and what was left was the width every table then had to
+ * scroll inside. Below `lg` the watchlist lives in the sheet instead, which also
+ * makes that sheet's body identical at every width it appears at.
+ *
+ * A flex column, not a block: `WatchlistPanel` claims its height with `flex-1`
+ * so it can do so in both shells.
  */
 export function WatchlistRail({ rows, universe }: PanelProps) {
   return (
     <aside
       aria-label="Watchlist"
-      className="hidden w-72 shrink-0 border-r border-hairline bg-surface md:sticky md:top-16 md:block md:h-[calc(100vh-4rem)] md:overflow-y-auto"
+      className="hidden w-72 shrink-0 border-r border-hairline bg-surface lg:sticky lg:top-16 lg:flex lg:h-[calc(100vh-4rem)] lg:flex-col lg:overflow-y-auto"
     >
       <WatchlistPanel rows={rows} universe={universe} />
     </aside>
@@ -351,28 +385,59 @@ export function WatchlistRail({ rows, universe }: PanelProps) {
 /** The mobile shell: a nav-bar trigger and the sheet it opens. */
 export function WatchlistSheet({ rows, universe }: PanelProps) {
   const [open, setOpen] = useState(false)
+  const pathname = usePathname()
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open watchlist">
+        <Button variant="ghost" size="icon" className="xl:hidden" aria-label="Open menu">
           <Menu aria-hidden="true" />
         </Button>
       </SheetTrigger>
-      {/* Full-bleed: DESIGN.md → Collapsing Strategy calls for a full-screen
-          sheet under 768px, and the default left a strip of dimmed page beside
-          it. The overrides must repeat `data-[side=left]:`, because the base
-          class is `data-[side=left]:w-3/4` — tailwind-merge groups by variant,
-          so a bare `w-full` lands in a different group and loses silently.
-          The trigger is `md:hidden`, so this sheet only ever renders below the
-          breakpoint and needs no width above it. */}
+      {/* Full-bleed below `md`: DESIGN.md → Collapsing Strategy calls for a
+          full-screen sheet under 768px, and the default left a strip of dimmed
+          page beside it. From `md` to `lg` it is a panel instead — since F37
+          this sheet also appears on tablets, and a full-screen menu on a 1000px
+          viewport is heavier than the navigation it carries.
+
+          Every override repeats `data-[side=left]:`, because the base class is
+          `data-[side=left]:w-3/4` — tailwind-merge groups by variant, so a bare
+          `w-full` lands in a different group and loses silently. */}
       <SheetContent
         side="left"
-        className="p-0 data-[side=left]:w-full data-[side=left]:sm:max-w-none"
+        className="p-0 data-[side=left]:w-full data-[side=left]:sm:max-w-none data-[side=left]:md:max-w-sm"
       >
         <SheetHeader className="sr-only">
-          <SheetTitle>Watchlist</SheetTitle>
+          <SheetTitle>Menu</SheetTitle>
         </SheetHeader>
+
+        {/* The same array the desktop nav renders, so the two cannot drift and
+            `terminal-routes.test.ts` already proves every href here has a page
+            behind it. Closing on select is explicit: these are client
+            navigations, and the sheet does not unmount itself. */}
+        <nav aria-label="Terminal" className="shrink-0 border-b border-hairline">
+          <ul>
+            {TERMINAL_NAV_LINKS.map((link) => {
+              const active = pathname === link.href
+              return (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      'block px-4 py-3 text-body-sm transition-colors hover:bg-surface-elevated',
+                      active ? 'font-medium text-ink' : 'text-muted-strong'
+                    )}
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
+
         <WatchlistPanel rows={rows} universe={universe} />
       </SheetContent>
     </Sheet>

@@ -6,7 +6,7 @@ import { OrderTicket } from '@/components/terminal/OrderTicket'
 import { QuoteChannel } from '@/components/terminal/QuoteChannel'
 import { TerminalClock } from '@/components/terminal/TerminalClock'
 import { ThemeSync } from '@/components/terminal/ThemeSync'
-import { WatchlistRail } from '@/components/terminal/WatchlistSidebar'
+import { WatchlistDemand, WatchlistRail } from '@/components/terminal/WatchlistSidebar'
 import { Toaster } from '@/components/ui/sonner'
 import { LOGIN_PATH } from '@/lib/auth/routes'
 import { loadHolidays } from '@/lib/market/market-hours'
@@ -228,6 +228,12 @@ export default async function TerminalLayout({ children }: { children: ReactNode
           here so they survive navigation between pages rather than being torn
           down and rebuilt by each one. Renders nothing. */}
         <QuoteChannel symbols={livePrices.map((row) => row.symbol)} seed={livePrices} />
+
+        {/* Tells the tick which symbols are on screen. Mounted here rather than
+            inside the watchlist panel, which the rail and the sheet each render
+            — so while the sheet was open the RPC fired twice for the same
+            symbols. Renders nothing. (F37) */}
+        <WatchlistDemand symbols={rows.map((row) => row.symbol)} />
 
         {/* One ticket for the whole terminal, opened from anywhere through
             `openTicket`. Mounted beside the channel for the same reason: the
