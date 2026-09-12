@@ -8,7 +8,7 @@ import { StockHeader } from '@/components/terminal/StockHeader'
 import { StockPosition } from '@/components/terminal/StockPosition'
 import { StockStats } from '@/components/terminal/StockStats'
 import { getCandles } from '@/lib/market/candles/service'
-import { RANGE_INTERVAL, type CandleRange } from '@/lib/market/candles/types'
+import { type CandleRange } from '@/lib/market/candles/types'
 import { createClient } from '@/lib/supabase/server'
 
 type StockPageProps = {
@@ -89,9 +89,12 @@ export default async function StockPage({ params, searchParams }: StockPageProps
   // cache write for a symbol that does not exist.
   const series = await getCandles(symbol, range)
 
-  // The 52-week range needs the daily series whatever the chart is showing. When
-  // the chart is already daily this is the same read, served from cache.
-  const daily = RANGE_INTERVAL[range] === 'ONE_DAY' ? series : await getCandles(symbol, '1Y')
+  // The 52-week range needs a *year* of dailies, so the reuse test is the
+  // window, not the interval. `1M` is also `ONE_DAY` but `getCandles` has
+  // already trimmed it to 22 bars — reusing it there reported the one-month
+  // high and low as the 52-week range on the default view of every stock page.
+  // (Phase 5 checkpoint)
+  const daily = range === '1Y' ? series : await getCandles(symbol, '1Y')
 
   return (
     <div className="space-y-4">

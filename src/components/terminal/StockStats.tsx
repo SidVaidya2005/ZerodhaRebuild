@@ -1,3 +1,4 @@
+import { FIFTY_TWO_WEEK_MIN_SPAN_DAYS } from '@/lib/constants'
 import type { ProviderCandle } from '@/lib/market/candles/types'
 import { formatCurrency, formatQuantity } from '@/lib/utils'
 
@@ -28,10 +29,16 @@ export function fiftyTwoWeekRange(
 ): { high: number; low: number } | null {
   const since = now.getTime() - 365 * 86_400_000
   const inWindow = daily.filter((bar) => bar.ts >= since)
-  // The stored series runs to 400 days, so a shorter one means the symbol has
-  // less than a year of history — reporting its extremes as a "52-week" range
-  // would overstate what they cover.
   if (inWindow.length === 0) return null
+
+  // **A short series must be refused, and counting bars cannot detect one.** The
+  // guard here was `inWindow.length === 0`, which only ever caught an *empty*
+  // series: 22 daily bars all fall inside 365 days, so the one-month high and
+  // low were returned under a "52-week" label. The honest test is the span the
+  // series actually covers. (Phase 5 checkpoint)
+  const oldest = Math.min(...inWindow.map((bar) => bar.ts))
+  if (now.getTime() - oldest < FIFTY_TWO_WEEK_MIN_SPAN_DAYS * 86_400_000) return null
+
   return {
     high: Math.max(...inWindow.map((bar) => bar.high)),
     low: Math.min(...inWindow.map((bar) => bar.low)),
