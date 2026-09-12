@@ -82,6 +82,7 @@ To read one feature without loading its whole phase:
 - `pnpm lint` — ESLint
 - `pnpm typecheck` — `tsc --noEmit`
 - `pnpm audit:a11y` — Lighthouse accessibility score against a **running** server (`pnpm start` first)
+- `pnpm audit:overflow` — fails if any route scrolls sideways at 375, 768, 1024, 1280 or 1440px. Also needs a **running** server. Terminal routes need `OVERFLOW_GUARD_COOKIE` (a `document.cookie` string from a signed-in tab) and it **fails rather than skips** without it; `OVERFLOW_GUARD_PUBLIC_ONLY=1` accepts public-only coverage deliberately
 - `pnpm test` — tier 1: Vitest logic tests, no database
 - `pnpm test:db` — tier 2: pgTAP suites in `supabase/tests/`, run by `scripts/run-pgtap.mts`. **Not** `supabase test db`, which needs Docker even against a remote database (F09)
 - `pnpm test:race` — tier 3: two-connection concurrency tests. **Commits to the real database**; needs `ALLOW_RACE_TESTS` set
