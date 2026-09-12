@@ -17,10 +17,10 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Current Status
 
-**Phase:** Phase 6 — Polish & Ship, F36 done and F37 next. `constraints.md` was split into a core plus reference halves first (6.00.02), so the always-read set has room again. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
-**Last completed:** **F36 States, skeletons, and error boundaries.** Nine `loading.tsx`, eight `error.tsx` and `global-error.tsx` — plus the change that made the boundaries mean anything: seven pages and the terminal layout now log **and throw** on a failed read instead of falling through to the empty state, so an empty state means empty and a boundary means broken. Boundaries call `retry()`, not `reset()`. All three `**Verify:**` lines were checked in a real browser against a rebuilt server, and one was **corrected** — a brand-new account cannot see an empty watchlist or ledger, because bootstrap seeds one and every account carries a `SIGNUP_CREDIT` row
+**Phase:** Phase 6 — Polish & Ship, F37 done and F38 next. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
+**Last completed:** **F37 Responsive pass**, which turned out to be a different feature than planned: both recorded overflow causes were **already fixed** in Phase 5. What was broken was navigation — nothing below 1024px reached Orders, Holdings, Positions, Funds or Reports without typing a URL. The header sheet is now the menu below `xl`, the rail starts at `lg`, `DialogContent` caps its height so a tall dialog scrolls rather than clipping, and `pnpm audit:overflow` guards 5 widths × 14 routes. Adding the two breakpoint boundaries to that guard found a **pre-existing** 202px sideways scroll on every terminal page from 1024 to ~1226, fixed in the same feature
 **In progress:** Nothing
-**Next:** **F37 Responsive pass**, which already has two measured items waiting: `/orders` and `/holdings` scroll sideways from an `sr-only` label escaping its scroll region *and* the terminal header overflowing by 104px, and the 768–1024px terminal has no page navigation at all. **Before F39 deploys**, either Yahoo lands or `/` and `/about` are reconciled — every price badges `SIMULATED` today. **One finding is open from 6.00.02:** `trading-contract.md` §13's money sweep has never covered `constraints.md`, so `constraints/trading.md`'s charge and margin rationale sits outside it
+**Next:** **F38 Accessibility pass.** **Before F39 deploys**, either Yahoo lands or `/` and `/about` are reconciled — every price badges `SIMULATED` today. **One finding is open from 6.00.02:** `trading-contract.md` §13's money sweep has never covered `constraints.md`, so `constraints/trading.md`'s charge and margin rationale sits outside it
 
 ---
 
@@ -84,7 +84,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ### Phase 6 — Polish & Ship
 
 - [x] 36 States, skeletons, and error boundaries
-- [ ] 37 Responsive pass
+- [x] 37 Responsive pass
 - [ ] 38 Accessibility pass
 - [ ] 39 Deploy
 - [ ] 40 README, demo, and handoff
@@ -93,6 +93,10 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ---
 
 ## Key Decisions
+
+- **Terminal navigation below `lg` lives in the header sheet, and the watchlist rail moves up to `lg`.** Below 1024px there was no page navigation at all — the nav is `lg:flex`, the hamburger opened the watchlist, and at 375px even the wordmark's `/dashboard` link is hidden — so the six links now render above the watchlist inside one sheet, from the same `TERMINAL_NAV_LINKS` the desktop nav uses. **Lowering the nav's breakpoint was ruled out by measurement:** at 768px the header bar has ~106px spare and the nav needs 404px. (F37)
+
+- **The no-horizontal-overflow property gets a guard, because it was already true and nobody knew.** Both causes this phase recorded were fixed in passing during Phase 5, which is exactly how the property would rot again. `pnpm audit:overflow` drives headless Brave over every route at three widths, resolving `puppeteer-core` through `lighthouse` rather than adding a dependency. Standalone like `audit:a11y`, not a `test:all` tier, because it needs a running server. (F37)
 
 - **A failed read now throws, because an empty state and a broken query were the same pixel.** Six terminal pages and the terminal layout logged read errors and fell through to the empty state — their own comments named it as "how a broken read hides behind a plausible empty state" — which also made F36's own `**Verify:**` line unprovable. They now log and throw. The consequence is deliberate: a layout's `error.tsx` does not catch its own throw, so a failed watchlist read surfaces at the *root* boundary as a chrome-less error rather than a terminal-shaped one. (F36)
 
@@ -109,7 +113,3 @@ Any AI agent reading this should immediately know what is done, what is in progr
 - **A date filter compares a `date` column the view computes, so no caller does timezone arithmetic.** `trade_history.traded_on` is `(traded_at at time zone 'Asia/Kolkata')::date`. F33 lost a session to the mirror image of this — Lightweight Charts treating every instant as UTC — and a dated page is where it recurs: the boundary is one `at time zone` away from silently filing a 23:45 IST trade on the previous day. (F34)
 
 - **A simulated series must be reproducible, or the chart rewrites its own past.** Candles are seeded from `(symbol, interval, ts)`, so each regenerates byte-identical and a refresh appends without overwriting; a free-running walk would show a different year of history on every visit. **The forming bar is the one exception and closes on `ltp`** — the Phase 5 checkpoint corrected an earlier `prev_close` anchor here, which closed *today's* bar at yesterday's close and produced the chart-header contradiction this rule exists to prevent. (F33, corrected at the Phase 5 checkpoint)
-
-- **Retention is `prune_candles()` on its own `pg_cron`, not a call inside `market-tick`.** `boundary-patterns.md` put it in the tick handler, but that host is F16 — deliberately parked until the end of the project — and a prune living there can only be verified by deploying and waiting. As SQL it is pure data work with no HTTP dependency and is testable at tier 2. The losing document is corrected in the same change. (F33)
-
-- **The chart draws once per server render; only the header ticks.** The `FIVE_MIN` TTL means the series is at best five minutes fresh, so a live-growing rightmost bar would imply precision the pipeline does not have. It also keeps a canvas out of F19's trap, where subscribing to the quote store re-renders a component ~60×/s for the length of the interpolation window. (F33)

@@ -40,23 +40,74 @@ error thrown by the root layout itself.
 
 ### 37 Responsive pass
 
+Close the navigation gap below `lg`, make the order ticket survive a short viewport, and put a
+guard under the no-horizontal-overflow property so it stays true.
 
+**The two causes this section used to record are fixed.** Re-measured before planning, on two
+independent mechanisms that agree — an in-page iframe harness and headless Brave — every route
+reports `scrollWidth === clientWidth` at 375px, 768px and 1440px. The `sr-only` label no longer
+escapes its scroll region (every wrapper carries `relative`, and each table says why), and the
+header no longer overflows (the wordmark is `hidden … sm:block`, which was the cause). Phase 5
+fixed both in passing. What is left is navigation, and it is worse than recorded.
+
+**Below 1024px there is no page navigation at all.** The header nav is `lg:flex`, the hamburger
+opens the watchlist rather than the menu, and `AvatarMenu` holds only Settings and Sign out — so
+at 375px not one of the six destinations is reachable without typing a URL, and at 768–1023px only
+`/dashboard` is, through the wordmark. **Lowering the nav's breakpoint is ruled out by
+measurement:** at 768px the header bar has ~106px spare and the nav needs 404px.
 
 **UI:**
 
-- Watchlist becomes a bottom sheet or drawer on mobile.
-- Dense tables scroll horizontally inside their own container; the page body never scrolls sideways.
-- The order ticket is usable one-handed at 375px.
-- **Already measured, still open — `/orders` scrolls sideways by 365px at 375px, from TWO independent causes.** Re-measured at the Phase 4 checkpoint inside a 375-wide iframe (`resize_window` is a no-op in macOS fullscreen), which corrected the earlier single-cause reading:
-  1. **An `sr-only` span escapes the table's scroll region — the larger cause, and the one previously missed.** The visually-hidden "Actions" column label sits in a `<th>` at the right edge of a `min-w-[720px]` table. `.sr-only` is `position: absolute`, the `<th>` is not a containing block, and the `div.overflow-x-auto` wrapper is not positioned either — so the span resolves against the initial containing block, **escapes the clipping the overflow region would otherwise apply**, and lands at document x=735. That alone pushes `documentElement.scrollWidth` to 736 against a 371px viewport. Setting `position: relative` on the `<th>` drops it to 475 and the sideways scroll from 365px to 104.5px, confirming the mechanism. **This is the general hazard, not an `/orders` quirk, and it is measured rather than inferred:** `/holdings` has it too and worse — its `sr-only` `<th>` label sits at document x=896 against a 375 viewport, giving **521px** of sideways scroll, because that table is 880 wide rather than 720. Its own scroll region is correct in every other respect (343 clientWidth containing 880, `tabIndex=0`, `role="region"`, labelled "Holdings, scrollable"), which is exactly the point: a correct region does not contain an absolutely-positioned child that has no positioned ancestor. Any `sr-only` element inside a wide table in an unpositioned `overflow-x-auto` container does this, so every table F31, F33 and F34 add needs the same containing block. Fix both pages together, and prefer fixing it where `.sr-only` and the scroll wrapper are defined rather than per-`<th>`.
-  2. **The terminal header overflows by 104px.** `header.scrollWidth` 475 against 371, from the `ml-auto flex items-center gap-3 lg:ml-0` cluster carrying the market-status pill, the data-source badge and available cash. It lives in the `(terminal)` layout, so this one affects **every** terminal page.
+- The header's sheet becomes the menu below `xl`: trigger `md:hidden` → `xl:hidden`, relabelled
+  "Open menu", with the six `TERMINAL_NAV_LINKS` rendered above the watchlist panel and
+  `aria-current="page"` on the active one. Reusing that array means `terminal-routes.test.ts`
+  already proves every link in the sheet has a route behind it, and the sheet cannot drift from
+  the desktop nav.
+- The sheet is full-bleed below `md` and a constrained panel from `md` to `lg`, per DESIGN.md →
+  Collapsing Strategy. Each override repeats the `data-[side=left]:` prefix, or tailwind-merge
+  drops it into a different variant group and it loses silently.
+- `WatchlistRail` moves from `md` to `lg`, returning 288px to the tables at tablet widths.
+- **The desktop nav moves from `lg` to `xl`, which was not in the plan.** Measuring the two new
+  breakpoint boundaries found a **pre-existing** 202px sideways scroll on every terminal page from
+  1024 to ~1226: the six links need 404px and the right-hand cluster 442px, and `lg:` brought both
+  into a 1024px bar. Proven pre-existing by stashing F37 and rebuilding — the baseline overflows by
+  the identical 202px, from the identical element. Below `xl` the sheet carries the links, which is
+  what made raising the breakpoint an option rather than a regression.
+- `DialogContent` gains `max-h-[calc(100dvh-2rem)] overflow-y-auto`. It is `fixed` and
+  `-translate-y-1/2` with no max height, so a dialog taller than the viewport is clipped at both
+  ends with no way to scroll. Fixed in the primitive rather than at the order ticket, because
+  `ModifyOrderDialog` and `ResetAccountDialog` carry the identical hazard.
 
-  The earlier note recorded only cause 2 and stated that F27's own table was not at fault. That was half right and misleading: the `overflow-x-auto` region does contain its 720px table correctly (339 wide, 720 scrollWidth, `tabIndex=0`, `role="region"`, labelled — all verified), but the sr-only span inside it does not stay in the region. Fixing only the header would have left 365px of the 469px problem in place. (F27, re-measured at the Phase 4 checkpoint)
+**Logic:**
+
+- `WatchlistPanel`'s `h-full` becomes `min-h-0 flex-1`. With a sibling above it in the sheet's
+  flex column, `h-full` claims the whole sheet and pushes the watchlist off-screen — the same
+  failure this file already records for `Command`'s base `h-full`.
+- `scripts/audit-overflow.mts` behind `pnpm audit:overflow`: every route at 375, 768 and 1440,
+  failing on `scrollWidth > clientWidth` and naming the widest offending element so a failure is
+  actionable. Standalone rather than a `test:all` tier, because it needs a running server —
+  exactly like `audit:a11y`, which is also outside `test:all`.
+- **`puppeteer-core` resolves through `lighthouse`**, so the guard adds no dependency:
+  `createRequire(require.resolve('lighthouse'))` reaches it. A direct `require.resolve` fails
+  under pnpm's isolation, and hardcoding the `.pnpm/puppeteer-core@<version>` path would break
+  silently on a lighthouse bump.
+- Terminal routes need a session and headless Brave has none, so the guard replays a cookie from
+  `OVERFLOW_GUARD_COOKIE` and **fails rather than skips** when terminal routes are requested
+  without it — `test:parity`'s behaviour without `TEST_DATABASE_URL`. Public routes always run.
 
 **Verify:**
 
-- Every route at 375px, 768px, and 1440px has no horizontal body overflow.
-- The order ticket can be completed end to end on a 375px viewport.
+- `pnpm audit:overflow` exits 0 across every route at 375, 768, 1024, 1280 and 1440px.
+- The guard can fail: inject a `w-[2000px]` element, confirm it names the route, the overflow and
+  the offending element, then revert.
+- The guard cannot *false*-pass on a stale session: a garbage `OVERFLOW_GUARD_COOKIE` must report
+  every terminal route as redirected, not as narrow. Falsifiable without handling a real token.
+- All six destinations are reachable below `xl` with `aria-current` on the active link, and at
+  `xl` and above the header nav shows and the trigger is gone.
+- The order ticket can be completed end to end on a 375×667 viewport. Drive this with real input
+  on an unoccluded window: a dispatched pointer sequence opens the Radix sheet but **not** this
+  dialog, so an automated attempt is unjudgeable rather than failing.
+- `pnpm lint`, `typecheck`, `test`, `build` and `context:cost` all green.
 
 ### 38 Accessibility pass
 

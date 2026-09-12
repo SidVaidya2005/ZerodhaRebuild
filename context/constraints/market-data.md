@@ -33,6 +33,8 @@
 - **Intraday series are trimmed by IST date, not served whole.** `readStored` has no date bound and `prune_candles` removes only the previous day, so "1D" drew two sessions on day D+1. `windowSeries` keeps the last N distinct dates present, which also resolves 1D on a Sunday to Friday with no holiday set. (Phase 5 checkpoint)
 - **A cached series reports its stored `fetched_at`, never the current instant.** Only a refresh that actually wrote rows may claim `now` — anything else over-claims freshness, the one direction the provenance rules forbid. (Phase 5 checkpoint)
 - **A "52-week" range is refused when the series does not span a year, and counting bars cannot detect that.** The stock page passed the 1M window — 22 dailies, all inside 365 days — so a length-based guard reported the one-month high and low under a 52-week label. `fiftyTwoWeekRange` tests the span against `FIFTY_TWO_WEEK_MIN_SPAN_DAYS`. (Phase 5 checkpoint)
+- **The chart draws once per server render; only the header ticks.** The `FIVE_MIN` TTL means the series is at best five minutes fresh, so a live-growing rightmost bar would imply precision the pipeline does not have — and a canvas subscribed to the quote store re-renders ~60×/s (F19). (F33)
+- **Retention is `prune_candles()` on its own `pg_cron`, not a call inside `market-tick`.** Its natural host is F16, which is parked until the end of the project, and a prune living there could only be verified by deploying and waiting; as SQL it is testable at tier 2. (F33)
 
 ## Quote providers
 
