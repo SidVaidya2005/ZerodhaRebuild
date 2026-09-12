@@ -50,10 +50,17 @@ function DialogContent({
   return (
     <DialogPortal>
       <DialogOverlay />
+      {/* `max-h` and `overflow-y-auto` are load-bearing, not defensive (F37).
+          This element is `fixed` and centred with `-translate-y-1/2`, so a
+          dialog taller than the viewport hangs off both ends and neither end
+          can be reached: a fixed element creates no page scroll, and there is
+          nothing else to scroll. `dvh` rather than `vh` so a mobile browser's
+          retracting toolbar is counted. The order ticket is the tall one, but
+          the hazard belongs to every dialog. */}
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          'fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+          'fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
           className
         )}
         {...props}
