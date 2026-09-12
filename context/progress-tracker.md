@@ -17,7 +17,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Current Status
 
-**Phase:** Phase 5 — Portfolio Pages. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
+**Phase:** Phase 6 — Polish & Ship, not yet started. Phase 5 is closed and compacted. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
 **Last completed:** the **Phase 5 checkpoint**. All four tiers green (516 tier-1 / 25 pgTAP files / 10 race / 36 parity) plus lint, typecheck, format and build. The phase-diff review's **seven findings were all fixed**, each with a test falsified against the code it replaced, and §11 reset was finally proven from `/settings` — closing Phase 5's last open `**Verify:**` line. Phase 5 is compacted; **every Phase 5 feature and the checkpoint are ticked**
 **In progress:** Nothing
 **Next:** **Phase 6 F36 States, skeletons, and error boundaries**, which also owns the missing `loading.tsx`/`error.tsx` across all eight terminal segments — `code-standards.md` states the rule and records that F36 is where it becomes true. Two items are filed for Phase 6 and not yet started: `text-brand`'s 1.37:1 contrast on light (F38) and the 768–1024px terminal having no page navigation (F37). **Before F39 deploys**, either Yahoo lands or `/` and `/about` are reconciled — every price badges `SIMULATED` today
