@@ -18,9 +18,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 ## Current Status
 
 **Phase:** Phase 5 — Portfolio Pages. **F16 and the Phase 2 checkpoint stay open by decision** — F16 is being finished at the very end of the project, so do not tick it
-**Last completed:** **F34 Reports and trade history**, in two commits — the history table with its filters and P&L summary (`5.34.01`), then the CSV export (`5.34.02`). `trade_history` and `traded_symbols` views, `reports_summary`, and `/reports/export` as the third route handler. All gates green: 485 tier-1, 24 pgTAP files with `19-reports.sql` at 16/16, 36 parity, lint/typecheck/format/build clean, verified signed in against direct SQL
-**In progress:** **F35 Profile and settings**, planned and confirmed — two commits: the page, then theme persistence (a narrowed `update (theme)` grant, a Server Action, and a client sync). Always-read budget is at its limit, so F35 must evict rather than add
-**Next:** the **Phase 5 checkpoint**, which closes the phase
+**Last completed:** the **Phase 5 checkpoint**. All four tiers green (516 tier-1 / 25 pgTAP files / 10 race / 36 parity) plus lint, typecheck, format and build. The phase-diff review's **seven findings were all fixed**, each with a test falsified against the code it replaced, and §11 reset was finally proven from `/settings` — closing Phase 5's last open `**Verify:**` line. Phase 5 is compacted; **every Phase 5 feature and the checkpoint are ticked**
+**In progress:** Nothing
+**Next:** **Phase 6 F36 States, skeletons, and error boundaries**, which also owns the missing `loading.tsx`/`error.tsx` across all eight terminal segments — `code-standards.md` states the rule and records that F36 is where it becomes true. Two items are filed for Phase 6 and not yet started: `text-brand`'s 1.37:1 contrast on light (F38) and the 768–1024px terminal having no page navigation (F37). **Before F39 deploys**, either Yahoo lands or `/` and `/about` are reconciled — every price badges `SIMULATED` today
 
 ---
 
@@ -78,8 +78,8 @@ Any AI agent reading this should immediately know what is done, what is in progr
 - [x] 32 Funds page
 - [x] 33 Stock detail page
 - [x] 34 Reports and trade history
-- [ ] 35 Profile and settings
-- [ ] Phase checkpoint — verify Phase 5 — Portfolio Pages is stable before starting the next phase
+- [x] 35 Profile and settings
+- [x] Phase checkpoint — verify Phase 5 — Portfolio Pages is stable before starting the next phase
 
 ### Phase 6 — Polish & Ship
 
@@ -94,6 +94,8 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
+- **The always-read budget is saturated, and nothing scheduled relieves it.** This tracker claimed journal compaction would free it — it cannot: `build-journal.md` is on-demand and uncounted, and compaction *promotes into* the counted `constraints.md`. Fitting seven findings took ~20 constraints compressed and one dead bullet deleted, landing at 39,981 of 40,000, so the next feature must evict before it can add. The structural fix is splitting `constraints.md` into a core plus on-demand topic files, as `verification.md` already was — a `/review-context` job, not one to improvise at a checkpoint. (Phase 5 checkpoint)
+
 - **A preference that must follow the account is applied client-side, because `next-themes` accepts no server value.** Its injected script reads `localStorage` and `setTheme` is the only write path (confirmed against Context7), so the terminal layout passes `profiles.theme` down and a client component calls `setTheme` once per full load. That leaves the library sole owner of the class *and* the storage key; the price is one frame of the wrong theme on a browser that has never seen this account, inside the terminal only. A blocking script would remove that frame by hand-writing a key the library owns and racing its hydration. (F35)
 
 - **Both terminal toggles persist, the marketing one cannot, and the `profiles` grant narrows in the same change.** Reading a session in the public header would force dynamic rendering on every marketing page (F12), so `SiteHeader` stays `localStorage`-only — and if the top-bar toggle did not persist, the layout's stored value would silently revert it on the next full load. F35 is also the first feature to write `profiles`, so it is where `grant select, update` narrows to `update (theme)`, which today still lets a user rewrite their own `client_id` by direct PostgREST call. (F35)
@@ -102,7 +104,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 - **A date filter compares a `date` column the view computes, so no caller does timezone arithmetic.** `trade_history.traded_on` is `(traded_at at time zone 'Asia/Kolkata')::date`. F33 lost a session to the mirror image of this — Lightweight Charts treating every instant as UTC — and a dated page is where it recurs: the boundary is one `at time zone` away from silently filing a 23:45 IST trade on the previous day. (F34)
 
-- **A simulated series must be reproducible, or the chart rewrites its own past.** F33's candles are seeded from `(symbol, interval, ts)`, so any candle regenerates byte-identical and a TTL refresh appends without overwriting; the daily series is anchored to `quotes.prev_close`, the same anchor the live quote simulator walks from, so the chart and the header cannot contradict each other. A free-running walk would show a different year of history on every visit — fabricated data that disagrees with itself, which is the thing the provenance rules exist to prevent. (F33)
+- **A simulated series must be reproducible, or the chart rewrites its own past.** Candles are seeded from `(symbol, interval, ts)`, so each regenerates byte-identical and a refresh appends without overwriting; a free-running walk would show a different year of history on every visit. **The forming bar is the one exception and closes on `ltp`** — the Phase 5 checkpoint corrected an earlier `prev_close` anchor here, which closed *today's* bar at yesterday's close and produced the chart-header contradiction this rule exists to prevent. (F33, corrected at the Phase 5 checkpoint)
 
 - **Retention is `prune_candles()` on its own `pg_cron`, not a call inside `market-tick`.** `boundary-patterns.md` put it in the tick handler, but that host is F16 — deliberately parked until the end of the project — and a prune living there can only be verified by deploying and waiting. As SQL it is pure data work with no HTTP dependency and is testable at tier 2. The losing document is corrected in the same change. (F33)
 
@@ -112,4 +114,3 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 - **A ledger row that names no order cannot be reconciled, and §12.9 counts exactly those rows.** `recompute_position_collateral` took no order id, so a short cover's collateral release referenced nothing: the INFY short summed to −4708.62 against a true cash effect of −18.19, while the long beside it reconciled to the paisa. The cash was never wrong, only unattributable — and the contract already named `MARGIN_RELEASE` among the rows that must be counted, so the implementation was the loser and was fixed. A signature change means a drop, which discards the ACL Supabase then re-grants. (Phase 4 checkpoint)
 
-- **A page that filters on placement loses a row the moment it transitions.** `/orders` listed `status=OPEN` or `placed_at` today, and an order placed earlier that filled today matched neither — so it vanished rather than moving to Executed. `executed_at` is stamped by every terminal transition, so one condition closes the fill, cancel and reject variants together. The lesson generalises to every dated page Phase 5 still has to build. (Phase 4 checkpoint)

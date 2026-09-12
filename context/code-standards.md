@@ -46,7 +46,7 @@ drift across sessions.
 - Call `revalidatePath` for every route whose data a Server Action changed; list them explicitly rather than revalidating the layout.
 - Terminal pages are dynamic by default because they read the session. Marketing pages must stay statically renderable — never read `cookies()` in `(marketing)`.
 - Use `next/image` for all raster images and `next/font` for fonts. No `<img>` tags, no external font CDN links.
-- Every route segment that fetches data has a sibling `loading.tsx`; every terminal segment has an `error.tsx`.
+- Every route segment that fetches data has a sibling `loading.tsx`; every terminal segment has an `error.tsx`. **Not yet true, and F36 owns it** — no terminal segment carries either file today. Stated here as the standard the phase must reach, not as a description of the tree; a new segment added before F36 does not have to invent its own fallback. (Phase 5 checkpoint)
 
 ---
 
