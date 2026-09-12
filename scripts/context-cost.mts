@@ -62,6 +62,8 @@ const ON_DEMAND = [
   'context/architecture/patterns.md',
   'context/code-standards/boundary-patterns.md',
   'context/code-standards/testing.md',
+  'context/constraints/verification.md',
+  'context/constraints/supabase-cli.md',
   'context/library-docs.md',
   'context/DESIGN.md',
   'context/build-journal.md',

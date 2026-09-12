@@ -31,6 +31,7 @@ actually triggers.
 | Using any third-party library | The one relevant section of `context/library-docs.md` — after Context7, per the authority order below |
 | Building or restyling any UI | `context/DESIGN.md`. The tokens that actually ship are in `library-docs.md` → Tailwind, and they win where the two disagree |
 | Verifying in a real browser, or judging an automated check | `context/constraints/verification.md` — the traps that make a check report a false result rather than fail |
+| Running the Supabase CLI — a migration, a type regeneration, a function deploy | `context/constraints/supabase-cli.md` — the traps in this machine's CLI setup |
 | Reconstructing why one past feature went the way it did | That feature's entry in `context/build-journal.md`. **Never read this file at session start** |
 
 Every one of those files states its own rules; none of them restates an invariant. Where a reference
