@@ -65,7 +65,7 @@ export function HowItWasBuilt() {
                 <li key={step} className="flex gap-3 text-body-sm text-body">
                   <span
                     aria-hidden="true"
-                    className="mt-0.5 font-numeric text-caption font-medium text-brand"
+                    className="mt-0.5 font-numeric text-caption font-medium text-brand light:text-ink"
                   >
                     {index + 1}
                   </span>
@@ -92,7 +92,10 @@ export function HowItWasBuilt() {
       <p className="mt-8 max-w-prose text-body-sm text-body">
         The source, including the architecture notes and the trading contract these rules come from,
         is on{' '}
-        <ExternalLink href={REPOSITORY_URL} className="text-brand underline underline-offset-4">
+        <ExternalLink
+          href={REPOSITORY_URL}
+          className="text-brand underline underline-offset-4 light:text-ink"
+        >
           GitHub
         </ExternalLink>
         .

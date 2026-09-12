@@ -35,7 +35,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <main className="mx-auto flex min-h-screen max-w-7xl flex-col items-center justify-center px-4 py-16">
       <div className="w-full max-w-sm">
-        <Link href="/" className="text-title-sm font-bold text-brand">
+        <Link href="/" className="text-title-sm font-bold text-brand light:text-ink">
           ZerodhaRebuild
         </Link>
 
@@ -65,7 +65,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
         <p className="mt-6 text-body-sm text-muted">
           By signing in you agree that this is a simulator.{' '}
-          <Link href="/legal" className="text-brand underline underline-offset-4">
+          <Link href="/legal" className="text-brand underline underline-offset-4 light:text-ink">
             What that means
           </Link>
           .

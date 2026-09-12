@@ -65,7 +65,7 @@ export function TopNav({
             badge — which the honesty guarantee depends on — at full size. */}
         <Link
           href="/dashboard"
-          className="hidden shrink-0 font-bold text-body text-brand sm:block sm:text-title-sm"
+          className="hidden shrink-0 font-bold text-body text-brand sm:block sm:text-title-sm light:text-ink"
         >
           ZerodhaRebuild
         </Link>

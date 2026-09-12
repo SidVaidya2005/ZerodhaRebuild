@@ -25,9 +25,18 @@ const timeFormatter = new Intl.DateTimeFormat('en-IN', {
   hour12: false,
 })
 
+/**
+ * `OPEN` keeps brand yellow on the dark canvas, where it is 11-13.5:1, and swaps
+ * to `muted-strong` (8.87:1) in the light theme. F02's invariant keeps
+ * `--color-brand` byte-identical across themes, so the same yellow otherwise
+ * lands on white at 1.37-1.43:1 -- under even the 3:1 large-text floor.
+ * Not `text-info`: that is 4.30:1 on `--color-surface`, the surface this table
+ * sits on. `COMPLETE` already holds `text-ink`, so `OPEN` cannot take it. The
+ * cell prints the word too, so colour is never the sole carrier. (F38)
+ */
 const STATUS_TONE: Record<string, string> = {
   COMPLETE: 'text-ink',
-  OPEN: 'text-brand',
+  OPEN: 'text-brand light:text-muted-strong',
   CANCELLED: 'text-muted',
   REJECTED: 'text-down',
 }

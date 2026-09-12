@@ -24,7 +24,7 @@ export function SiteFooter() {
       <div className="mx-auto max-w-7xl px-4 py-12 md:px-6">
         <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-4">
           <div>
-            <p className="text-title-sm font-bold text-brand">ZerodhaRebuild</p>
+            <p className="text-title-sm font-bold text-brand light:text-ink">ZerodhaRebuild</p>
             <p className="mt-2 text-body-sm text-body">
               A paper-trading terminal for NSE equities, built as a portfolio project.
             </p>
@@ -62,7 +62,7 @@ export function SiteFooter() {
           </span>{' '}
           in any way. All trading is simulated with fictional money. Nothing here is financial
           advice. See the{' '}
-          <Link href="/legal" className="text-brand underline underline-offset-4">
+          <Link href="/legal" className="text-brand underline underline-offset-4 light:text-ink">
             full disclaimer
           </Link>
           .

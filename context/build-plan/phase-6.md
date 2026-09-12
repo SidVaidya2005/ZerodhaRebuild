@@ -111,23 +111,110 @@ measurement:** at 768px the header bar has ~106px spare and the nav needs 404px.
 
 ### 38 Accessibility pass
 
+Close the two holes in this project's accessibility evidence — Lighthouse cannot reach a
+`(terminal)` page, and `audit:a11y` only ever loads one theme — then fix what that reveals.
+**The measurement comes first and its output is the remediation list**, because part of this
+feature is already built: `HoldingsTable.tsx` carries an F38-attributed comment and nine
+components already call the signed formatters, so the bullets below are not a reliable
+statement of what is broken. F37 shipped against a plan whose recorded causes were already
+fixed; this one measures before it edits.
 
+**UI:**
+
+- `OPEN` order status moves from `text-brand` to `text-info` in `OrdersTable.tsx` and
+  `RecentOrders.tsx`. `--color-info` is already the `--color-ring` source and clears AA on both
+  canvases; `OPEN` is informational, not a price direction, so `up`/`down` stay reserved for money.
+- Every remaining `text-brand` **text** node is reclassed per the decision below. The decorative
+  `aria-hidden` brand glyphs are exempt — they carry no text.
+- A ⌘K / Ctrl+K hint beside the watchlist search input.
 
 **Logic:**
 
-- Keyboard navigation throughout; visible focus rings; a search shortcut.
-- Labels on every input, `aria-live` on the market status and toasts.
-- Contrast checked in both themes — including P&L red and green against both backgrounds.
-- **Already fixed, do not redo (1.00.01):** the muted-token failures found across F04–F08. Both tokens now flip in `.light`, and `theme-tokens.test.ts` computes every foreground/surface ratio in both themes and asserts AA plus the `muted < muted-strong < body` hierarchy. **Do not remove those assertions** — `pnpm audit:a11y` cannot see the light theme, so they are the only thing guarding it.
-- **Still open — `text-brand` cannot pass AA on the light canvas, by construction.** Brand yellow is 11–13.5:1 as text on dark surfaces and **1.37–1.43:1 on light**, under even the 3:1 large-text floor. F02's invariant deliberately keeps `--color-brand` byte-identical across themes, so the same yellow necessarily lands on white. After 1.00.01 this is the **only** remaining contrast failure on the public site — 4 elements on `/legal`, all wordmark or inline prose link. Resolving it means choosing between a light-mode text variant of the brand token, restricting `text-brand` to dark-background contexts, or treating the wordmark as a brand mark exempt from text rules. A design decision, not a cleanup.
-- **`pnpm audit:a11y` only ever loads the default theme**, so a clean score is never evidence about light mode.
-- **Measure a theme by loading it, never by toggling the class from script.** Elements carrying `transition-colors` return stale computed colours after a scripted class change — that produced a 17-failure phantom during 1.00.01 which vanished on a real page load. Set the stored theme, reload, then measure.
+- **`pnpm audit:a11y:axe` (new, `scripts/audit-a11y-axe.mts`)** — the authenticated, both-themes
+  audit. Clones `audit-overflow.mts`'s harness: headless Brave, cookie-borne session,
+  stale-redirect detection, and a load check on `304 || 2xx`. **axe-core is resolved *through*
+  `lighthouse`**, as that script resolves `puppeteer-core` — axe-core 4.13.0 is already on disk as
+  lighthouse's transitive dependency, so this costs **no new dependency** and
+  `code-standards.md`'s approved list is untouched. No widths loop: axe is width-independent, so
+  five viewports would be five times the work for no extra coverage.
+  - `axe.run({ runOnly: { type: 'tag', values: ['wcag2a','wcag2aa','wcag21a','wcag21aa'] } })`,
+    injected via `page.evaluateHandle` with `axeCore.source` (shape confirmed against Context7).
+  - Reports `id`, `impact`, `help`, `helpUrl` and each node's `html` and `target` — the offending
+    element is the finding, for the same reason the overflow guard names offenders.
+  - **Exits non-zero on `serious` or `critical` only.** `moderate` and `minor` print as notes, so
+    the guard lands green today without claiming the app is perfect.
+  - `A11Y_AXE_COOKIE` **fails rather than skips** when absent, like `OVERFLOW_GUARD_COOKIE` and
+    `test:parity`; `A11Y_AXE_PUBLIC_ONLY=1` accepts public-only coverage deliberately.
+- **Keyboard:** the search shortcut focuses the inline `CommandInput` in the watchlist rail.
+  **Scoped to `lg` and up**, because search is an inline `<Command>` in `WatchlistSidebar`, not the
+  unused `CommandDialog`, and F37 put the rail at `lg`. Below that the input is inside the sheet,
+  and opening a Radix dialog programmatically hits the F25 focus-restore trap for a convenience;
+  the sheet trigger is already a focusable button reachable by Tab, so nobody is stranded.
+- **Already fixed, do not redo (1.00.01):** the muted-token failures found across F04–F08. Both
+  tokens now flip in `.light`, and `theme-tokens.test.ts` computes every foreground/surface ratio
+  in both themes and asserts AA plus the `muted < muted-strong < body` hierarchy. **Do not remove
+  those assertions** — `pnpm audit:a11y` cannot see the light theme, so they are the only thing
+  guarding it.
+- **Already fixed, do not redo (Phase 5):** colour is not the sole carrier of P&L sign.
+  `formatSignedCurrency` / `formatSignedPercent` render an explicit +/− and nine components call
+  them; `HoldingsTable.tsx`'s `toneOf()` already cites this pass by name.
+- **Decided — `text-brand` is restricted to dark surfaces.** Brand yellow is 11–13.5:1 as text on
+  dark and **1.37–1.43:1 on light**, under even the 3:1 large-text floor, and F02's invariant keeps
+  `--color-brand` byte-identical across themes. So the token does not change: `text-ink` carries
+  figures and headings, brand carries CTA **backgrounds**. **The recorded "4 elements on `/legal`"
+  understates it** — that was measured by `audit:a11y`, which reaches neither the terminal nor the
+  light theme, and F35 made a light terminal reachable where `text-brand` also lives (the `TopNav`
+  wordmark, and `OPEN` in two tables).
+- **`pnpm audit:a11y` only ever loads the default theme**, so a clean score is never evidence about
+  light mode.
+- **Measure a theme by loading it, never by toggling the class from script.** Elements carrying
+  `transition-colors` return stale computed colours after a scripted class change — that produced a
+  17-failure phantom during 1.00.01 which vanished on a real page load. Set the stored theme,
+  reload, then measure.
+- **The light-theme *terminal* pass needs `profiles.theme = 'light'` on the signed-in account.**
+  F35 has the layout apply the stored account theme client-side on every full load, so a
+  `localStorage` value the script sets is overridden back. The honest run is two passes with the
+  Settings toggle flipped between them. Marketing pages have no account theme, so `localStorage`
+  alone works there.
 
 **Verify:**
 
-- The full order flow is completable with the keyboard alone.
-- Axe reports no serious or critical violations on the six main terminal routes.
-- Colour is never the only carrier of meaning — P&L sign shows an arrow or sign as well.
+**Status: the public half is done and verified; the terminal half is deferred by decision
+(2026-09-12).** The harness ships and is proven on 6 of 14 routes in both themes. The 8 terminal
+routes need a `document.cookie` from a signed-in tab, which the developer chose not to paste, so
+**F38's box stays unticked** — the checks below marked *deferred* are the reason, and nothing about
+the terminal's accessibility has been measured yet.
+
+- ✅ `pnpm audit:a11y:axe` exits 0 on a dark pass **and** a light pass over the **6 public routes**.
+  The light pass is the first time that theme has ever been audited, and it found all six failing
+  before the fix. Read the printed route count: a run covering only the public half prints
+  `(public routes only)`, which is what these two runs printed.
+- ⏸ **Deferred — the same two passes across the 8 terminal routes**, which is the half Lighthouse
+  has never been able to reach and therefore the half most likely to hold findings. Needs
+  `A11Y_AXE_COOKIE` from a signed-in tab, and `profiles.theme='light'` set in Settings for the light
+  pass. **Terminal-side remediation is consequently unknown** — the `OPEN` status reclass below was
+  derived by computing the token's contrast, not by observing axe fail on it.
+- ⏸ **Deferred — the full order flow on the keyboard alone.** It needs real input on an unoccluded
+  window: `constraints/verification.md` is explicit that a dispatched pointer sequence opens the
+  Radix sheet but **not** the order ticket, so an automated negative would be unjudgeable rather
+  than failing. Pairs with F37's own deferred submit check, which is outstanding for the same reason.
+- ✅ With `A11Y_AXE_COOKIE` unset it **exits 1** naming the 8 uncovered routes, rather than passing on
+  half the app.
+- ⏸ **Deferred with the terminal pass** — with a deliberately corrupted cookie, every terminal route
+  should report `redirected to /auth/login; the session cookie is stale` and exit 1, so a stale
+  session is never a false pass. The code path exists and is unexercised.
+- ✅ `grep -rn 'text-brand' src/` — every survivor is one of four `aria-hidden` decorative spans, and
+  every text site carries a `light:` override. The light pass confirms no `color-contrast` violation
+  **on the 6 public routes**; the 3 terminal sites (`TopNav` wordmark, `OPEN` in two tables) are
+  covered by the deferred pass, not by this one.
+- ✅ `OrdersTable.tsx` and `RecentOrders.tsx` still print the word `OPEN`, so the token change cannot
+  have removed meaning.
+- ⏸ **Deferred with the terminal pass** — ⌘K focuses the watchlist `CommandInput` on `/dashboard` at
+  1280px. `/dashboard` needs a session, so this was never driven; the handler is scoped to the rail
+  via `offsetParent`, lints and typechecks, and is unexercised in a browser.
+- ✅ `pnpm lint`, `typecheck`, `test`, `build` and `context:cost` green; `pnpm audit:overflow` still
+  reports no sideways scroll; `pnpm audit:a11y` still scores >90 per public page, confirmed by
+  reading `finalDisplayedUrl` out of the report rather than trusting the score (F05).
 
 ### 39 Deploy
 

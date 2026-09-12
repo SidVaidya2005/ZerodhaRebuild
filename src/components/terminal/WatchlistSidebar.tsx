@@ -3,7 +3,7 @@
 import { ChevronDown, ChevronUp, LineChart, Menu, Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -262,7 +262,11 @@ function WatchlistRowItem({ row, isFirst, isLast, pending, run }: RowProps) {
   )
 }
 
-function WatchlistPanel({ rows, universe }: PanelProps) {
+function WatchlistPanel({
+  rows,
+  universe,
+  searchRef,
+}: PanelProps & { searchRef?: React.Ref<HTMLInputElement> }) {
   const [pending, startTransition] = useTransition()
   const [query, setQuery] = useState('')
 
@@ -295,7 +299,13 @@ function WatchlistPanel({ rows, universe }: PanelProps) {
   // so the list's own `overflow-y-auto` is what scrolls. (F37)
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <p className="px-4 py-3 text-caption font-medium tracking-wide text-muted">Watchlist</p>
+      <div className="flex items-baseline justify-between px-4 py-3">
+        <p className="text-caption font-medium tracking-wide text-muted">Watchlist</p>
+        {/* Only rendered in the rail, which is the only shell the shortcut
+            reaches. `aria-hidden` because the input's own `aria-label` already
+            names it — this is a sighted-user affordance, not a second label. */}
+        {searchRef ? <SearchShortcutHint /> : null}
+      </div>
 
       {/* cmdk filters the preloaded universe in memory. 200 rows of symbol and
           name is a single packet, and Postgres would seq-scan a table this small
@@ -308,6 +318,7 @@ function WatchlistPanel({ rows, universe }: PanelProps) {
           tailwind-merge does override it here. */}
       <Command className="h-auto shrink-0 bg-transparent" shouldFilter={false}>
         <CommandInput
+          ref={searchRef}
           value={query}
           onValueChange={setQuery}
           placeholder="Search and add"
@@ -372,13 +383,72 @@ function WatchlistPanel({ rows, universe }: PanelProps) {
  * so it can do so in both shells.
  */
 export function WatchlistRail({ rows, universe }: PanelProps) {
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  // Cmd/Ctrl+K focuses search, the cmdk convention.
+  //
+  // **Scoped to the rail on purpose.** The rail is `hidden ... lg:flex`, so
+  // `offsetParent` is null below `lg` and the shortcut becomes a no-op there
+  // rather than focusing an input nobody can see. Below `lg` the search input
+  // lives in the sheet, and opening a Radix dialog from a keydown would need
+  // the F25 focus-capture dance — the store has to remember
+  // `document.activeElement` itself, because Radix returns focus to a
+  // `DialogTrigger` that a programmatically-opened dialog does not have. That
+  // is a real mechanism to add for a convenience, and it buys nothing a keyboard
+  // user lacks: the sheet trigger is a focusable button already in the tab order.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'k' || !(event.metaKey || event.ctrlKey)) return
+      const input = searchRef.current
+      if (!input || input.offsetParent === null) return
+      event.preventDefault()
+      input.focus()
+      input.select()
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   return (
     <aside
       aria-label="Watchlist"
       className="hidden w-72 shrink-0 border-r border-hairline bg-surface lg:sticky lg:top-16 lg:flex lg:h-[calc(100vh-4rem)] lg:flex-col lg:overflow-y-auto"
     >
-      <WatchlistPanel rows={rows} universe={universe} />
+      <WatchlistPanel rows={rows} universe={universe} searchRef={searchRef} />
     </aside>
+  )
+}
+
+const subscribeNever = () => () => {}
+const getModifier = () => (navigator.userAgent.includes('Mac') ? '\u2318' : 'Ctrl ')
+const getServerModifier = () => null
+
+/**
+ * The `⌘K` / `Ctrl K` chip beside the Watchlist heading.
+ *
+ * Rendered after mount rather than on the server: the right glyph depends on the
+ * platform, and deciding it during SSR would either hardcode one or produce a
+ * hydration mismatch. Nothing is announced — the input carries its own label —
+ * so an absent chip on first paint costs a screen reader nothing.
+ */
+function SearchShortcutHint() {
+  // `useSyncExternalStore` rather than state set from an effect: this is a
+  // client-only value that must render as nothing on the server, which is
+  // exactly the `getServerSnapshot` contract. The store never changes, so
+  // `subscribe` is a no-op, and both snapshots return primitives so React sees a
+  // stable value.
+  const modifier = useSyncExternalStore(subscribeNever, getModifier, getServerModifier)
+
+  if (modifier === null) return null
+
+  return (
+    <kbd
+      aria-hidden="true"
+      className="rounded border border-hairline px-1.5 py-0.5 font-numeric text-caption text-muted"
+    >
+      {modifier}K
+    </kbd>
   )
 }
 

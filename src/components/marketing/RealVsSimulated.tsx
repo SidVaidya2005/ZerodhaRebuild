@@ -38,7 +38,7 @@ export function RealVsSimulated() {
       <p className="mt-8 max-w-prose text-body-sm text-body">
         The places this deliberately diverges from how a real broker would behave — and what that
         means for you — are set out on the{' '}
-        <Link href="/legal" className="text-brand underline underline-offset-4">
+        <Link href="/legal" className="text-brand underline underline-offset-4 light:text-ink">
           disclaimer page
         </Link>
         .

@@ -16,7 +16,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-hairline bg-canvas">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 md:px-6">
-        <Link href="/" className="text-title-sm font-bold text-brand">
+        <Link href="/" className="text-title-sm font-bold text-brand light:text-ink">
           ZerodhaRebuild
         </Link>
 

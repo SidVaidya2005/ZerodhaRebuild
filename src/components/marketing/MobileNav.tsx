@@ -49,7 +49,7 @@ export function MobileNav() {
         className="bg-canvas data-[side=right]:w-full data-[side=right]:sm:max-w-none"
       >
         <SheetHeader>
-          <SheetTitle className="text-brand">ZerodhaRebuild</SheetTitle>
+          <SheetTitle className="text-brand light:text-ink">ZerodhaRebuild</SheetTitle>
           <SheetDescription className="sr-only">
             Links to the public pages and the sign-in action.
           </SheetDescription>

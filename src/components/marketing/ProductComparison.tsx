@@ -42,7 +42,7 @@ export function ProductComparison() {
         require the full value of the trade, so the choice between them is about settlement and
         square-off, not about buying more than you can afford. What they do cost differs — that is
         set out on the{' '}
-        <Link href="/pricing" className="text-brand underline underline-offset-4">
+        <Link href="/pricing" className="text-brand underline underline-offset-4 light:text-ink">
           pricing page
         </Link>
         .
@@ -62,7 +62,9 @@ function ProductCard({ code, name, summary, points }: ProductCardProps) {
   return (
     <div className="rounded-xl border border-hairline bg-surface p-6">
       <div className="flex items-baseline gap-3">
-        <span className="font-numeric text-title font-semibold text-brand">{code}</span>
+        <span className="font-numeric text-title font-semibold text-brand light:text-ink">
+          {code}
+        </span>
         <span className="text-body-sm text-muted">{name}</span>
       </div>
       <p className="mt-3 text-body">{summary}</p>

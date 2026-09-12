@@ -38,7 +38,10 @@ export function LegalDisclaimer() {
             The short version: none of this is real, none of it is advice, and it has nothing to do
             with Zerodha. The longer version follows, and the specific ways this simulator behaves
             differently from a real broker are set out{' '}
-            <Link href="#simplifications" className="text-brand underline underline-offset-4">
+            <Link
+              href="#simplifications"
+              className="text-brand underline underline-offset-4 light:text-ink"
+            >
               further down
             </Link>
             .
