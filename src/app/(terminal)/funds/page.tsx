@@ -38,14 +38,11 @@ export default async function FundsPage({
 
   const supabase = await createClient()
 
-  // Built before awaiting so the filter is applied to the count as well as the
-  // rows — a count of the whole ledger beside a filtered page would report
-  // pages that do not exist.
+  // Rows only — the total is its own query below, so asking for a count here
+  // would be a second exact count on every request that nothing reads.
   let ledgerQuery = supabase
     .from('fund_ledger')
-    .select('id, type, amount, balance_after, note, created_at, orders(symbol, side, product)', {
-      count: 'exact',
-    })
+    .select('id, type, amount, balance_after, note, created_at, orders(symbol, side, product)')
     // `.range()` is 0-based and inclusive and needs a companion order, or the
     // page boundaries are non-deterministic. `clock_timestamp()` already
     // separates rows within one fill; the id breaks any remaining tie.
@@ -55,19 +52,40 @@ export default async function FundsPage({
 
   if (query.type !== null) ledgerQuery = ledgerQuery.eq('type', query.type)
 
+  // **The total comes from its own unranged count, not from the paged query.**
+  // PostgREST answers `PGRST103` for an offset past the end of a set and returns
+  // null rows *and* a null count — so a total read off the paged query collapses
+  // to 0 exactly when the page is out of range, and the table then describes the
+  // account rather than the page. Reports hit this at F34 and took its total
+  // from an aggregate; Funds was left on `count ?? 0`. Reachable: sit on
+  // `/funds?page=3` and reset the account. (Phase 5 checkpoint)
+  //
+  // The filter is applied to both queries, or a count of the whole ledger beside
+  // a filtered page would report pages that do not exist.
+  let ledgerTotalQuery = supabase.from('fund_ledger').select('id', { count: 'exact', head: true })
+
+  if (query.type !== null) ledgerTotalQuery = ledgerTotalQuery.eq('type', query.type)
+
   const [
     {
       data: { user },
     },
     { data: overviewRow, error: overviewError },
-    { data: ledgerRows, error: ledgerError, count },
-  ] = await Promise.all([supabase.auth.getUser(), overviewSelect(supabase), ledgerQuery])
+    { data: ledgerRows, error: ledgerError },
+    { count: ledgerTotal, error: ledgerTotalError },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    overviewSelect(supabase),
+    ledgerQuery,
+    ledgerTotalQuery,
+  ])
 
   // Logged rather than thrown. An empty ledger and a failed query render
   // identically, which is exactly how a broken read hides behind a plausible
   // empty state.
   if (overviewError) console.error('[funds] funds_overview', overviewError)
   if (ledgerError) console.error('[funds] fund_ledger', ledgerError)
+  if (ledgerTotalError) console.error('[funds] fund_ledger count', ledgerTotalError)
 
   const overview: FundsOverview = {
     availableCash: Number(overviewRow?.available_cash ?? 0),
@@ -130,7 +148,7 @@ export default async function FundsPage({
         </div>
 
         <div className="mt-4">
-          <LedgerTable entries={entries} total={count ?? 0} query={query} />
+          <LedgerTable entries={entries} total={ledgerTotal ?? 0} query={query} />
         </div>
       </section>
     </div>

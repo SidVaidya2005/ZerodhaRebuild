@@ -24,6 +24,26 @@ type LedgerTableProps = {
 export function LedgerTable({ entries, total, query }: LedgerTableProps) {
   const pages = pageCount(total)
 
+  // **Past the end is not the same as empty**, and conflating them tells an
+  // account that has moved cash that it never has. A bookmarked `?page=3` that
+  // outlives the rows it pointed at — reset the account while sitting on it —
+  // lands here with a non-empty set. Say where the rows went rather than
+  // describing the account. Mirrors `TradeHistoryTable`. (Phase 5 checkpoint)
+  if (entries.length === 0 && total > 0) {
+    return (
+      <p className="rounded-md border border-dashed border-hairline bg-surface p-6 text-center text-body-sm text-muted-strong">
+        Page {query.page} is past the end of {total} {total === 1 ? 'entry' : 'entries'}.{' '}
+        <Link
+          href={ledgerHref({ ...query, page: 1 })}
+          className="text-ink underline underline-offset-2"
+        >
+          Back to page 1
+        </Link>
+        .
+      </p>
+    )
+  }
+
   if (entries.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-hairline bg-surface p-6 text-center text-body-sm text-muted-strong">
