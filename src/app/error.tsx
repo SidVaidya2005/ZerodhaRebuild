@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 
 type ErrorBoundaryProps = {
   error: Error & { digest?: string }
-  reset: () => void
+  retry: () => void
 }
 
 /**
@@ -24,10 +24,16 @@ type ErrorBoundaryProps = {
  * production Next.js replaces the message with an opaque digest anyway. The
  * digest is shown because it is the one thing that makes a report actionable.
  *
- * Errors thrown by the root layout itself are not caught here — that would need
- * `global-error.tsx`, which is beyond what this feature specifies.
+ * Errors thrown by the root layout itself are not caught here; `global-error.tsx`
+ * catches those, added at F36.
+ *
+ * **The action is `retry`, not `reset`.** Next.js passes both: `reset()` only
+ * resets the boundary and re-renders from the payload it already has, while
+ * `retry()` calls `router.refresh()` first. Since F36 every terminal read
+ * failure throws, so the common case here is a failed *server* read — which
+ * `reset` alone would re-render unchanged, making the button appear dead. (F36)
  */
-export default function ErrorBoundary({ error, reset }: ErrorBoundaryProps) {
+export default function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   useEffect(() => {
     console.error('[app.error]', error)
   }, [error])
@@ -44,7 +50,7 @@ export default function ErrorBoundary({ error, reset }: ErrorBoundaryProps) {
       </p>
 
       <div className="mt-8 flex flex-wrap justify-center gap-3">
-        <Button onClick={reset} className="rounded-full">
+        <Button onClick={() => retry()} className="rounded-full">
           Try again
         </Button>
         <Button asChild variant="outline" className="rounded-full">
