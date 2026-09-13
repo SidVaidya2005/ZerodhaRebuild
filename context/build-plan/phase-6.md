@@ -297,9 +297,23 @@ a comment saying why. The reclass never rested on an unobserved contrast figure 
 
 **Verify:**
 
-- A cold visit to the Render URL loads and signs in successfully.
-- `cron.job_run_details` on production shows successful runs while the web service is asleep.
-- Placing an order on production behaves exactly as locally.
+**Status: deployed and verified 2026-09-13 at <https://zerodha-rebuild.onrender.com>**, except one
+item that structurally cannot pass yet — see the `pg_cron` line below.
+
+- ✅ A cold visit to the Render URL loads and signs in successfully. All six public routes answer
+  200, and `/dashboard` without a session 307s to `…onrender.com/auth/login?next=%2Fdashboard` —
+  the proxy guard active, on the right origin, with `safeNext()` preserving the destination.
+- ⏸ **Cannot pass yet: `cron.job_run_details` showing runs while the web service is asleep.** There
+  is no `pg_cron` job, because there is no deployed `market-tick` to call — that is **F16**, parked
+  to the end of the project. On production today nothing refreshes quotes and nothing matches limit
+  orders. **Do not tick this at the Phase 6 checkpoint**; it closes with F16.
+- ✅ Placing an order on production behaves exactly as locally, proven with both a BUY and a SELL
+  MARKET order on a Sunday: both `REJECTED` with `MARKET_CLOSED`, both written as rows rather than
+  rolled back (§4), `blocked_margin` 0.00, and **no ledger row** — cash and used margin byte-identical
+  before and after, with identities 1, 3 and 8 re-checked. The CNC SELL rejected on `MARKET_CLOSED`
+  rather than `NO_HOLDING`, which is the correct precedence. **What this actually proves is the
+  production half** — Server Actions execute on Render, the session carries `auth.uid()` into
+  `place_order`, RLS admits the right user — since local and production share one Supabase project.
 - ✅ No secret appears in the client bundle — verified by grepping the built output for the
   service-role key, the Twelve Data key and `TEST_DATABASE_URL`. All three absent from
   `.next/static` **and** `.next/server`. **Scope the grep to those two directories**: run against
