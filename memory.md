@@ -4,11 +4,11 @@
 
 ## In flight
 
-- **The 6.00.05 doc pass is written but uncommitted** — 8 files under `context/`, recording that the simulator is the whole quote chain permanently. No code changed. Commit as `6.00.05`; the phase-6 `00` counter is at `04`. Also, `3d561c7` is **1 ahead of origin** and unpushed.
+- Nothing.
 
 ## Tried and rejected
 
-- **Nothing durable.** Three approaches failed during the session and are already recorded as constraints rather than here: `corepack enable` on Render (read-only `/usr`), and twice overriding a `NEXT_PUBLIC_*` variable at runtime to falsify a check — which cannot work, because those values are inlined at build time. See `constraints.md` → Deployment.
+- Nothing.
 
 ## Open questions
 
