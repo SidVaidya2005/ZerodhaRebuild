@@ -31,7 +31,7 @@
 | Forms | `react-hook-form` 7.85.0 + `@hookform/resolvers` 5.9.1 | Order ticket only. The support form uses React 19's form action + `useActionState`, so it submits without JavaScript (F07B) |
 | Portfolio charts | Recharts 3.10.1 | Top-10 holdings donut, P&L breakdown |
 | Price charts | `lightweight-charts` 5.2.1 | Candlestick chart on stock detail |
-| Quote sources | Built-in simulator today; Yahoo Finance `v8/finance/chart` (keyless) in front of it when it lands | **Twelve Data was dropped in F14**, not deferred — its free plan carries no NSE symbols, verified live with a real key. Yahoo is deferred to the end of the project after a validation probe got this machine's IP blocked, so Phase 3 ships simulator-backed and every price badges `SIMULATED` (F14, F15) |
+| Quote sources | Built-in simulator, and nothing else | **No external provider is wired, by decision.** Twelve Data was dropped in F14 — its free plan carries no NSE symbols, verified live with a real key. Yahoo was deferred after a validation probe got this machine's IP blocked, and is now out of scope: no keyless source proved workable, so the build ships simulator-backed and every price badges `SIMULATED`. The chain, the breaker and the limiter remain as seams (F14, F15, decided 6.00.05) |
 | Tests — logic | Vitest 4.1.11 | Charge estimator, provider chain, market-hours, parsers |
 | Tests — database | pgTAP, run by `scripts/run-pgtap.mts` over `pg` | RLS, grants, constraints, function correctness. **Not** `supabase test db`: it needs Docker even with `--db-url` (F09) |
 | Tests — concurrency | `pg` 8.23.0, two live connections | Row-lock races the other tiers cannot express |
@@ -103,14 +103,15 @@ export function deriveSource(
 }
 ```
 
-**What this means in practice: with Yahoo as the provider, quotes badge `DELAYED`, never `LIVE`.**
-`LIVE` is reserved for a provider that actually streams ticks, and this build has none. Saying
-`DELAYED` honestly is the point of the badge; a `LIVE` badge over a polled REST endpoint would be the
-exact dishonesty the guarantee exists to prevent.
+**What this means in practice: every quote in this build badges `SIMULATED`.** No external provider
+is wired, so `DELAYED` is unreachable; and `LIVE` is reserved for a provider that actually streams
+ticks, which none of the three would be even if one were. Both states stay in the vocabulary rather
+than being deleted, because what makes the badge trustworthy is that it *can* refuse to claim more
+than it knows — a `LIVE` chip over a polled REST endpoint would be the exact dishonesty the guarantee
+exists to prevent. The public copy marks both as never shown here (6.00.04).
 
-**TODO: measure Yahoo's real `regularMarketTime` lag during an open NSE session** and record it, so
-`QUOTE_DELAYED_WINDOW_MS` is set from data rather than assumption. Two attempts to measure it were
-rate-limited.
+`QUOTE_DELAYED_WINDOW_MS` is therefore unexercised. It stays set from assumption, and a provider that
+ever lands must measure its real lag before trusting the threshold.
 
 ### Interpolated values
 

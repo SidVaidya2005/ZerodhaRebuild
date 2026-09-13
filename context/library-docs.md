@@ -683,7 +683,7 @@ GET https://api.twelvedata.com/quote?symbol=RELIANCE.NS&apikey=…   → 404, in
 The US control proves the key and the endpoint shape are fine, so this is a **plan entitlement**, not a symbol-format problem. Every instrument this project trades is on NSE, so a free-tier Twelve Data provider can serve **none** of them.
 
 - **Rate limits, confirmed from the account and from response headers**: 8 requests per minute, 800 API credits per day. `/quote` costs 1 credit per symbol; responses carry `api-credits-used`, `api-credits-left` and `api-credits-request`. Even with NSE access, 800/day cannot sustain a one-minute tick across a ~375-minute session — that is ~2 requests per minute sustained, for ~200 symbols.
-- **Consequence for the provider chain (open, decide in F15):** as things stand the chain is Yahoo → simulator, with the middle tier unavailable. `architecture.md`'s stack table still describes Twelve Data as a working fallback and needs reconciling once that call is made.
+- **Decided (6.00.05): the chain is the simulator alone.** Twelve Data is unusable on its free plan and Yahoo is out of scope, so no external provider is wired and every quote badges `SIMULATED`. `architecture.md`'s stack table and `project-overview.md`'s scope both say so. The sections below are kept as reference for a provider that might land later, not as a description of what runs.
 - The provider must report `isAvailable() === false` when `TWELVE_DATA_API_KEY` is unset, so the chain skips it silently. On the free plan it would also have to report false **with** a key set, since the key entitles nothing this project can use.
 
 ### Simulator — final fallback, always available

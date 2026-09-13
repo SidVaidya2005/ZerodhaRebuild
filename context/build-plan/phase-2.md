@@ -430,6 +430,14 @@ provider, precisely so the risky parts — the schedule, the Vault credential, t
 authentication, and the session gate — are all proven before a real provider exists. Yahoo later drops
 into a pipeline that has already been exercised rather than into an untested one.
 
+> **Superseded in part (6.00.05): no provider is coming.** The simulator is the whole chain by
+> decision, so the "Yahoo later drops in" framing above is now historical — it is why the feature was
+> shaped this way, not a pending obligation. **The feature itself is unchanged**: it was always
+> simulator-only, and it is still what makes prices move, matches limit orders and squares off MIS on
+> the deployed app. Two obligations it carried are closed rather than inherited — the circuit-breaker
+> state fix and the token-bucket limiter, both of which existed only to serve an outbound provider.
+> See `constraints/market-data.md` → Quote providers.
+
 **Logic:**
 
 - `supabase/functions/_shared/market-hours.ts` — the pure core of the session logic, **moved there

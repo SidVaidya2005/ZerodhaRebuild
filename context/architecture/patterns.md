@@ -23,7 +23,8 @@ pg_cron ('* 3-10 * * 1-5' — UTC, ≈ 08:30–16:29 IST; a coarse cost window, 
         │    symbol_demand ∪ watchlists, deduplicated, ranked, capped. Watchlists
         │    are in it because symbol_demand has no write path until F18 (F16).
         ├─ QuoteService.getQuotes(symbols)
-        │    ├─ YahooProvider        → not built yet; deferred to the end (F14)
+        │    ├─ (no external provider) → out of scope by decision; the chain is a
+        │                              seam with nothing above the simulator (6.00.05)
         │    └─ SimulatorProvider    → last resort, cannot fail; walks from the last
         │                              quote, else instruments.prev_close (F15)
         ├─ upsert quotes (ltp, prev_close, ohlc, volume, provider, provider_ts, fetched_at)
@@ -93,9 +94,10 @@ Stock detail page (Server Component)
         ├─ map range → interval  (1D→FIVE_MIN, 1W→THIRTY_MIN, 1M/1Y→ONE_DAY)
         ├─ candle_sync fresh for (symbol, interval)?  → read candles, done
         └─ stale or missing:
-              ├─ CandleProvider chain → simulator  (Yahoo arrives with the
-              │    limiter and circuit breaker; F15 established that a bucket
-              │    in front of a local simulator caps nothing)
+              ├─ CandleProvider chain → simulator  (the only provider; the
+              │    limiter and circuit breaker stay unbuilt seams, since a
+              │    bucket in front of a local simulator caps nothing — F15,
+              │    made permanent 6.00.05)
               ├─ upsert candles, update candle_sync (fetched_at, provider)
               └─ on total failure: serve the stale rows we already have,
                  badged with their real age — never an empty chart, never a fabricated one
