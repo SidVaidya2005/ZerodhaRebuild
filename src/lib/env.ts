@@ -40,4 +40,39 @@ export function parsePublicEnv(source: Record<string, unknown> = readPublicEnv()
   return parsed.data
 }
 
+/**
+ * A deployed instance must not carry a localhost site URL.
+ *
+ * `NEXT_PUBLIC_SITE_URL` is the OAuth `redirectTo` (`server/actions/auth.ts`),
+ * built from env rather than from the request on purpose — a request-derived
+ * origin is a host-header-injection vector and Supabase must have the exact URL
+ * allow-listed. The cost of that correctness is that a wrong value is **silent**:
+ * every page renders, the health check passes, and sign-in sends the user to
+ * `localhost` with nothing in the logs. That is what happened on the first
+ * Render deploy.
+ *
+ * It is not enough to set the variable — `NEXT_PUBLIC_*` is inlined at build
+ * time, so the fix is always "set it **and** redeploy", which is what the
+ * message says.
+ *
+ * Gated on a platform marker rather than `NODE_ENV`, because `pnpm start`
+ * locally is also a production build and legitimately serves localhost — the
+ * accessibility and overflow audits both depend on it.
+ */
+export function assertDeployableSiteUrl(
+  siteUrl: string,
+  platform: string | undefined
+): void {
+  if (!platform) return
+  const { hostname } = new URL(siteUrl)
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') {
+    throw new Error(
+      `NEXT_PUBLIC_SITE_URL is "${siteUrl}" on a deployed instance (${platform}).\n` +
+        'Google sign-in would send every user to localhost after authenticating.\n' +
+        'Set it to this service\'s public URL, then trigger a new deploy — the value ' +
+        'is inlined at build time, so saving it alone changes nothing.'
+    )
+  }
+}
+
 export const env: PublicEnv = parsePublicEnv()

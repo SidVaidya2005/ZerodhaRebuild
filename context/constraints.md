@@ -64,6 +64,13 @@ brevity is a hard rule rather than a preference.
 
 **Moved to `context/constraints/verification.md`** — read before driving a browser or trusting an automated check. On demand, because none of it binds a session that never opens one.
 
+## Deployment
+
+- **`NEXT_PUBLIC_*` is inlined at build time, so setting one on the host and not rebuilding changes nothing.** It has now cost three things in one session: a Render deploy that sent every sign-in to `localhost`, and two falsification attempts that appeared to pass while testing nothing. **Any check that overrides one at runtime is invalid** — rebuild, or test the value through a pure function instead. (F39)
+- **A wrong `NEXT_PUBLIC_SITE_URL` is silent by construction**, because the OAuth `redirectTo` is built from env rather than the request — deliberately, since a request-derived origin is a host-header-injection vector and Supabase must have the URL allow-listed. Every page renders and `/api/health` passes; only sign-in breaks. `assertDeployableSiteUrl` in `instrumentation.ts` refuses to boot a deployed instance carrying a localhost URL, gated on `RENDER` rather than `NODE_ENV` because `pnpm start` locally is also a production build and the audits need it. (F39)
+- **An instrumentation throw does not stop a Next server** — it logs `Failed to prepare server` and leaves the process alive but not serving, which on a platform is an instance failing its health check forever rather than a failed deploy. Exit non-zero instead. (F39)
+- **`corepack enable` cannot run on Render**: it writes a shim into a read-only `/usr` and dies with `EROFS` before installing anything. `npx --yes pnpm@<pinned>` needs no privileged write. (F39)
+
 ## Local development environment
 
 - **HTTP 431 on `localhost:3000`** (see `CLAUDE.md` → Environment notes) **also silently kills Server Action POSTs**, not just document requests. Escape hatch if clearing the foreign `sb-*` cookies is impractical: `NODE_OPTIONS=--max-http-header-size=32768`. (F12)
