@@ -40,7 +40,7 @@ const STATUS_TONE: Record<OrderRow['status'], string> = {
   COMPLETE: 'text-ink',
   OPEN: 'text-brand light:text-muted-strong',
   CANCELLED: 'text-muted',
-  REJECTED: 'text-down',
+  REJECTED: 'text-down-text',
 }
 
 export function OrdersTable({ orders, label }: { orders: OrderRow[]; label: string }) {
@@ -105,7 +105,7 @@ export function OrdersTable({ orders, label }: { orders: OrderRow[]; label: stri
                   <span
                     className={cn(
                       'rounded-xs px-1.5 py-0.5 text-caption font-medium',
-                      order.side === 'BUY' ? 'bg-up/10 text-up' : 'bg-down/10 text-down'
+                      order.side === 'BUY' ? 'bg-up/10 text-up-text' : 'bg-down/10 text-down-text'
                     )}
                   >
                     {order.side}
@@ -119,7 +119,7 @@ export function OrdersTable({ orders, label }: { orders: OrderRow[]; label: stri
                     column: only rejected rows carry one, and a column that is
                     empty on three tabs out of four is mostly whitespace. */}
                 {order.rejectionReason ? (
-                  <span className="mt-1 block text-caption text-down">
+                  <span className="mt-1 block text-caption text-down-text">
                     {ORDER_ERROR_COPY[order.rejectionReason]}
                   </span>
                 ) : null}

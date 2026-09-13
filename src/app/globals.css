@@ -25,8 +25,23 @@
   --color-on-brand: #181a20; /* black on yellow — the system's signature pairing */
 
   /* ── Trading semantics ── fixed meaning everywhere, never decorative */
+  /* The fills: candle bodies, filled buy/sell buttons, the LIVE and OPEN dots.
+     Byte-identical across themes per F02, and never used as text — see below. */
   --color-up: #0ecb81;
   --color-down: #f6465d;
+  /* The *text* tier, and the only one a price figure may use. The fills above
+     fail WCAG AA as text: measured by axe at F38, `--color-down` is 4.48:1 on
+     `--color-surface` and 3.72:1 on `--color-surface-elevated` in this theme,
+     and on light both are worse — `--color-up` bottoms out at 1.95:1, barely
+     distinguishable from its background. DESIGN.md §Trading Semantics does
+     specify them as text colours, and this deviates for the same reason F04's
+     inline links deviate from it: WCAG wins, and the deviation is recorded.
+     These carry the same hue and flip in `.light`; the fills do not.
+     Measured against every background these are actually drawn on — the three
+     surfaces *and* the 10% tints behind a BUY/SELL badge and a destructive
+     button, which sit closer to the text than the plain surface does. */
+  --color-up-text: #0ecb81; /* worst 5.21:1 — the fill already clears it on dark */
+  --color-down-text: #fa8d99; /* worst 4.90:1; the fill managed only 3.72:1 */
   /* Text on a filled up/down button. Theme-invariant like --color-on-brand:
      both fills are the same colour in either theme, so their foreground must be
      too — `--color-ink` would flip to near-black on light and fail against
@@ -146,6 +161,14 @@
      these invert relative to the dark theme. */
   --color-muted: #5a6472;
   --color-muted-strong: #3d4552;
+
+  /* The trading *text* tier flips; the fills above it never do. Left at their
+     dark values on this canvas, green measured 1.95–2.13:1 and red 3.24–3.53:1
+     — every P&L figure, day change and index number in the light terminal was
+     below AA, `--color-up` almost invisibly so. Darkened along the same hue
+     until the worst of the three light surfaces (#f5f5f5) clears 4.5. (F38) */
+  --color-up-text: #076842; /* worst 4.64:1 */
+  --color-down-text: #b0091e; /* worst 4.59:1 */
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -173,7 +196,12 @@
   --color-secondary-foreground: var(--color-body);
   --color-accent: var(--color-surface-elevated);
   --color-accent-foreground: var(--color-body);
-  --color-destructive: var(--color-down);
+  /* The *text* red, not the fill. `text-destructive` is the only foreground use
+     in this codebase and the fill measured 3.12:1 behind the Cancel button on
+     light — a serious axe failure on /orders, /funds and /settings. Nothing here
+     renders a solid `bg-destructive`; every other use is a border, a ring, or a
+     ≤20% tint, all of which read the same red. (F38) */
+  --color-destructive: var(--color-down-text);
   --color-destructive-foreground: var(--color-ink);
   --color-muted-foreground: var(--color-muted);
   --color-border: var(--color-hairline);

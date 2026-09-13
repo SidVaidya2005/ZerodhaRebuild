@@ -324,7 +324,7 @@ function HoldingsRow({
  */
 function toneOf(value: number | null): string {
   if (value === null) return 'text-muted'
-  if (value > 0) return 'text-up'
-  if (value < 0) return 'text-down'
+  if (value > 0) return 'text-up-text'
+  if (value < 0) return 'text-down-text'
   return 'text-ink'
 }

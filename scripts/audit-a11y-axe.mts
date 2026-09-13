@@ -15,6 +15,11 @@
  * So this drives a real browser with a real session, in a named theme, and runs
  * the same engine Lighthouse runs internally.
  *
+ * It also presses ⌘K once per run, because axe cannot press a key and this is
+ * the only place in the repo with a session, a theme and the stale-redirect
+ * handling already plumbed. See the block at the end for why a pass there is
+ * conclusive and a failure is not.
+ *
  * **No new dependency.** axe-core is already on disk as lighthouse's transitive
  * dependency, and is resolved *through* lighthouse exactly as `audit-overflow.mts`
  * resolves `puppeteer-core` — pnpm's isolation puts both out of this package's
@@ -269,6 +274,65 @@ try {
     for (const v of notes) {
       noted += 1
       console.log(`      note [${v.impact}] ${v.id} × ${v.nodes.length} — ${v.help}`)
+    }
+  }
+
+  // ── ⌘K focuses the watchlist search ─────────────────────────────────────────
+  //
+  // Not an axe rule — axe cannot press a key. It lives in this script because
+  // this is the only place carrying a session, a named theme and the
+  // stale-redirect handling, and a second script would hold a second copy of
+  // all three, which is how two lists of the app's routes would drift.
+  //
+  // **A pass here is conclusive; a failure is not.** Puppeteer drives input
+  // through CDP, which produces *trusted* events — the opposite of the
+  // synthetic DOM sequences `constraints/verification.md` warns about, where
+  // Chromium refuses to move focus on an untrusted mousedown. But if this ever
+  // reports a failure, re-check it with real input on a foregrounded window
+  // before calling it a bug in the handler.
+  if (cookies) {
+    const response = await page.goto(new URL('/dashboard', base).href, {
+      waitUntil: 'networkidle0',
+      timeout: 45_000,
+    })
+    const status = response?.status() ?? 0
+
+    if (new URL(page.url()).pathname !== '/dashboard') {
+      console.error('✗ ⌘K — /dashboard redirected away; the session cookie is stale')
+      failures += 1
+    } else if (status !== 304 && !(status >= 200 && status < 300)) {
+      console.error(`✗ ⌘K — /dashboard answered HTTP ${status || 'nothing'}`)
+      failures += 1
+    } else {
+      // The 1280px viewport set above is what makes this meaningful: the rail
+      // exists only from `lg` up, and below that the input lives in the sheet
+      // where the handler deliberately no-ops on `offsetParent`.
+      await page.keyboard.down('Meta')
+      await page.keyboard.press('KeyK')
+      await page.keyboard.up('Meta')
+
+      const focused = await page.evaluate(() => {
+        const el = document.activeElement as HTMLElement | null
+        if (!el) return null
+        return {
+          slot: el.dataset.slot ?? null,
+          label: el.getAttribute('aria-label'),
+          tag: el.tagName.toLowerCase(),
+        }
+      })
+
+      if (focused?.slot === 'command-input') {
+        console.log(`✓ ${THEME} ⌘K focuses the watchlist search — "${focused.label}"`)
+      } else {
+        failures += 1
+        const found = focused
+          ? `${focused.tag}${focused.slot ? ` [data-slot=${focused.slot}]` : ''}`
+          : 'nothing'
+        console.error(
+          `✗ ⌘K did not focus the watchlist search — activeElement is ${found}.\n` +
+            '    A CDP failure is not conclusive: re-check with real input on a foregrounded window.'
+        )
+      }
     }
   }
 

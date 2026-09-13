@@ -42,6 +42,13 @@ describe('the .light override block', () => {
     '--color-surface',
     '--color-hairline',
     '--color-ink',
+    // The trading *text* tier flips even though the fills above it never do.
+    // Left at the fill values, green measured 1.95:1 and red 3.24:1 on the light
+    // surfaces — every P&L figure in the light terminal was below AA. Found by
+    // axe at F38, because nothing here was computing their ratios: they appeared
+    // only in `mustNotFlip` above, which says nothing about contrast.
+    '--color-up-text',
+    '--color-down-text',
     // The muted tones flip too. Left at their dark values they failed WCAG AA on
     // the light canvas and inverted their own hierarchy — muted-strong, being the
     // lighter of the two, read as less prominent than muted. See the contrast
@@ -103,7 +110,19 @@ const THEMES = [
 ] as const
 
 describe.each(THEMES)('$name theme contrast', ({ source, surfaces }) => {
-  const foregrounds = ['--color-ink', '--color-body', '--color-muted', '--color-muted-strong']
+  // Every token this project renders as *text*. The trading pair earns its place
+  // here the hard way: `--color-up`/`--color-down` were used as text app-wide and
+  // were never in this list, so nothing computed their ratios — axe found green
+  // at 1.95:1 on the light canvas at F38. The `-text` tier exists so this list
+  // can cover them without flipping the fills, which F02 pins byte-identical.
+  const foregrounds = [
+    '--color-ink',
+    '--color-body',
+    '--color-muted',
+    '--color-muted-strong',
+    '--color-up-text',
+    '--color-down-text',
+  ]
 
   it.each(foregrounds)('%s clears AA on every surface', (token) => {
     const colour = readToken(source, token)

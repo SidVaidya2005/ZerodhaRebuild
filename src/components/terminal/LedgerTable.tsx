@@ -106,9 +106,15 @@ export function LedgerTable({ entries, total, query }: LedgerTableProps) {
                   {entry.order === null ? (
                     '—'
                   ) : (
+                    // A persistent underline, not hover-only: this link sits in a
+                    // text block — the side and product render beside it in the
+                    // same cell — so colour alone would identify it, which WCAG
+                    // 1.4.1 forbids and axe reports as `link-in-text-block`. The
+                    // symbol links in the other tables are alone in their cell
+                    // and stay hover-only, exactly as F04 settled it. (F38)
                     <Link
                       href={`/stocks/${entry.order.symbol}`}
-                      className="text-ink hover:underline"
+                      className="text-ink underline underline-offset-2"
                     >
                       {entry.order.symbol}
                     </Link>
@@ -125,8 +131,8 @@ export function LedgerTable({ entries, total, query }: LedgerTableProps) {
                 <td
                   className={cn(
                     'py-2 text-right tabular-nums',
-                    entry.amount > 0 && 'text-up',
-                    entry.amount < 0 && 'text-down',
+                    entry.amount > 0 && 'text-up-text',
+                    entry.amount < 0 && 'text-down-text',
                     entry.amount === 0 && 'text-ink'
                   )}
                 >

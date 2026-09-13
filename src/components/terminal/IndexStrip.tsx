@@ -100,8 +100,8 @@ export function IndexStrip({ composite }: { composite: MarketComposite | null })
                 'text-body-sm font-medium tabular-nums',
                 // Direction is the one thing these two tokens mean everywhere
                 // in the app, and here the number genuinely encodes it.
-                direction === 'up' && 'text-up',
-                direction === 'down' && 'text-down',
+                direction === 'up' && 'text-up-text',
+                direction === 'down' && 'text-down-text',
                 direction === 'flat' && 'text-muted-strong',
                 source === 'STALE' && 'text-muted'
               )}
@@ -126,10 +126,10 @@ export function IndexStrip({ composite }: { composite: MarketComposite | null })
           </p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-caption">
             <dt className="text-muted">Advancing</dt>
-            <dd className="text-up tabular-nums">{composite.advances}</dd>
+            <dd className="text-up-text tabular-nums">{composite.advances}</dd>
 
             <dt className="text-muted">Declining</dt>
-            <dd className="text-down tabular-nums">{composite.declines}</dd>
+            <dd className="text-down-text tabular-nums">{composite.declines}</dd>
 
             <dt className="text-muted">Unchanged</dt>
             <dd className="text-ink tabular-nums">{composite.unchanged}</dd>

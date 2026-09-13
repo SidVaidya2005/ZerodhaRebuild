@@ -125,8 +125,8 @@ function Tile({
         className={cn(
           'mt-1 font-numeric tabular-nums',
           emphasis ? 'text-title font-semibold' : 'text-title-sm font-medium',
-          direction === 'up' && 'text-up',
-          direction === 'down' && 'text-down',
+          direction === 'up' && 'text-up-text',
+          direction === 'down' && 'text-down-text',
           (direction === undefined || direction === 'flat') && 'text-ink'
         )}
       >

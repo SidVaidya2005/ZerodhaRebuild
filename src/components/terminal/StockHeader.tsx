@@ -83,7 +83,7 @@ export function StockHeader({ symbol, name, exchange, quote }: StockHeaderProps)
 /** Colour never carries the sign alone — the formatter renders an explicit +/−. */
 function toneOf(value: number | null): string {
   if (value === null) return 'text-muted'
-  if (value > 0) return 'text-up'
-  if (value < 0) return 'text-down'
+  if (value > 0) return 'text-up-text'
+  if (value < 0) return 'text-down-text'
   return 'text-ink'
 }

@@ -74,7 +74,7 @@ function formatChange(change: number | null, changePct: number | null): string {
 
 function changeTone(change: number | null): string {
   if (change === null || change === 0) return 'text-muted'
-  return change > 0 ? 'text-up' : 'text-down'
+  return change > 0 ? 'text-up-text' : 'text-down-text'
 }
 
 /**
@@ -228,7 +228,7 @@ function WatchlistRowItem({ row, isFirst, isLast, pending, run }: RowProps) {
         <Button
           variant="ghost"
           size="icon-sm"
-          className="font-medium text-up"
+          className="font-medium text-up-text"
           aria-label={`Buy ${row.symbol}`}
           onClick={() => openTicket({ symbol: row.symbol, side: 'BUY' })}
         >
@@ -237,7 +237,7 @@ function WatchlistRowItem({ row, isFirst, isLast, pending, run }: RowProps) {
         <Button
           variant="ghost"
           size="icon-sm"
-          className="font-medium text-down"
+          className="font-medium text-down-text"
           aria-label={`Sell ${row.symbol}`}
           onClick={() => openTicket({ symbol: row.symbol, side: 'SELL' })}
         >
@@ -324,27 +324,36 @@ function WatchlistPanel({
           placeholder="Search and add"
           aria-label="Search instruments to add to your watchlist"
         />
-        {query !== '' && (
-          <CommandList className="max-h-56">
-            <CommandEmpty>No instrument matches that.</CommandEmpty>
-            <CommandGroup>
-              {candidates.map((entry) => (
-                <CommandItem
-                  key={entry.symbol}
-                  value={`${entry.symbol} ${entry.name}`}
-                  onSelect={() => {
-                    setQuery('')
-                    run(() => addToWatchlist({ symbol: entry.symbol }))
-                  }}
-                >
-                  <Plus aria-hidden="true" className="size-3.5 text-muted" />
-                  <span className="font-medium text-ink">{entry.symbol}</span>
-                  <span className="truncate text-muted">{entry.name}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        )}
+        {/* The list stays mounted and is hidden when empty, rather than being
+            conditionally rendered. `CommandInput` is a `role="combobox"` and
+            always emits `aria-controls` pointing at this list's generated id —
+            unmounting it left that reference dangling, which axe reports as a
+            *critical* `aria-valid-attr-value` on every terminal route, since
+            this rail lives in the layout. The children stay conditional so
+            `CommandEmpty` cannot announce "no match" against an empty box. (F38) */}
+        <CommandList className={query === '' ? 'hidden' : 'max-h-56'}>
+          {query !== '' && (
+            <>
+              <CommandEmpty>No instrument matches that.</CommandEmpty>
+              <CommandGroup>
+                {candidates.map((entry) => (
+                  <CommandItem
+                    key={entry.symbol}
+                    value={`${entry.symbol} ${entry.name}`}
+                    onSelect={() => {
+                      setQuery('')
+                      run(() => addToWatchlist({ symbol: entry.symbol }))
+                    }}
+                  >
+                    <Plus aria-hidden="true" className="size-3.5 text-muted" />
+                    <span className="font-medium text-ink">{entry.symbol}</span>
+                    <span className="truncate text-muted">{entry.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </>
+          )}
+        </CommandList>
       </Command>
 
       {rows.length === 0 ? (

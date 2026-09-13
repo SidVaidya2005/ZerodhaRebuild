@@ -88,6 +88,23 @@ export function StockChartCard({
       ) : (
         <PriceChart candles={candles} interval={interval} symbol={symbol} />
       )}
+
+      {/* Lightweight Charts' licence requires a link to TradingView. Its own
+          `attributionLogo` satisfies that, but it injects an unnamed anchor
+          *inside* the chart's `role="img"` container — a focusable descendant of
+          a widget role, which axe reports as `nested-interactive`. The option is
+          off and the obligation is met here instead, by a link that actually has
+          an accessible name. (F38) */}
+      <p className="mt-3 text-caption text-muted">
+        <a
+          href="https://www.tradingview.com/"
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2"
+        >
+          Charting by TradingView
+        </a>
+      </p>
     </section>
   )
 }

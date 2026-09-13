@@ -97,7 +97,19 @@ export function PriceChart({ candles, interval, symbol }: PriceChartProps) {
 
     const theme = resolveTokens()
     const chart = createChart(container, {
-      layout: { background: { color: 'transparent' }, textColor: theme.muted },
+      layout: {
+        background: { color: 'transparent' },
+        textColor: theme.muted,
+        // The library injects an attribution anchor into this container by
+        // default, and the container is `role="img"` — a widget role must not
+        // contain focusable descendants, which axe reports as a serious
+        // `nested-interactive`. It was the only focusable element in there.
+        // **The licence still requires the link**, so `StockChartCard` renders a
+        // real, labelled one below the chart instead of an unnamed logo anchor
+        // inside it — which is the better accessible outcome as well. Do not set
+        // this false without keeping that link. (F38)
+        attributionLogo: false,
+      },
       grid: { vertLines: { visible: false }, horzLines: { color: theme.hairline } },
       rightPriceScale: { borderColor: theme.hairline },
       timeScale: { borderColor: theme.hairline, timeVisible: interval !== 'ONE_DAY' },

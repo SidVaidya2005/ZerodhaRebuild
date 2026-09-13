@@ -81,8 +81,10 @@ export default function StyleguidePage() {
           <Swatch token="bg-on-brand" className="bg-on-brand" note="black on yellow" />
         </div>
         <p className="mt-4 text-caption text-muted">
-          Brand and trading colours are byte-identical in both themes — asserted in
-          <code className="font-numeric"> theme-tokens.test.ts</code>, not by eye.
+          Brand and the trading <em>fills</em> are byte-identical in both themes — asserted in
+          <code className="font-numeric"> theme-tokens.test.ts</code>, not by eye. The trading{' '}
+          <em>text</em> tier is the one exception and does flip, because the fills fail WCAG AA as
+          text.
         </p>
       </Section>
 
@@ -91,8 +93,15 @@ export default function StyleguidePage() {
         note="Fixed meaning everywhere. Never decorative, never a category colour."
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Swatch token="text-up" className="bg-up" note="price rose" />
-          <Swatch token="text-down" className="bg-down" note="price fell" />
+          <Swatch token="bg-up" className="bg-up" note="fill — price rose" />
+          <Swatch token="bg-down" className="bg-down" note="fill — price fell" />
+        </div>
+        {/* The text tier is a separate pair because the fills above fail WCAG AA
+            as text — badly on light, where the green measured 1.95:1. A price
+            figure uses these; a candle body or a filled button uses those. (F38) */}
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <p className="text-number text-up-text">text-up-text +1,234.50</p>
+          <p className="text-number text-down-text">text-down-text −1,234.50</p>
         </div>
       </Section>
 
@@ -231,12 +240,12 @@ export default function StyleguidePage() {
                     {formatCurrency(h.ltp)}
                   </TableCell>
                   <TableCell
-                    className={`text-right font-numeric text-number-sm ${pnl < 0 ? 'text-down' : 'text-up'}`}
+                    className={`text-right font-numeric text-number-sm ${pnl < 0 ? 'text-down-text' : 'text-up-text'}`}
                   >
                     {formatSignedCurrency(pnl)}
                   </TableCell>
                   <TableCell
-                    className={`text-right font-numeric text-number-sm ${pct < 0 ? 'text-down' : 'text-up'}`}
+                    className={`text-right font-numeric text-number-sm ${pct < 0 ? 'text-down-text' : 'text-up-text'}`}
                   >
                     {formatSignedPercent(pct)}
                   </TableCell>

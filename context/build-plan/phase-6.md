@@ -145,6 +145,24 @@ fixed; this one measures before it edits.
     the guard lands green today without claiming the app is perfect.
   - `A11Y_AXE_COOKIE` **fails rather than skips** when absent, like `OVERFLOW_GUARD_COOKIE` and
     `test:parity`; `A11Y_AXE_PUBLIC_ONLY=1` accepts public-only coverage deliberately.
+  - **The ⌘K assertion lives in this script too**, not a second one: it is the only place with a
+    session, a theme and the stale-redirect handling already plumbed, and two copies of that would
+    drift. Once per run when a session exists, on `/dashboard` at 1280px —
+    `keyboard.down('Meta')` → `press('KeyK')` → `up('Meta')`, then read `document.activeElement`.
+    **CDP input is trusted**, unlike the synthetic DOM events `constraints/verification.md` warns
+    about, so a pass here is conclusive; a failure gets re-checked with real input before being
+    called a bug (shape confirmed against Context7 `/puppeteer/puppeteer`: modifiers do affect
+    `press`).
+- **Remediation covers every impact level on the terminal routes; the guard's exit threshold does
+  not.** The two are deliberately different — `serious`/`critical` is what lets the guard ship
+  switched **on**, and a guard nobody can keep green gets disabled, which is how this property
+  rotted before. The consequence to accept: a moderate/minor fix is not regression-protected until
+  the threshold is tightened.
+- **The finding list is reported before any component is edited.** Reading the code predicts
+  nothing — headings are clean (`h1` then `id`-bearing `h2`s on every page), all five terminal
+  tables are labelled focusable regions carrying `relative`, `ReportsFilter` has real `htmlFor`
+  labels, and the one unpaired `overflow-x-auto` is the shadcn `Table` primitive
+  (`ui/table.tsx:9`), imported only by `/dev/styleguide` and therefore not an audited route.
 - **Keyboard:** the search shortcut focuses the inline `CommandInput` in the watchlist rail.
   **Scoped to `lg` and up**, because search is an inline `<Command>` in `WatchlistSidebar`, not the
   unused `CommandDialog`, and F37 put the rail at `lg`. Below that the input is inside the sheet,
@@ -179,42 +197,83 @@ fixed; this one measures before it edits.
 
 **Verify:**
 
-**Status: the public half is done and verified; the terminal half is deferred by decision
-(2026-09-12).** The harness ships and is proven on 6 of 14 routes in both themes. The 8 terminal
-routes need a `document.cookie` from a signed-in tab, which the developer chose not to paste, so
-**F38's box stays unticked** — the checks below marked *deferred* are the reason, and nothing about
-the terminal's accessibility has been measured yet.
+**Status: done, both halves verified 2026-09-13.** `pnpm audit:a11y:axe` reports
+`14 of 14 routes audited` and exits 0 in **both** themes, with no `note [moderate]` or
+`note [minor]` line on any route. One bullet stays deferred by design — the keyboard-only order
+flow, which pairs with F37's outstanding submit check — and three follow-ups are recorded at the
+end of this block.
+
+**What the terminal actually held**, none of which reading the code had predicted: a **critical**
+`aria-valid-attr-value` on all 8 routes, `color-contrast` on all 8, `link-in-text-block` on
+`/funds`, and `nested-interactive` on `/stocks/*`. The plan's own UI bullet above — move `OPEN` to
+`text-info` — was **superseded before this ran**: `--color-info` is 4.30:1 on `--color-surface`,
+so the public half landed `text-brand light:text-muted-strong` instead, and both components carry
+a comment saying why. The reclass never rested on an unobserved contrast figure in the end.
 
 - ✅ `pnpm audit:a11y:axe` exits 0 on a dark pass **and** a light pass over the **6 public routes**.
   The light pass is the first time that theme has ever been audited, and it found all six failing
   before the fix. Read the printed route count: a run covering only the public half prints
   `(public routes only)`, which is what these two runs printed.
-- ⏸ **Deferred — the same two passes across the 8 terminal routes**, which is the half Lighthouse
-  has never been able to reach and therefore the half most likely to hold findings. Needs
-  `A11Y_AXE_COOKIE` from a signed-in tab, and `profiles.theme='light'` set in Settings for the light
-  pass. **Terminal-side remediation is consequently unknown** — the `OPEN` status reclass below was
-  derived by computing the token's contrast, not by observing axe fail on it.
+- ✅ **The same two passes across all 14 routes**, dark and light, both printing
+  `14 of 14 routes audited` in the trailer — not merely exiting 0, which a public-only run also
+  does. **Both passes were red first and are green only after the fixes below**, which is what
+  makes them evidence rather than a formality.
+- ✅ **Zero violations at any impact level on the 8 terminal routes** — neither final run printed a
+  `note [moderate]` or `note [minor]` line for any route, so the remediation scope agreed for this
+  feature is met and not merely the `serious`/`critical` exit threshold.
+- **The four findings and what each needed:**
+  - **`aria-valid-attr-value` (critical, all 8 routes).** `WatchlistSidebar` rendered `CommandList`
+    only when a query existed, while cmdk's `CommandInput` always emits `aria-controls` at it — a
+    dangling reference, on every route, because the rail is in the layout. The list now stays
+    mounted and hides; its children stay conditional so `CommandEmpty` cannot announce "no match"
+    against an empty box.
+  - **`color-contrast` (serious, all 8 routes)** — the finding this feature existed to catch. See
+    the token split recorded in `constraints.md` → Theming. `--color-destructive` was a second,
+    separate cause: it bridged onto the *fill* red and measured **3.12:1** behind Cancel on
+    `/orders`, `/funds` and `/settings`.
+  - **`link-in-text-block` (serious, `/funds`).** `LedgerTable`'s symbol link is the only one in
+    the app sharing a cell with other text, so it takes a persistent underline per F04; the same
+    class in the other four tables sits alone in its cell and correctly stays hover-only.
+  - **`nested-interactive` (serious, `/stocks/*`).** Lightweight Charts injects its attribution
+    anchor inside the `role="img"` container. `attributionLogo: false` removes it — and **the
+    licence still requires that link**, so `StockChartCard` renders a named one outside the chart.
 - ⏸ **Deferred — the full order flow on the keyboard alone.** It needs real input on an unoccluded
   window: `constraints/verification.md` is explicit that a dispatched pointer sequence opens the
   Radix sheet but **not** the order ticket, so an automated negative would be unjudgeable rather
   than failing. Pairs with F37's own deferred submit check, which is outstanding for the same reason.
 - ✅ With `A11Y_AXE_COOKIE` unset it **exits 1** naming the 8 uncovered routes, rather than passing on
   half the app.
-- ⏸ **Deferred with the terminal pass** — with a deliberately corrupted cookie, every terminal route
-  should report `redirected to /auth/login; the session cookie is stale` and exit 1, so a stale
-  session is never a false pass. The code path exists and is unexercised.
+- ✅ With a deliberately corrupted cookie, all 8 terminal routes reported
+  `redirected to /auth/login; the session cookie is stale`, the ⌘K check reported the same, the run
+  exited 1 and the trailer read `6 of 14 routes audited`. A stale session cannot be a false pass.
 - ✅ `grep -rn 'text-brand' src/` — every survivor is one of four `aria-hidden` decorative spans, and
   every text site carries a `light:` override. The light pass confirms no `color-contrast` violation
   **on the 6 public routes**; the 3 terminal sites (`TopNav` wordmark, `OPEN` in two tables) are
-  covered by the deferred pass, not by this one.
+  covered by the terminal pass below, not by this one.
 - ✅ `OrdersTable.tsx` and `RecentOrders.tsx` still print the word `OPEN`, so the token change cannot
   have removed meaning.
-- ⏸ **Deferred with the terminal pass** — ⌘K focuses the watchlist `CommandInput` on `/dashboard` at
-  1280px. `/dashboard` needs a session, so this was never driven; the handler is scoped to the rail
-  via `offsetParent`, lints and typechecks, and is unexercised in a browser.
-- ✅ `pnpm lint`, `typecheck`, `test`, `build` and `context:cost` green; `pnpm audit:overflow` still
-  reports no sideways scroll; `pnpm audit:a11y` still scores >90 per public page, confirmed by
-  reading `finalDisplayedUrl` out of the report rather than trusting the score (F05).
+- ✅ ⌘K focuses the watchlist `CommandInput` on `/dashboard` at 1280px, printed as its own line in
+  every run and passing in both themes — `✓ ⌘K focuses the watchlist search — "Search instruments
+  to add to your watchlist"`. CDP input is trusted, so this is conclusive.
+- ✅ `pnpm lint`, `typecheck`, `test` (528, up from 522 — six new contrast assertions), `build` and
+  `context:cost` green; `pnpm audit:overflow` clean over 70 checks (14 routes × 5 widths) *with* a
+  session; `pnpm audit:a11y` scores 100 on `/`, `/legal` and `/pricing`, each confirmed by reading
+  `finalDisplayedUrl` out of the report rather than trusting the score (F05).
+
+**Carried forward — recorded, not silently assumed:**
+
+- ☐ **Three of the five dense tables have never been audited with rows.** The account holds no
+  fills, so `/holdings`, `/positions` and `/reports` — and the dashboard's Recharts donut — were
+  measured as **empty states**. `/orders` and `/funds` did carry real rows (7 open, 1 cancelled,
+  2 rejected, a 10-row ledger). Filling the rest needs an open session *and* fresh quotes: the
+  stored quotes are weeks stale, and §5 refuses a fill against a stale quote. Blocked behind F16,
+  which is parked to the end of the project. **A clean F38 says nothing about those four surfaces.**
+- ☐ **The destructive button's hover state is 4.09:1 in dark.** `hover:bg-destructive/20` lightens
+  the tint toward the text. axe never renders hover so it appears in no pass, and clearing it would
+  have forced the dark red to `#fba6b2`, a pale pink, across the whole terminal. Deliberately left.
+- ⏸ **The keyboard-only order flow** stays deferred, with F37's 375×667 submit check, for the
+  reason `constraints/verification.md` gives: a dispatched pointer sequence opens the Radix sheet
+  but not the order ticket, so an automated negative would be unjudgeable rather than failing.
 
 ### 39 Deploy
 

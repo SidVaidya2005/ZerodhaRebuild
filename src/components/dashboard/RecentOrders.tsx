@@ -38,7 +38,7 @@ const STATUS_TONE: Record<string, string> = {
   COMPLETE: 'text-ink',
   OPEN: 'text-brand light:text-muted-strong',
   CANCELLED: 'text-muted',
-  REJECTED: 'text-down',
+  REJECTED: 'text-down-text',
 }
 
 export function RecentOrders({ orders }: { orders: RecentOrder[] }) {
@@ -95,7 +95,7 @@ export function RecentOrders({ orders }: { orders: RecentOrder[] }) {
                   <span
                     className={cn(
                       'rounded-xs px-1.5 py-0.5 text-caption font-medium',
-                      order.side === 'BUY' ? 'bg-up/10 text-up' : 'bg-down/10 text-down'
+                      order.side === 'BUY' ? 'bg-up/10 text-up-text' : 'bg-down/10 text-down-text'
                     )}
                   >
                     {order.side}

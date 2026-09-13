@@ -246,7 +246,7 @@ function PositionsRow({
       {/* Signed, and toned like a P&L figure, because the sign is the single
           most consequential fact in the row — a short read as a long inverts
           every other number beside it. */}
-      <td className={cn('py-2 text-right tabular-nums', isShort ? 'text-down' : 'text-ink')}>
+      <td className={cn('py-2 text-right tabular-nums', isShort ? 'text-down-text' : 'text-ink')}>
         {formatQuantity(row.netQuantity)}
         {isShort && <span className="ml-1 text-caption text-muted">Short</span>}
       </td>
@@ -311,7 +311,7 @@ function PositionsRow({
  */
 function toneOf(value: number | null): string {
   if (value === null) return 'text-muted'
-  if (value > 0) return 'text-up'
-  if (value < 0) return 'text-down'
+  if (value > 0) return 'text-up-text'
+  if (value < 0) return 'text-down-text'
   return 'text-ink'
 }
