@@ -17,11 +17,21 @@ services:
     # so this is the shortest round trip available on the free plan.
     region: singapore
 
+    # **Not `corepack enable`.** It writes a shim to /usr/bin, which is read-only
+    # in Render's image, and the build dies with
+    # `EROFS: read-only file system, unlink '/usr/bin/pnpm'` before installing
+    # anything. `npx` needs no privileged write — it caches under $HOME — and
+    # pinning the version here means the build uses the same pnpm as
+    # package.json's `packageManager` rather than whatever is newest.
+    #
     # `--frozen-lockfile` makes a lockfile that disagrees with package.json fail
     # the build rather than silently resolving something else. Dependencies are
     # pinned exactly (code-standards.md), so a drift here is always a mistake.
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
-    startCommand: pnpm start
+    buildCommand: npx --yes pnpm@11.18.0 install --frozen-lockfile && npx --yes pnpm@11.18.0 build
+    # `npm start` runs the same `next start` script without resolving pnpm again:
+    # npm ships with Node, the dependencies are already installed by then, and a
+    # download on every cold boot is exactly what a free instance cannot afford.
+    startCommand: npm start
 
     # Returns 503 when the database is unreachable, so a failing deploy is
     # visible rather than serving a broken app. It reaches Postgres on every
