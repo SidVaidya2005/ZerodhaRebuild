@@ -1,0 +1,53 @@
+# Render blueprint for the web service (build-plan feature 39).
+#
+# Optional: you can create the service by hand in the dashboard and ignore this
+# file. It exists so the settings are reviewable in the repo rather than living
+# only in form fields nobody can diff.
+#
+# There is deliberately no cron or worker here. Render's free tier has neither,
+# and all scheduled work lives in Supabase `pg_cron` calling the `market-tick`
+# Edge Function — see architecture.md. A free web service also spins down after
+# 15 minutes idle, which is expected: the market keeps ticking without it.
+services:
+  - type: web
+    name: zerodha-rebuild
+    runtime: node
+    plan: free
+    # Supabase is in ap-south-1 (Mumbai); Singapore is the nearest Render region,
+    # so this is the shortest round trip available on the free plan.
+    region: singapore
+
+    # `--frozen-lockfile` makes a lockfile that disagrees with package.json fail
+    # the build rather than silently resolving something else. Dependencies are
+    # pinned exactly (code-standards.md), so a drift here is always a mistake.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+
+    # Returns 503 when the database is unreachable, so a failing deploy is
+    # visible rather than serving a broken app. It reaches Postgres on every
+    # call, which is also what makes it usable as a keep-warm probe.
+    healthCheckPath: /api/health
+
+    envVars:
+      # Must match `.node-version` and package.json's `engines`.
+      - key: NODE_VERSION
+        value: "26"
+
+      # `sync: false` means "prompt me, never store it in git". Every value below
+      # is set in the dashboard; none is committed.
+      #
+      # **NEXT_PUBLIC_* is inlined at build time, not read at runtime.** Setting
+      # one after the first deploy changes nothing until you rebuild — so set
+      # NEXT_PUBLIC_SITE_URL to this service's own URL and then trigger a manual
+      # deploy, or OAuth will redirect to whatever was there when it last built.
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+
+      # Server-only. Bypasses RLS, and `admin.ts` carries `import 'server-only'`
+      # so a client import fails the build rather than shipping it.
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

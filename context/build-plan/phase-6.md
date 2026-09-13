@@ -300,7 +300,13 @@ a comment saying why. The reclass never rested on an unobserved contrast figure 
 - A cold visit to the Render URL loads and signs in successfully.
 - `cron.job_run_details` on production shows successful runs while the web service is asleep.
 - Placing an order on production behaves exactly as locally.
-- No secret appears in the client bundle — verified by grepping the built output for the service-role key.
+- ✅ No secret appears in the client bundle — verified by grepping the built output for the
+  service-role key, the Twelve Data key and `TEST_DATABASE_URL`. All three absent from
+  `.next/static` **and** `.next/server`. **Scope the grep to those two directories**: run against
+  `.next` as a whole it reports all three as found, because Turbopack's build cache under
+  `.next/cache/` holds the loaded environment. That cache is gitignored and never deployed, so the
+  hit is a false positive — but a naive grep here reads as a leak and will cost someone an hour.
+  Re-run on the deployed build, since this one was built locally.
 
 ### 40 README, demo, and handoff
 
