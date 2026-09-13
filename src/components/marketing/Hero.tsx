@@ -25,7 +25,7 @@ export function Hero() {
             <span className="font-numeric font-medium text-body">
               {formatCurrency(OPENING_BALANCE)}
             </span>{' '}
-            of simulated cash, and trade around 200 NSE stocks against real market prices. Margin
+            of simulated cash, and trade around 200 real NSE stocks against simulated prices. Margin
             blocking, brokerage and STT, intraday square-off at 3:20pm — the mechanics behave, and
             none of the money is real.
           </p>

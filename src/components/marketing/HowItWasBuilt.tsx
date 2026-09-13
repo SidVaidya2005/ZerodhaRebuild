@@ -23,7 +23,7 @@ const PATHS: readonly Path[] = [
       'A scheduled Postgres job wakes once a minute during market hours and calls an Edge Function.',
       'That function checks the real NSE session clock against a holiday calendar before it does anything. The schedule window is a cost bound, never the authority.',
       'It fetches only the symbols someone is actually looking at, holding, or has an open order against, through a rate limiter.',
-      'Providers are tried in order and fall through on failure — a dead provider trips a circuit breaker and the next one takes over, ending at a simulator that always answers.',
+      'Providers are tried in order and fall through on failure — a dead provider trips a circuit breaker and the next one takes over, ending at a simulator that always answers. In this build the chain holds only that simulator, so it is what answers every time.',
       'Quotes are written with the provider that produced them and that provider\u2019s own timestamp, and the row change is pushed to subscribed browsers.',
       'The browser interpolates between refreshes so the tape moves. Those in-between figures are synthetic and are never used where a number drives a decision.',
     ],

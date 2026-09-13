@@ -38,7 +38,7 @@
 
 ## Quote providers
 
-- **Yahoo is deferred to the end of the project, so the build ships simulator-backed** and every price badges `SIMULATED`, which is honest by construction. **What must not ship is that state alongside copy promising real prices:** either Yahoo lands or `/` and `/about` are reconciled before F39 deploys. (F14)
+- **Yahoo is deferred to the end of the project, so the build ships simulator-backed** and every price badges `SIMULATED`, which is honest by construction. **The public copy was reconciled to that state at 6.00.04** — across `/`, `/about`, `/legal`, `/support` and the home page's `description` metadata — so the F39 gate is closed and the deploy is no longer blocked on a provider. **Landing a real provider now means editing that copy back**, including flipping `DataHonesty`'s `DELAYED` chip to `reachable`. (F14, closed 6.00.04)
 - **Twelve Data's free plan carries no NSE symbols at all** — verified against the live API with a real key. A plan entitlement, not a symbol-format issue, and its 800 credits/day could not sustain a one-minute tick even with access. The chain is Yahoo → simulator. (F14)
 - **Yahoo throttles bursts at the IP level and the block outlasts any in-process backoff.** Never treat 429 as a verdict on a symbol — only 404 means the symbol is unknown. Probe sequentially (~1.5s apart) and cache results so a throttled run resumes. (F14)
 - **The circuit breaker cannot open across ticks, so it does not yet do its job.** `createQuoteService`'s counts are closure-local and it is constructed per request, so every minute gets a full `failureThreshold` afresh. Harmless while the simulator is the whole chain; **the feature that adds Yahoo must move that state to a table.** (F15, F16)

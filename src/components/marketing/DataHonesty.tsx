@@ -10,12 +10,17 @@ type BadgeState = {
 /**
  * The four states deriveSource() can return, documented honestly.
  *
- * LIVE is included and explicitly marked unreachable rather than quietly
- * omitted: architecture.md reserves it for a genuinely streaming provider and
- * PROVIDER_IS_REALTIME is false for all three of this build's providers, so a
- * quote here can only badge DELAYED, SIMULATED or STALE. Saying that plainly is
- * the point of the badge — a LIVE chip over a polled REST endpoint would be the
+ * LIVE and DELAYED are both included and explicitly marked unreachable rather
+ * than quietly omitted. LIVE is structural: architecture.md reserves it for a
+ * genuinely streaming provider and PROVIDER_IS_REALTIME is false for all three.
+ * DELAYED is circumstantial — the chain supports it, but **no real provider is
+ * wired in this build**, so every quote resolves SIMULATED. Saying that plainly
+ * is the point of the badge; a DELAYED chip over a tick engine would be the
  * exact overclaim the whole provenance system exists to prevent.
+ *
+ * **Flip DELAYED back to reachable the moment a real provider joins the chain.**
+ * These chips are hand-written copy and nothing derives them from
+ * PROVIDER_IS_REALTIME, so they cannot follow that change on their own.
  *
  * These chips are presentational marketing copy, not the real badge. The real
  * one is built in feature 20 against Provenance and deriveSource().
@@ -28,13 +33,13 @@ const BADGE_STATES: readonly BadgeState[] = [
   {
     label: 'DELAYED',
     meaning:
-      'A real provider produced this price, recently enough to trade against, but it was polled rather than streamed. This is what you will see during market hours.',
-    reachable: true,
+      'A real provider produced this price, recently enough to trade against, but it was polled rather than streamed. The provider chain is built and this is what it would badge — but no real provider is wired in this build, so you will not see it here either.',
+    reachable: false,
   },
   {
     label: 'SIMULATED',
     meaning:
-      'No provider could be reached, so a tick engine produced this figure from the last known real price. It is a plausible number, not a real one, and it never pretends otherwise.',
+      'A tick engine produced this figure, walking from a real NSE closing price. It is a plausible number, not a real one, and it never pretends otherwise. This is what you will see here — every price in this build is simulated.',
     reachable: true,
   },
   {

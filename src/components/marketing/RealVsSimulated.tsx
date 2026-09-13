@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Section } from './Section'
 
 const REAL: readonly string[] = [
-  'The prices. Quotes come from a real market data provider covering real NSE instruments, and every one records where it came from and when.',
+  'The instruments. Around 200 real NSE symbols with their real names, seeded from published exchange data — and every quote against them records where it came from and when.',
   'The charge formulas. Brokerage, STT, exchange transaction charges, the SEBI turnover fee, stamp duty, GST and DP charges are modelled on the published structure, applied per order.',
   'The order mechanics. Margin is blocked at placement, released on cancellation, and an unaffordable order is rejected rather than quietly shrunk.',
   'The market clock. Sessions follow NSE hours in IST against a holiday calendar, and intraday positions are squared off at 3:20pm.',
@@ -11,6 +11,7 @@ const REAL: readonly string[] = [
 ]
 
 const SIMULATED: readonly string[] = [
+  'The prices. A tick engine generates every quote, walking from a real NSE closing price. The provider chain that would fetch real quotes is built, but none is wired here — so every price on screen badges SIMULATED, and says so rather than implying otherwise.',
   'The money. There is no account, no deposit, no withdrawal, and no payment integration anywhere in the system. The opening balance is a number in a database row.',
   'The fills. There is no counterparty and no order book, so an order fills in full at the last traded price or not at all — partial fills do not exist here.',
   'The market impact. Your orders move nothing, because there is nobody on the other side.',

@@ -141,10 +141,11 @@ const CATEGORIES: readonly Category[] = [
         question: 'Are the prices live?',
         answer: (
           <>
-            No, and the app never claims they are. Prices come from a real market data provider but
-            are polled on a schedule rather than streamed, so they are marked delayed. When no
-            provider can be reached, a simulator fills in and is labelled as such. The full
-            vocabulary is on the{' '}
+            No, and the app never claims they are. Every price here is produced by a simulator that
+            walks from a real NSE closing price, refreshed on a schedule — so each one is marked
+            SIMULATED. The provider chain that would fetch real quotes is built, but none is wired
+            in this build, so you will not see a delayed or live price at all. The full vocabulary
+            is on the{' '}
             <Link href="/" className="text-body underline underline-offset-4">
               home page
             </Link>
