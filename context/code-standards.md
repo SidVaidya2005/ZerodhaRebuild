@@ -143,6 +143,12 @@ Validation is forced at boot by `register()` in `src/instrumentation.ts`. Next.j
 | `TEST_DATABASE_URL` | Tiers 2 and 3. The project's connection string, on the **session-mode** pooler (port 5432) — tier 3 holds a transaction open across statements, which transaction-mode pooling cannot express | **Yes** |
 | `ALLOW_RACE_TESTS` | Set to run tier 3. Unset, `pnpm test:race` exits without touching the database | No |
 
+**One variable is read directly and deliberately.** `/api/health` reads `RENDER_GIT_COMMIT` from
+`process.env` with a `?? null` fallback rather than through either module above: it is injected by
+the platform, is not a secret, and is absent on every developer machine — validating it would fail
+`pnpm dev` for everyone to report a commit hash. The route carries a comment saying so. Any *other*
+variable still goes through `env.ts` or `env.server.ts`. (F39)
+
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically inside Edge Functions and
 must not be added to `supabase/functions/.env`. `.env.example` lists every variable with a dummy
 value and is committed; `.env.local` is not.

@@ -415,8 +415,15 @@ select is(
   'a buy beyond the balance is rejected'
 );
 
+-- Scoped to the fixture user like every other assertion in this file. Unscoped,
+-- this subquery returned more than one row the moment a *real* account in the
+-- same database held a rejected order — tier 2 runs against the one hosted
+-- project, which also carries the developer's own data, so an assertion that
+-- assumes `orders` holds only its fixtures is a false green waiting to happen.
 select is(
-  (select status from public.orders where rejection_reason = 'INSUFFICIENT_FUNDS'),
+  (select status from public.orders
+    where user_id = '11111111-1111-1111-1111-111111111111'::uuid
+      and rejection_reason = 'INSUFFICIENT_FUNDS'),
   'REJECTED'::public.order_status,
   'and the order row exists to be shown, rather than being rolled back'
 );

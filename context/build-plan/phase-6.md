@@ -282,9 +282,18 @@ a comment saying why. The reclass never rested on an unobserved contrast figure 
 **Logic:**
 
 - Render web service: build and start commands, Node version pinned, environment variables set.
-- Supabase production project migrated and seeded; Google OAuth redirect URLs updated for the Render origin.
+- ~~Supabase production project migrated and seeded~~ — **there is no separate production project
+  and must not be.** One project was the decision at 1.00.03, precisely so one could not pause
+  while the other stayed warm; see `constraints.md` → Environment and secrets. What remains here is
+  updating the Google OAuth redirect URLs for the Render origin.
 - `pg_cron` job scheduled against the production Edge Function.
-- `/api/health` returning build and database status.
+- `/api/health` returning build and database status. **Done (6.39.01).** It calls
+  `health_check()`, a `security definer` function returning a boolean and a timestamp, because
+  `anon` can read no table in this schema and `constraints/security.md` forbids granting it one.
+  200 when the database answers, 503 when it does not, never a Postgres message in the body, and
+  no service-role client on an unauthenticated path. **This is also the keep-warm probe** — the
+  request has to reach Postgres to count as activity against the free tier's idle timer, which is
+  why it reads a table rather than returning a constant.
 
 **Verify:**
 

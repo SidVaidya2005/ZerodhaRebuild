@@ -909,6 +909,13 @@ export type Database = {
       }
       execute_order: { Args: { p_order_id: string }; Returns: undefined }
       generate_client_id: { Args: never; Returns: string }
+      health_check: {
+        Args: never
+        Returns: {
+          checked_at: string
+          instruments_seeded: boolean
+        }[]
+      }
       market_constants: {
         Args: never
         Returns: {
