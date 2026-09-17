@@ -12,12 +12,12 @@
  * hardcoding the `.pnpm/puppeteer-core@<version>` path breaks silently on a
  * lighthouse bump.
  *
- * **Not every shot can be taken here.** The order ticket is a Radix dialog, and
- * `constraints/verification.md` records that a dispatched pointer sequence opens
- * a Radix *Sheet* but never the ticket — twice — and that a negative result
- * there is unjudgeable rather than failing. That one is captured by hand, in a
- * foregrounded window with real input. A script that appeared to capture it
- * would be confidently photographing a dialog that never opened.
+ * **The order ticket is opened with `page.mouse`, never a dispatched event.**
+ * `constraints/verification.md` records that a dispatched pointer sequence does
+ * not open that Radix dialog; puppeteer's mouse sends trusted input through the
+ * DevTools protocol, which does. The shot still waits for the dialog to report
+ * `data-state="open"`, so a click that opened nothing fails rather than
+ * photographing the page behind it.
  */
 
 import { createRequire } from 'node:module'
@@ -46,6 +46,8 @@ type Shot = {
   file: string
   /** Evaluated in the page; the shot waits for it before capturing. */
   ready?: () => boolean
+  /** Text of a button to click with real mouse input, opening a dialog to capture. */
+  openDialog?: string
 }
 
 /**
@@ -57,10 +59,6 @@ type Shot = {
  * during a trading session, the same command is re-run, and the same files fill
  * in. The README references a shot once it has something in it, which is why
  * this list is longer than the set of images the README currently uses.
- *
- * The order ticket is deliberately absent: it is a Radix dialog, and
- * `constraints/verification.md` records that a dispatched pointer sequence does
- * not open it. That one is captured by hand.
  */
 const SHOTS: readonly Shot[] = [
   { route: '/', file: 'home.png' },
@@ -76,11 +74,12 @@ const SHOTS: readonly Shot[] = [
     // Lightweight Charts paints on a canvas via requestAnimationFrame, which
     // `networkidle0` knows nothing about: without this the shot is a correctly
     // sized, completely empty chart. Proven by sampling the canvas: the candles
-    // are there long after the network goes quiet.
+    // are there long after the network goes quiet. The plot is the largest
+    // canvas; a fixed size threshold broke when the chart's height changed.
     ready: () => {
-      const canvas = [...document.querySelectorAll('canvas')].find(
-        (c) => c.width > 1000 && c.height > 400
-      )
+      const canvas = [...document.querySelectorAll('canvas')].sort(
+        (a, b) => b.width * b.height - a.width * a.height
+      )[0]
       if (!canvas) return false
       const ctx = canvas.getContext('2d')
       if (!ctx) return false
@@ -89,7 +88,33 @@ const SHOTS: readonly Shot[] = [
       return false
     },
   },
+  { route: '/stocks/RELIANCE', file: 'order-ticket.png', openDialog: 'Buy' },
 ]
+
+/** The dialog's open animation settles well inside this. */
+const DIALOG_SETTLE_MS = 1_000
+
+type Page = Awaited<ReturnType<Awaited<ReturnType<typeof puppeteer.launch>>['newPage']>>
+
+async function openDialog(page: Page, label: string) {
+  const buttons = await page.$$('button')
+  for (const button of buttons) {
+    const text = await button.evaluate((el: Element) => el.textContent?.trim())
+    if (text !== label) continue
+
+    const box = await button.boundingBox()
+    if (!box) continue
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    try {
+      await page.waitForSelector('[role="dialog"][data-state="open"]', { timeout: 10_000 })
+    } catch {
+      return false
+    }
+    await new Promise((resolve) => setTimeout(resolve, DIALOG_SETTLE_MS))
+    return true
+  }
+  return false
+}
 
 /** Public routes need no session; everything else must prove it landed signed in. */
 const PUBLIC_ROUTES = new Set(['/', '/pricing'])
@@ -102,7 +127,7 @@ const TERMINAL_ROUTES = SHOTS.map((s) => s.route).filter((r) => !PUBLIC_ROUTES.h
  * than a second name for one value. It is a credential: it lives in the
  * environment and is never written to a file.
  *
- * Absent, this fails rather than skips. Six of the eight shots are terminal
+ * Absent, this fails rather than skips. Seven of the nine shots are terminal
  * routes, so a silent skip would leave a run that looks green having captured
  * only the two public pages.
  */
@@ -181,6 +206,15 @@ try {
         await page.waitForFunction(shot.ready, { timeout: 20_000, polling: 250 })
       } catch {
         console.error(`✗ ${shot.route} — content never finished painting`)
+        failures += 1
+        continue
+      }
+    }
+
+    if (shot.openDialog) {
+      const opened = await openDialog(page, shot.openDialog)
+      if (!opened) {
+        console.error(`✗ ${shot.route} — clicking "${shot.openDialog}" opened no dialog`)
         failures += 1
         continue
       }

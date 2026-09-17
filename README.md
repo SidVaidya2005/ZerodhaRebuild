@@ -1,23 +1,55 @@
+<div align="center">
+
 # ZerodhaRebuild
 
-[![Demo](https://img.shields.io/badge/demo-zerodha--rebuild.onrender.com-0ECB81?style=flat-square)](https://zerodha-rebuild.onrender.com)
-[![Prices: simulated](https://img.shields.io/badge/prices-simulated-F0B90B?style=flat-square)](#prices-are-simulated-and-the-app-says-so)
-[![Next.js](https://img.shields.io/badge/Next.js-App%20Router-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
+**Paper-trade NSE stocks on a broker-grade engine. ₹0 at risk.**
+
+A full-stack paper-trading platform modelled on Zerodha's Kite terminal, with real margin,
+charges, order matching and an auditable ledger.
+
+[![Next.js 16](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Supabase Postgres](https://img.shields.io/badge/Supabase-Postgres-3FCF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com)
-[![Tests: 4 tiers](https://img.shields.io/badge/tests-4%20tiers-6366F1?style=flat-square)](#how-its-tested)
+[![Tests: 4 tiers](https://img.shields.io/badge/tests-4%20tiers-6366F1?style=flat-square)](#testing)
+[![Prices: simulated](https://img.shields.io/badge/prices-simulated-F0B90B?style=flat-square)](context/architecture.md#quote-provenance)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow?style=flat-square)](LICENSE)
 
-**Learn how Indian stock trading actually works, without risking a rupee.**
-
-A paper-trading platform modelled on Zerodha's Kite terminal. Sign in with Google, get ₹1,00,000 of
-simulated cash, and trade around 200 real NSE stocks — with the margin blocking, order rejections,
-brokerage and taxes that a real broker would apply.
-
-**→ [Try it live](https://zerodha-rebuild.onrender.com)** · No signup form, no card, no real money
-anywhere in the system.
+**[Live demo](https://zerodha-rebuild.onrender.com)** ·
+**[Portfolio](https://siddarthvaidya2005-7iyf.onrender.com/)** ·
+**[LinkedIn](https://www.linkedin.com/in/siddarth-vaidya-885871239)**
 
 ![The trading terminal](docs/screenshots/dashboard.png)
+
+</div>
+
+> [!NOTE]
+> An independent portfolio project, **not affiliated with or endorsed by Zerodha Broking Ltd.**
+> No real money moves anywhere in the system, and all prices are simulated.
+
+## Contents
+
+[Highlights](#highlights) · [Screenshots](#screenshots) · [Features](#features) ·
+[Tech stack](#tech-stack) · [How it works](#how-it-works) · [Architecture](#architecture) ·
+[Testing](#testing) · [Challenges and lessons](#challenges-and-lessons) ·
+[Getting started](#getting-started) · [Scope and limitations](#scope-and-limitations) ·
+[Roadmap](#roadmap) · [Author](#author)
+
+---
+
+## Highlights
+
+- **Atomic order execution.** Every fill runs in a single Postgres transaction inside one function,
+  `execute_order`, so money can never leave an account without the shares arriving.
+- **All money math in the database.** Balances, average prices, charges and P&L are `numeric`
+  arithmetic in Postgres. TypeScript only formats them.
+- **Row Level Security as the security boundary.** Client roles can only `select` the money tables;
+  every write goes through a `security definer` function.
+- **Concurrency-safe by design.** One global lock order, pinned by a test that reads it back out of
+  the live function definitions.
+- **Four test tiers**, including real two-connection race tests and a parity check that keeps the
+  TypeScript charge estimate and the Postgres calculator exactly equal.
+- **Honest data provenance.** Every price carries its source, and the UI never labels simulated data
+  as live.
 
 ---
 
@@ -25,110 +57,63 @@ anywhere in the system.
 
 | | |
 | --- | --- |
-| **Stock detail** — candlesticks, OHLC, and a buy/sell ticket<br>![Stock detail](docs/screenshots/stock-detail.png) | **Order ticket** — position-aware margin, before you commit<br>![Order ticket](docs/screenshots/order-ticket.png) |
-| **Funds** — every rupee that moved, as a ledger<br>![Funds](docs/screenshots/funds.png) | **Pricing** — the charge model the engine actually applies<br>![Pricing](docs/screenshots/pricing.png) |
+| **Stock detail**: candlesticks, OHLC and a buy/sell ticket<br>![Stock detail](docs/screenshots/stock-detail.png) | **Order ticket**: position-aware margin, shown before you commit<br>![Order ticket](docs/screenshots/order-ticket.png) |
+| **Funds**: every rupee that moved, as a ledger<br>![Funds](docs/screenshots/funds.png) | **Pricing**: the charge model the engine applies<br>![Pricing](docs/screenshots/pricing.png) |
+| **Holdings**: live P&L and day change on delivery positions<br>![Holdings](docs/screenshots/holdings.png) | **Landing page**: the public marketing site<br>![Landing page](docs/screenshots/home.png) |
 
 ---
 
 ## Features
 
-**Trading**
+| Area | What you get |
+| --- | --- |
+| **Orders** | Market and limit orders, in CNC (delivery) and MIS (intraday). Limit orders rest and fill automatically. Open orders can be modified or cancelled. |
+| **Risk** | Margin is blocked on placement and released on fill, cancel or rejection. MIS short selling with collateral. Intraday positions are squared off at 15:20 IST. |
+| **Charges** | Brokerage, STT, exchange transaction charges, SEBI fee, stamp duty, GST and DP charges, as a real trade incurs them. |
+| **Portfolio** | Holdings, Positions, Funds with a complete ledger, Reports, and realised and unrealised P&L. |
+| **Terminal** | A searchable, reorderable watchlist with ticking prices, stock detail pages with candlestick charts, and one-click account reset to ₹1,00,000. |
+| **Quality** | Light and dark themes, responsive down to a 375px phone, and accessibility-audited with Lighthouse. |
 
-- **Market and limit orders**, in **CNC** (delivery) and **MIS** (intraday) — the same product split
-  Zerodha uses.
-- **Limit orders rest and fill on their own** when the price crosses them. You don't have to be
-  watching.
-- **Short selling on MIS**, with collateral held against the position until you cover.
-- **Intraday positions close themselves at 15:20 IST**, the way a real broker force-squares them.
-- **Orders can be modified or cancelled** while they're still open, and the margin follows.
-
-**The money is modelled properly**
-
-- **Every charge a real trade incurs**: brokerage, STT, exchange transaction charges, the SEBI
-  turnover fee, stamp duty, GST, and DP charges on delivery sells.
-- **Margin is blocked when you place an order** and released when it fills, cancels, or is rejected.
-- **A complete ledger** — every rupee that moves is one row, and the rows always add up to your
-  balance.
-- **Realised and unrealised P&L**, with the day's change measured against the previous close.
-
-**Everything around it**
-
-- A **watchlist** you can search, reorder, and trade straight from, with prices that tick and flash.
-- **Holdings, Positions, Funds, Reports**, and a **stock detail page with candlestick charts**.
-- **Reset your account** to a clean ₹1,00,000 whenever you want.
-- **Light and dark themes**, works down to a 375px phone, and accessibility-audited.
-
----
-
-## How it works
-
-In plain terms, five things happen.
-
-**1. You sign in, and an account appears.** Google OAuth, no forms. A database trigger creates your
-profile with a generated client ID, credits ₹1,00,000, writes the matching ledger row, and seeds a
-starter watchlist — so you never land on an empty screen.
-
-**2. Prices move on their own.** A job runs inside the database every minute the NSE is open. It
-takes each stock's real closing price and walks it forward, then pushes the new price to your browser
-over a realtime connection. Between updates the browser smoothly interpolates, so the number ticks
-instead of jumping once a minute.
-
-That job lives in the database rather than the website on purpose: the site sleeps when nobody visits
-it, and the market shouldn't stop just because nobody's watching.
-
-**3. You place an order.** The app checks you can afford it and blocks that money as margin. A market
-order fills right away at the current price. A limit order waits, and the same background job fills
-it the moment the price crosses.
-
-**4. The fill happens in one shot.** Cash is debited, charges calculated and applied, a trade
-recorded, a holding or position created or updated, and ledger rows written — all inside a single
-database transaction. It either all happens or none of it does. There's no state where your money
-left but your shares never arrived.
-
-**5. Intraday clears itself out.** At 15:20 IST every open MIS position is closed at the current
-price, with the realised P&L recorded, exactly as a broker would.
+Full scope: [`context/project-overview.md`](context/project-overview.md).
 
 ---
 
 ## Tech stack
 
-| | |
+| Layer | Technology |
 | --- | --- |
-| **Frontend** | Next.js (App Router, Server Components by default) · React · TypeScript in `strict` · Tailwind CSS · shadcn/ui on Radix |
-| **Client state** | Zustand for the in-memory quote store and tick interpolation · Recharts for the portfolio donut · Lightweight Charts for candlesticks |
-| **Data** | Supabase Postgres · Row Level Security · plpgsql functions for everything involving money |
-| **Auth** | Supabase Auth, Google OAuth only |
-| **Realtime & jobs** | Supabase Realtime · Edge Functions on Deno · `pg_cron` for scheduling |
-| **Testing** | Vitest · pgTAP · node-postgres for concurrency races |
-| **Hosting** | Render (free web service) + hosted Supabase |
+| **Frontend** | Next.js 16 (App Router, Server Components) · React 19 · TypeScript (strict) · Tailwind CSS v4 · shadcn/ui on Radix |
+| **Client state and charts** | Zustand · Lightweight Charts · Recharts |
+| **Backend and data** | Supabase Postgres · plpgsql functions · Row Level Security · Zod-validated Server Actions |
+| **Auth** | Supabase Auth with Google OAuth |
+| **Realtime and jobs** | Supabase Realtime · Edge Functions (Deno) · `pg_cron` |
+| **Testing** | Vitest · pgTAP · node-postgres |
+| **Hosting** | Render · hosted Supabase |
 
-Exact pinned versions live in `package.json`, and `/about` renders them from a typed list with a
-drift test against it — so they're never repeated anywhere they could quietly go stale.
+Pinned versions live in [`package.json`](package.json). Full stack rationale:
+[`context/architecture.md`](context/architecture.md#stack).
 
 ---
 
-## Prices are simulated, and the app says so
+## How it works
 
-This is the part most worth understanding.
+1. **Sign in with Google.** A database trigger creates your profile, credits ₹1,00,000, writes the
+   matching ledger row and seeds a starter watchlist.
+2. **Prices move.** A `pg_cron` job calls an Edge Function every minute during NSE hours. It walks
+   each stock forward from its real closing price and streams updates to the browser over Realtime,
+   where they are interpolated so prices tick smoothly.
+3. **Place an order.** A Server Action validates it and blocks margin. Market orders fill
+   immediately; limit orders fill when the price crosses.
+4. **The fill is one transaction.** Cash, charges, the trade, the holding or position, and the ledger
+   rows all commit together or not at all.
+5. **Intraday clears itself.** At 15:20 IST every open MIS position is closed and its P&L recorded.
 
-**No external market-data provider is wired.** Twelve Data's free plan carries no NSE symbols at all
-(verified with a real key), and a validation probe against Yahoo got the development machine's IP
-blocked. No keyless source proved workable, so the built-in tick engine isn't a fallback — it's the
-whole quote chain, by decision.
-
-What that means concretely:
-
-- The **instruments are real** — Nifty 200 constituents, each walking from a real NSE closing price.
-- The **prices are simulated**, and every price on screen can tell you so.
-- Every quote stores its provider and timestamp, and the badge is **derived when you read it**, never
-  stored. In this build every quote resolves `SIMULATED`.
-- Two of the four provenance states are unreachable here and the UI admits it: `DELAYED`, because no
-  real provider exists, and `LIVE` structurally — that one is reserved for a provider that genuinely
-  streams, and a polled REST endpoint may never claim it.
-
-The machinery stays in the code even though only one branch can fire, because the interesting
-property is that the badge *refuses to overclaim*. A `LIVE` chip over a polled endpoint would be
-exactly the dishonesty it exists to prevent.
+> [!IMPORTANT]
+> **Prices are simulated.** The ~200 instruments are real Nifty 200 constituents, but their prices
+> are generated from real NSE closing prices, because no free data source offered usable NSE
+> quotes. Each quote stores its provider and timestamp, and its badge is derived at render time, so
+> the app can never claim to be live. Details:
+> [`context/architecture.md` → Quote Provenance](context/architecture.md#quote-provenance).
 
 ---
 
@@ -141,20 +126,20 @@ flowchart TB
         CC["Client Components<br/>Zustand quote store<br/>+ tick interpolation"]
     end
 
-    subgraph next["Next.js on Render (free web service)"]
+    subgraph next["Next.js on Render"]
         SA["Server Actions<br/>Zod-validated, the only mutation path"]
         PROXY["proxy.ts<br/>session refresh + route guard"]
     end
 
-    subgraph supa["Supabase (hosted Postgres, ap-south-1)"]
-        RLS["RLS — auth.uid() = user_id<br/>the security boundary"]
+    subgraph supa["Supabase (hosted Postgres)"]
+        RLS["RLS: auth.uid() = user_id<br/>the security boundary"]
         EX["execute_order()<br/>the only place a fill happens"]
         Q[("quotes")]
         RT["Realtime<br/>(Postgres Changes)"]
     end
 
-    subgraph sched["Scheduled work — never in the Next.js process"]
-        CRON["pg_cron · every minute<br/>weekdays, 03–10 UTC"]
+    subgraph sched["Scheduled work, outside the Next.js process"]
+        CRON["pg_cron · every minute<br/>during market hours"]
         TICK["market-tick Edge Function<br/>gate → refresh → match → square off"]
         SIM["Tick simulator"]
     end
@@ -172,82 +157,93 @@ flowchart TB
     RT -->|"live row changes"| CC
 ```
 
-### What's worth reading in the code
+**Why scheduled work lives in the database:** Render's free tier sleeps after 15 minutes idle, and the
+market should keep moving when nobody is visiting.
 
-- **No money is computed in TypeScript.** Every balance, average price, charge total and realised P&L
-  is `numeric` arithmetic in Postgres, read back for display. TypeScript formats numbers; it never
-  produces a stored one.
-- **Order fills happen in exactly one function.** `execute_order` takes `SELECT … FOR UPDATE` on the
-  user's funds row before reading the balance, re-checks the order is still open under that lock, and
-  is the only writer of a fill — not a Server Action, not a route handler, not the Edge Function.
-- **One lock order everywhere:** `orders` → `funds` → `holdings`/`positions`. A pgTAP suite reads the
-  sequence back out of each live function definition and pins it, because adding a guard under a row
-  lock is also a change to lock order.
-- **RLS is the security boundary, not application code.** On the six money tables, `select` is the
-  only grant any client role holds. There is no write policy for any command, so every write arrives
-  through a `security definer` function.
-- **Shorts carry two averages that may never cross.** One is net of charges and exists only for P&L;
-  the other is gross and exists only as the collateral basis. Using either for the other's job
-  silently under-collateralises the position or reports charges as profit.
-
-### How it's tested
-
-Four tiers, each doing something the others cannot.
-
-<details>
-<summary>What each tier covers</summary>
-
-<br>
-
-1. **Logic** (Vitest, no database) — charge estimator, provider chain, market-hours, parsers.
-2. **Database** (pgTAP) — RLS, grants, CHECK constraints, function correctness. Run through a custom
-   runner rather than `supabase test db`, which demands Docker even against a remote database.
-3. **Concurrency** (two live Postgres connections) — row-lock races the other tiers cannot express.
-   Gated behind an environment variable because it commits real rows.
-4. **Parity** (read-only) — the TypeScript charge estimator and the Postgres calculator must agree
-   *exactly*, over random inputs. Money is computed in Postgres, but the order ticket shows an
-   estimate before you commit; this is what stops the two drifting.
-
-</details>
+| Go deeper | Document |
+| --- | --- |
+| System boundaries, auth and the invariants | [`context/architecture.md`](context/architecture.md#invariants) |
+| Tables, views and folder structure | [`context/architecture/data-model.md`](context/architecture/data-model.md) |
+| Charges, margin, ledger and P&L rules | [`context/trading-contract.md`](context/trading-contract.md) |
+| Server Action and Postgres function patterns | [`context/architecture/patterns.md`](context/architecture/patterns.md) |
+| Code standards | [`context/code-standards.md`](context/code-standards.md) |
 
 ---
 
-## Running it locally
+## Testing
 
-Clone, `pnpm install`, point it at a Supabase project, and run `pnpm dev`.
+| Tier | Tool | What it proves | Command |
+| --- | --- | --- | --- |
+| **1. Logic** | Vitest | Charge estimator, market hours, parsers, provider chain | `pnpm test` |
+| **2. Database** | pgTAP | RLS, grants, CHECK constraints, function correctness, lock order | `pnpm test:db` |
+| **3. Concurrency** | node-postgres | Row-lock races across two live connections | `pnpm test:race` |
+| **4. Parity** | node-postgres | The TypeScript charge estimate equals the Postgres calculation exactly | `pnpm test:parity` |
 
-**→ [`docs/SETUP.md`](docs/SETUP.md)** has the full walkthrough: prerequisites, environment
-variables, every command, and the deployment notes.
+Details: [`context/code-standards/testing.md`](context/code-standards/testing.md).
 
 ---
 
-## Scope
+## Challenges and lessons
 
-**In:** the marketing site; Google OAuth with automatic account bootstrap; ~200 NSE symbols; a live
-watchlist; market and limit orders in CNC and MIS; the full charge model; margin reservation
-including short collateral; limit-order matching and 15:20 IST square-off; Holdings, Positions, Funds
-with a complete ledger, Reports, and stock detail with candlesticks; account reset; light and dark
-themes; RLS on every user-owned table.
+- **No free NSE data.** Twelve Data's free plan carries no NSE symbols, and probing Yahoo got the
+  development IP blocked. Rather than ship a fragile scraper, I made the simulator the entire quote
+  chain and built provenance so the UI stays honest about it.
+- **Race conditions in money code.** Fills, cancels, limit matching and square-off all contend for the
+  same rows. The answer was a single lock order (`orders` → `funds` → `holdings`/`positions`) enforced in every function,
+  plus a test that fails if any function drifts from it.
+- **Testing a remote database without Docker.** `supabase test db` needs Docker even against a hosted
+  database, so I wrote a small runner that executes the pgTAP suites directly.
+- **A blank page that was really HTTP 431.** Leftover auth cookies from other local projects pushed
+  request headers past Node's 16 KB limit, so requests died before reaching Next.js, with no log line.
 
-**Out, deliberately:** any real-money movement; real brokerage integration; derivatives; SL/GTT/AMO,
-bracket and cover orders; mutual funds, IPOs and bonds; KYC; order-book depth simulation; multi-user
-interaction; notifications; native apps; corporate actions; CNC short selling; backtesting.
+Design notes and past decisions: [`context/constraints.md`](context/constraints.md).
 
-<details>
-<summary><strong>Known simplifications</strong> — disclosed here and on <code>/legal</code> in the app</summary>
+---
 
-<br>
+## Getting started
 
-- **DP charge is per sell order**, where a real broker charges per scrip per day. Matching reality
-  would mean querying same-day trades inside the locked transaction.
-- **Fills are all-or-nothing.** There's no simulated counterparty book, so partial fills don't exist.
-- **A short's loss is capped at its collateral.** When covering would drive cash below zero the
-  position still closes, the debit is capped, and the remainder is recorded as an auditable
-  adjustment. A real broker would issue a margin call instead.
-- **Day's P&L measures everything against the previous close**, including shares bought today, where
-  a broker splits those out.
+**Prerequisites:** Node 26, pnpm 11 and a Supabase project. Docker is not needed.
 
-</details>
+```bash
+git clone https://github.com/SidVaidya2005/ZerodhaRebuild.git
+cd ZerodhaRebuild
+pnpm install
+cp .env.example .env.local   # fill in your Supabase values
+pnpm supabase link --project-ref <your-project-ref>
+pnpm supabase db push
+pnpm seed
+pnpm dev                     # http://localhost:3000
+```
+
+Google OAuth, environment variables, the scheduled job, every command and deployment are covered in
+**[`docs/SETUP.md`](docs/SETUP.md)**.
+
+---
+
+## Scope and limitations
+
+**Deliberately out of scope:** real money or brokerage integration, derivatives, SL/GTT/AMO and
+bracket orders, mutual funds and IPOs, KYC, and CNC short selling. The full list is in
+[`context/project-overview.md`](context/project-overview.md#features-out-of-scope).
+
+**Known simplifications** (also disclosed on `/legal` in the app):
+
+- DP charges apply per sell order rather than per scrip per day.
+- Fills are all-or-nothing; there are no partial fills.
+- A short's loss is capped at its collateral instead of triggering a margin call.
+- Day's P&L measures every holding against the previous close, including shares bought today.
+
+The rules behind each one are in [`context/trading-contract.md`](context/trading-contract.md).
+
+---
+
+## Roadmap
+
+- [ ] Plug in a real delayed NSE data provider; the provenance model already supports it
+- [ ] Stop-loss and GTT orders
+- [ ] Partial fills against a simulated order book
+- [ ] DP charges per scrip per day, matching real brokers
+- [ ] Corporate actions such as splits and dividends
 
 ---
 
@@ -260,10 +256,6 @@ Built by **Siddarth Vaidya**.
 [![GitHub](https://img.shields.io/badge/GitHub-SidVaidya2005-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/SidVaidya2005)
 [![Email](https://img.shields.io/badge/email-siddarthvaidya2005%40gmail.com-EA4335?style=flat-square&logo=gmail&logoColor=white)](mailto:siddarthvaidya2005@gmail.com)
 
----
-
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
-This is an unaffiliated portfolio project, not associated with or endorsed by Zerodha Broking Ltd.
+[MIT](LICENSE)

@@ -365,10 +365,11 @@ below is written from nothing.
   `lighthouse`, Brave via `CHROME_PATH`, session from `OVERFLOW_GUARD_COOKIE`, and its
   landed-route guard so a bounce to `/auth/login` fails the run instead of photographing it.
   Asserts the theme it actually got, per F38.
-- **The order-ticket shot is captured by hand**, in a foregrounded window with real input.
-  `constraints/verification.md` records that a dispatched pointer sequence opens a Radix *Sheet*
-  but never the ticket — twice — and that a negative result there is unjudgeable rather than
-  failing. Scripting it would produce a confident screenshot of a dialog that never opened.
+- **The order-ticket shot is scripted with `page.mouse`, not a dispatched event.** A dispatched
+  pointer sequence never opens the ticket (`constraints/verification.md`); puppeteer's mouse sends
+  trusted input through the DevTools protocol and does. The shot waits for
+  `[role="dialog"][data-state="open"]`, so a click that opened nothing fails the run instead of
+  photographing the page behind it. (Originally planned as a by-hand capture.)
 - ~~Repository links from About and the footer~~ — **already shipped.** `REPOSITORY_URL` in
   `nav-links.ts`, rendered by `SiteFooter`, `HowItWasBuilt` on About and `SupportContact` on
   Support, all through the shared `ExternalLink`. Nothing to do.
