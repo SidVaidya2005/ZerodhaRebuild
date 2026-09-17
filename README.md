@@ -251,6 +251,17 @@ interaction; notifications; native apps; corporate actions; CNC short selling; b
 
 ---
 
+## Author
+
+Built by **Siddarth Vaidya**.
+
+[![Portfolio](https://img.shields.io/badge/portfolio-visit-0ECB81?style=flat-square&logo=googlechrome&logoColor=white)](https://siddarthvaidya2005-7iyf.onrender.com/)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-connect-0A66C2?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/siddarth-vaidya-885871239)
+[![GitHub](https://img.shields.io/badge/GitHub-SidVaidya2005-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/SidVaidya2005)
+[![Email](https://img.shields.io/badge/email-siddarthvaidya2005%40gmail.com-EA4335?style=flat-square&logo=gmail&logoColor=white)](mailto:siddarthvaidya2005@gmail.com)
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

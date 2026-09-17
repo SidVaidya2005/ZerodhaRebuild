@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 
+import { AboutAuthor } from '@/components/marketing/AboutAuthor'
 import { AboutIntro } from '@/components/marketing/AboutIntro'
 import { HowItWasBuilt } from '@/components/marketing/HowItWasBuilt'
 import { RealVsSimulated } from '@/components/marketing/RealVsSimulated'
@@ -18,6 +19,7 @@ export default function AboutPage() {
       <HowItWasBuilt />
       <StackTable />
       <RealVsSimulated />
+      <AboutAuthor />
     </>
   )
 }

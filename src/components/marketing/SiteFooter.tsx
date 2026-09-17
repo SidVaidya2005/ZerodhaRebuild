@@ -1,13 +1,11 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { AuthorLinks } from './AuthorLinks'
 import { ExternalLink } from './ExternalLink'
 import { NAV_LINKS, REPOSITORY_URL } from './nav-links'
 
-const PROJECT_LINKS = [
-  { href: REPOSITORY_URL, label: 'Source on GitHub' },
-  { href: 'https://github.com/SidVaidya2005', label: 'Author' },
-] as const
+const PROJECT_LINKS = [{ href: REPOSITORY_URL, label: 'Source on GitHub' }] as const
 
 const LEGAL_LINKS = [{ href: '/legal', label: 'Disclaimer' }] as const
 
@@ -28,6 +26,8 @@ export function SiteFooter() {
             <p className="mt-2 text-body-sm text-body">
               A paper-trading terminal for NSE equities, built as a portfolio project.
             </p>
+            {/* -ml-2 aligns the first icon's glyph, not its 36px hit area, with the text above. */}
+            <AuthorLinks className="mt-4 -ml-2" />
           </div>
 
           <FooterColumn heading="Site">
