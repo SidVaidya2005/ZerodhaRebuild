@@ -17,10 +17,9 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Current Status
 
-**Phase:** Phase 6 — Polish & Ship, **F40 in progress** — README, demo and handoff, the last feature in the project. **F16 and the Phase 2 checkpoint stay open by decision**; F16 lands at the very end. Do not tick either
-**Last completed:** **F39 Deploy. The app is live at <https://zerodha-rebuild.onrender.com>**, signing in with Google against the one hosted Supabase project. `/api/health` reports build and database status through a `health_check()` `security definer` function — `anon` can read no table here and `constraints/security.md` forbids granting it one, so a function returning a boolean and a timestamp is the narrow exception, and `21-health-check.sql` asserts it widened nothing. Two deploys failed first: `corepack enable` cannot write to Render's read-only `/usr`, and a build carrying `NEXT_PUBLIC_SITE_URL=http://localhost:3000` sent every sign-in to localhost while every other signal stayed green
-**In progress:** **F40, three commits in (`6.40.01`–`6.40.03`), not finished.** Landed: the account reset to post-signup state through the app's own button; `README.md` rewritten from 16 bytes, recruiter-first, with seven badges; setup, commands, env vars and deployment moved to `docs/SETUP.md`; `scripts/capture-screenshots.mts` capturing nine shots in one command, the order ticket included via trusted `page.mouse` input; all nine captured on 2026-09-17 during a session with trades placed, so Holdings and the dashboard donut are populated; and the README restructured (highlights, challenges, roadmap, links into `context/`) with a 3×2 screenshot grid
-**Next:** the build-journal entry and the F40 tick. Positions is still empty (no MIS orders placed), so it stays out of the README grid. `pnpm capture:screenshots` needs `OVERFLOW_GUARD_COOKIE` and a running server (or `SCREENSHOT_BASE` pointed at the deployed app). **Four Phase 6 follow-ups remain**, all in `phase-6.md`, and `pnpm format:check` is red on three files that were **already unformatted at HEAD** (`render.yaml`, `TradeHistoryTable.tsx`, `env.ts`)
+**Phase:** Phase 6 — Polish & Ship, **checkpoint run, not ticked**: its production regression still needs a sign-up and a session-hours trade. **F16 and the Phase 2 checkpoint stay open by decision**; F16 lands at the very end. Do not tick either
+**Last completed:** **the Phase 6 checkpoint's automated half (2026-09-24).** All four test tiers, lint, typecheck, format and build pass; production serves HEAD with a healthy database. The phase-diff review found four real bugs, all fixed: the stock page never threw on a failed read, the layout dropped `profiles`/`funds` errors, the menu sheet duplicated the watchlist from `lg` to `xl`, and the order-ticket screenshot skipped the chart-paint wait. The journal is compacted and two lessons are promoted
+**Next:** the regression legs in `phase-6.md` → Phase checkpoint: sign up with a fresh Google account, place a CNC and an MIS market order during a session (Mon–Fri 09:15–15:30 IST), reset, sign out, and look at the `lg`–`xl` sheet and the stock page while there. Then tick the checkpoint. Three follow-ups are filed there, and F16 remains the last item in the project
 
 ---
 
@@ -87,7 +86,7 @@ Any AI agent reading this should immediately know what is done, what is in progr
 - [x] 37 Responsive pass
 - [x] 38 Accessibility pass
 - [x] 39 Deploy
-- [ ] 40 README, demo, and handoff
+- [x] 40 README, demo, and handoff
 - [ ] Phase checkpoint — verify Phase 6 — Polish & Ship is stable before starting the next phase
 
 ---
