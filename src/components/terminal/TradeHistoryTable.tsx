@@ -118,7 +118,10 @@ export function TradeHistoryTable({ trades, total, query }: TradeHistoryTablePro
 
                 <td className="py-2 text-left">
                   <span
-                    className={cn('font-medium', trade.side === 'BUY' ? 'text-up-text' : 'text-down-text')}
+                    className={cn(
+                      'font-medium',
+                      trade.side === 'BUY' ? 'text-up-text' : 'text-down-text'
+                    )}
                   >
                     {trade.side}
                   </span>

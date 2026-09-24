@@ -59,17 +59,14 @@ export function parsePublicEnv(source: Record<string, unknown> = readPublicEnv()
  * locally is also a production build and legitimately serves localhost — the
  * accessibility and overflow audits both depend on it.
  */
-export function assertDeployableSiteUrl(
-  siteUrl: string,
-  platform: string | undefined
-): void {
+export function assertDeployableSiteUrl(siteUrl: string, platform: string | undefined): void {
   if (!platform) return
   const { hostname } = new URL(siteUrl)
   if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') {
     throw new Error(
       `NEXT_PUBLIC_SITE_URL is "${siteUrl}" on a deployed instance (${platform}).\n` +
         'Google sign-in would send every user to localhost after authenticating.\n' +
-        'Set it to this service\'s public URL, then trigger a new deploy — the value ' +
+        "Set it to this service's public URL, then trigger a new deploy — the value " +
         'is inlined at build time, so saving it alone changes nothing.'
     )
   }

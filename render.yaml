@@ -41,7 +41,7 @@ services:
     envVars:
       # Must match `.node-version` and package.json's `engines`.
       - key: NODE_VERSION
-        value: "26"
+        value: '26'
 
       # `sync: false` means "prompt me, never store it in git". Every value below
       # is set in the dashboard; none is committed.
