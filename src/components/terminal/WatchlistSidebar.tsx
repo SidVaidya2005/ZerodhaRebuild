@@ -407,9 +407,13 @@ export function WatchlistRail({ rows, universe }: PanelProps) {
   // user lacks: the sheet trigger is a focusable button already in the tab order.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== 'k' || !(event.metaKey || event.ctrlKey)) return
+      // Lowercased so Caps Lock or Shift still reach the shortcut.
+      if (event.key.toLowerCase() !== 'k' || !(event.metaKey || event.ctrlKey)) return
       const input = searchRef.current
       if (!input || input.offsetParent === null) return
+      // From `lg` to `xl` the menu sheet can be open over a visible rail; its
+      // focus trap would fight a focus moved behind the overlay.
+      if (document.querySelector('[role="dialog"][data-state="open"]')) return
       event.preventDefault()
       input.focus()
       input.select()
@@ -517,7 +521,12 @@ export function WatchlistSheet({ rows, universe }: PanelProps) {
           </ul>
         </nav>
 
-        <WatchlistPanel rows={rows} universe={universe} />
+        {/* Below `lg` only: from `lg` to `xl` the rail is already on screen, and
+            the sheet is just the nav. The wrapper keeps the panel's
+            `min-h-0 flex-1` claim on the column's height. (Phase 6 checkpoint) */}
+        <div className="flex min-h-0 flex-1 flex-col lg:hidden">
+          <WatchlistPanel rows={rows} universe={universe} />
+        </div>
       </SheetContent>
     </Sheet>
   )
