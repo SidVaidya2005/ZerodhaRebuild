@@ -50,6 +50,23 @@ type Shot = {
   openDialog?: string
 }
 
+// Lightweight Charts paints on a canvas via requestAnimationFrame, which
+// `networkidle0` knows nothing about: without this the shot is a correctly
+// sized, completely empty chart. Proven by sampling the canvas: the candles
+// are there long after the network goes quiet. The plot is the largest
+// canvas; a fixed size threshold broke when the chart's height changed.
+const chartPainted = (): boolean => {
+  const canvas = [...document.querySelectorAll('canvas')].sort(
+    (a, b) => b.width * b.height - a.width * a.height
+  )[0]
+  if (!canvas) return false
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return false
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  for (let i = 3; i < data.length; i += 4 * 97) if (data[i] !== 0) return true
+  return false
+}
+
 /**
  * Every surface the README illustrates, captured in one pass.
  *
@@ -71,24 +88,11 @@ const SHOTS: readonly Shot[] = [
   {
     route: '/stocks/RELIANCE',
     file: 'stock-detail.png',
-    // Lightweight Charts paints on a canvas via requestAnimationFrame, which
-    // `networkidle0` knows nothing about: without this the shot is a correctly
-    // sized, completely empty chart. Proven by sampling the canvas: the candles
-    // are there long after the network goes quiet. The plot is the largest
-    // canvas; a fixed size threshold broke when the chart's height changed.
-    ready: () => {
-      const canvas = [...document.querySelectorAll('canvas')].sort(
-        (a, b) => b.width * b.height - a.width * a.height
-      )[0]
-      if (!canvas) return false
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return false
-      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      for (let i = 3; i < data.length; i += 4 * 97) if (data[i] !== 0) return true
-      return false
-    },
+    ready: chartPainted,
   },
-  { route: '/stocks/RELIANCE', file: 'order-ticket.png', openDialog: 'Buy' },
+  // The same wait: the chart sits behind the dialog, and a 1s settle after the
+  // click does not cover Lightweight Charts' first paint. (Phase 6 checkpoint)
+  { route: '/stocks/RELIANCE', file: 'order-ticket.png', openDialog: 'Buy', ready: chartPainted },
 ]
 
 /** The dialog's open animation settles well inside this. */
