@@ -10,6 +10,7 @@ import { StockStats } from '@/components/terminal/StockStats'
 import { getCandles } from '@/lib/market/candles/service'
 import { type CandleRange } from '@/lib/market/candles/types'
 import { createClient } from '@/lib/supabase/server'
+import { throwOnReadError } from '@/lib/read-errors'
 
 type StockPageProps = {
   params: Promise<{ symbol: string }>
@@ -55,10 +56,10 @@ export default async function StockPage({ params, searchParams }: StockPageProps
     {
       data: { user },
     },
-    { data: instrument },
-    { data: quote },
-    { data: holding },
-    { data: position },
+    { data: instrument, error: instrumentError },
+    { data: quote, error: quoteError },
+    { data: holding, error: holdingError },
+    { data: position, error: positionError },
   ] = await Promise.all([
     supabase.auth.getUser(),
     supabase
@@ -82,6 +83,16 @@ export default async function StockPage({ params, searchParams }: StockPageProps
       .eq('symbol', symbol)
       .maybeSingle(),
   ])
+
+  // Thrown before the 404 check: a failed instruments read leaves `instrument`
+  // null, and without this a valid symbol would 404 instead of reaching the
+  // segment's error boundary. (F36, fixed at the Phase 6 checkpoint)
+  throwOnReadError('stocks', {
+    instruments: instrumentError,
+    quotes: quoteError,
+    portfolio_holdings: holdingError,
+    portfolio_positions: positionError,
+  })
 
   if (!instrument) notFound()
 

@@ -70,8 +70,8 @@ export default async function TerminalLayout({ children }: { children: ReactNode
   if (!user) redirect(LOGIN_PATH)
 
   const [
-    { data: profile },
-    { data: funds },
+    { data: profile, error: profileError },
+    { data: funds, error: fundsError },
     holidays,
     { data: watchlist, error: watchlistError },
     { data: universe, error: universeError },
@@ -119,9 +119,8 @@ export default async function TerminalLayout({ children }: { children: ReactNode
   ])
 
   // Narrowed rather than asserted: the column is `text` with a CHECK behind it,
-  // so Postgres guarantees the value but the generated type does not. Falling
-  // back to the column's own default keeps a failed read from flipping the
-  // terminal to light.
+  // so Postgres guarantees the value but the generated type does not. A failed
+  // read throws below, so the fallback only covers a value the type cannot see.
   const storedTheme: Theme = isTheme(profile?.theme) ? profile.theme : 'dark'
 
   // Prefer the profile the bootstrap wrote, then Google's claim, then the email.
@@ -141,7 +140,12 @@ export default async function TerminalLayout({ children }: { children: ReactNode
   // chrome-less error page. That is the intended reading: the sidebar, the
   // search universe and the index strip are the shell, and a shell that cannot
   // load is not a working terminal to put chrome around.
+  // `profiles` and `funds` are shell reads too: without the first the terminal
+  // shows the wrong theme and name, without the second the ticket has no cash
+  // figure, and neither was visible as a failure. (Phase 6 checkpoint)
   throwOnReadError('terminal.layout', {
+    profiles: profileError,
+    funds: fundsError,
     watchlist_rows: watchlistError,
     instruments: universeError,
     portfolio_holdings: heldError,
