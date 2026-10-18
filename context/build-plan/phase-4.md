@@ -1,21 +1,21 @@
-> **One phase of `context/build-plan.md`.** That index carries the Core Principle and the phase list.
-> **Read only the phase you are building.** A finished phase is history — its still-binding decisions
-> live in `constraints.md`, its narrative in `build-journal.md`, and re-reading it here costs tokens for nothing.
+> Part of `context/build-plan.md`; see that index for the build principle and phase order.
+> Read the feature needed for the current task. `progress-tracker.md` holds current status.
+> These specifications retain implementation-time decisions and dated verification results. Check
+> current rules in the authoritative context files before reusing an older plan. Ongoing constraints
+> live in `constraints.md`; the account of past work lives in `build-journal.md`.
 
 ## Phase 4 — Trading Engine
 
 ### 22 Charge calculator
 
-The Postgres side of the charge model, and the proof that it and the TypeScript estimator are the
-same calculator. **`src/lib/trading/charges.ts` already exists — feature 06 built it** so the pricing
-page could compute its worked example from real code rather than typed-in totals. This feature does
-not create the estimator and does not rewrite it: the TypeScript one stays **display-only**, per
-`trading-contract.md` §1.
+Implement the charge calculator in Postgres and prove that it agrees with the TypeScript
+estimator. **F06 already created `src/lib/trading/charges.ts`** for the pricing page's worked
+example. Keep that estimator display-only under `trading-contract.md` §1; this feature neither
+creates nor rewrites it.
 
-**Build the carried-over items first** (below). They pin the TypeScript side to hand-computed
-figures, and until that happens the Postgres side has nothing trustworthy to be equal *to* — building
-against a test that restates the implementation would only copy a possibly-wrong expression into a
-second language.
+Complete the carried-over items below first. They check the TypeScript estimator against figures
+calculated by hand. The Postgres implementation needs an independently verified reference;
+copying an expression from one language to another would preserve the same error.
 
 **Logic:**
 
@@ -40,12 +40,12 @@ second language.
 - Both functions revoked from `public`, `anon` and `authenticated`. `code-standards.md` lists
   `calculate_charges` as internal-only; it runs inside `execute_order`, never from a browser.
 
-**A fourth test tier, because none of the three can host this.** Proving the two calculators equal
-needs TypeScript *and* a database connection in one process: tier 1 has no database, tier 2 is
-SQL-only, and tier 3 is gated behind `ALLOW_RACE_TESTS` because it commits. `calculate_charges`
-writes nothing, so it needs no commit gate — `pnpm test:parity` runs read-only over one `pg`
-connection and joins `test:all`. Putting it in tier 3 would leave this feature's headline test
-skipped inside a green `test:all`.
+Add a fourth test tier for parity: checking that two implementations return identical results.
+This needs TypeScript and a database connection in the same process. Tier 1 has no database,
+tier 2 runs only SQL, and tier 3 requires `ALLOW_RACE_TESTS` because it commits data.
+`calculate_charges` writes nothing, so `pnpm test:parity` can run read-only over one `pg`
+connection without that gate. Include it in `test:all`; putting it in tier 3 would let the
+main check be skipped while `test:all` still passed.
 
 **Verify:**
 
@@ -55,7 +55,7 @@ skipped inside a green `test:all`.
   the §3 table and labelled as such** — that proves internal consistency, not external agreement, and
   which one shipped is recorded rather than blurred.
 - **TypeScript and Postgres agree exactly over ≥100 random inputs** — `pnpm test:parity`, asserting
-  all seven keys *and* the total, seed printed so a failure reproduces. Exact equality, not "within a
+  all seven keys _and_ the total, seed printed so a failure reproduces. Exact equality, not "within a
   paisa": measured before committing to it, across 600k random component comparisons and 6,000
   constructed exact half-paisa midpoints, the epsilon-nudged `roundToPaise` never diverged from exact
   decimal half-up. Covers all four side/product combinations and straddles the ₹20 brokerage cap.
@@ -81,9 +81,9 @@ merely passing:
 
 - The §2 reconciliation case recomputes `roundToPaise(Object.values(breakdown).reduce(…))` —
   character-for-character the expression `charges.ts` uses to produce `total`. It does still catch a
-  switch to rounding the *unrounded* sum, so it is not inert, but it proves the property by
+  switch to rounding the _unrounded_ sum, so it is not inert, but it proves the property by
   restating the implementation rather than by independent expectation. Pin it to figures computed by
-  hand, so the Postgres side this feature adds has something to be equal *to*.
+  hand, so the Postgres side this feature adds has something to be equal _to_.
 - `DP_CHARGE_INCLUSIVE` is a hand-entered `15.34` with nothing tying it to
   `DP_CHARGE_BASE * (1 + GST_RATE)`. The file's own comment warns these rates move by circular;
   change the base and `/pricing` keeps showing ₹15.34 while the worked example updates, with the
@@ -91,22 +91,23 @@ merely passing:
 
 ### 23 Margin reservation and release
 
-Reservation and release, built and proven before any order can consume them. Five internal-only
-functions own every movement between `funds.available_cash` and `funds.used_margin`, and the
-collateral held against an open short. **Nothing here fills an order or writes a position's
-quantity** — F24 does that and calls these.
+Build and verify margin reservation, release and short collateral before any order uses them.
+Five internal functions own transfers between `funds.available_cash` and `funds.used_margin`,
+and the collateral held for an open short. Margin is cash reserved for an order; short collateral
+remains blocked while the short is open. **These functions do not fill orders or change position
+quantities.** F24 calls them as part of execution.
 
-**`trading-contract.md` §6 and §7 are amended first, in their own commit.** Four statements in them
-are false as written, and each one changes code:
+**First amend `trading-contract.md` §6 and §7 in a separate commit.** This implementation plan
+identified four errors in the contract at that time. Each affects the code:
 
 - **§6 step 1's "using the post-fill `average_price`"** is a typo for `entry_reference_price`. It
   contradicts the formula printed directly above it, §12.11, §12.12, and this feature's own
   falsification test.
-- **§6 step 2's delta ignores collateral already held on the position**, so a fill that *adds* to an
+- **§6 step 2's delta ignores collateral already held on the position**, so a fill that _adds_ to an
   existing short double-blocks. It becomes
   `(required_collateral + actual_charges) − (orders.blocked_margin + positions.blocked_margin)`.
 - **§6's table reserved 100% of notional for a short.** Collateral at fill is 120% of notional plus
-  closing charges, so delta was positive by roughly a fifth of the trade on *every* short — which
+  closing charges, so delta was positive by roughly a fifth of the trade on _every_ short — which
   made §7's short-entry `MARGIN_RELEASE` row a block rather than a release, falsified §6's own claim
   that step 3's top-up is the gap-up case, and let a user place a maximum-size short that its own
   fill then rejected. A short-opening MIS sell now reserves the §6 collateral formula evaluated at
@@ -131,8 +132,10 @@ are false as written, and each one changes code:
 - `reserve_margin(p_order_id)` per §6: computes the requirement, moves it from `available_cash` into
   `used_margin`, stamps `orders.blocked_margin`, writes `MARGIN_BLOCK`. Returns false and **writes
   nothing** if the user cannot cover it; `place_order` writes the `REJECTED` row.
-  - A buy reserves `quantity × price + estimated charges`. A short-opening MIS sell reserves
-    `short_collateral_requirement(excess, price) + estimated entry charges`.
+  - A buy reserves `opening quantity × price + estimated charges`. For CNC the opening quantity
+    is the whole order; an MIS buy covering a short reserves fresh cash only for any quantity
+    opening a long. Estimated charges still cover the whole order. A short-opening MIS sell
+    reserves `short_collateral_requirement(excess, price) + estimated entry charges`.
   - **Crossing zero:** an MIS sell of 10 against an existing MIS long of 4 closes 4 and shorts 6. The
     shorting excess is `quantity − max(net_quantity, 0)` and only that part is reserved; the closing
     part carries no obligation. A CNC sell, and an MIS sell fully covered by a long, reserve nothing.
@@ -152,17 +155,20 @@ are false as written, and each one changes code:
   Recomputes the requirement over the quantity the position is **about to become** and moves the
   difference to `available_cash` with a `MARGIN_RELEASE` row (§7's short-cover row). Called **before**
   F24 writes the new quantity: a full cover deletes the row and a flip to long cannot carry collateral,
-  so neither case can be expressed afterwards. Refuses to *increase* collateral — an add carries a
+  so neither case can be expressed afterwards. Refuses to _increase_ collateral — an add carries a
   reservation only `transfer_margin_to_position` knows how to retire.
-- All five are `security definer` with `set search_path = ''`, fully schema-qualified, lock `orders`
-  then `funds` with `for update` in that order, re-check `status = 'OPEN'` after taking the lock, and
-  are **revoked from `public`, `anon` and `authenticated`** per the grant policy in
-  `code-standards.md`.
+- All five are `security definer` with `set search_path = ''`, fully schema-qualified, and
+  **revoked from `public`, `anon` and `authenticated`** per `code-standards.md`'s grant policy.
+  The original plan prescribed `orders` then `funds` locks with `for update` and a post-lock
+  `status = 'OPEN'` check. **F29's installed-function audit supersedes that blanket lock rule:**
+  `transfer_margin_to_position` and `recompute_position_collateral` take `positions` before
+  `funds` and require `execute_order` to hold both already. Follow those helper preconditions
+  and the current lock protocol in `architecture.md`; do not call either helper directly.
 
-**Verify:** — tier 2, which rolls back, so even the randomised suite needs no commit gate. Split in
-two: `08-margin.sql` holds the hand-computed cases and `09-margin-identities.sql` the randomised one.
-They catch different things — an arithmetic slip shows up in 08, while a path that forgets one side of
-§12.3 only shows up in 09.
+**Verify:** Use tier 2, which rolls back its work; the randomised suite therefore needs no commit
+gate. Put hand-computed cases in `08-margin.sql` and the randomised sequence in
+`09-margin-identities.sql`. The first checks individual calculations; the second catches paths
+that update only one side of §12.3's margin identity.
 
 - **`fund_ledger.created_at` must be `clock_timestamp()`, not `now()`**, or §12.2 cannot be asserted at
   all: `now()` is the transaction start time, so the three rows a short entry writes tie, and "the
@@ -189,8 +195,9 @@ They catch different things — an arithmetic slip shows up in 08, while a path 
   reservation it fails by a fifth of the notional.
 - Test: `orders.blocked_margin` is zero after transfer and the ledger contains **no row** for the
   collateral amount; the three rows §6 writes are present and sum to `reservation − collateral − charges`.
-- Test: reserved estimated charges are not also debited — total cash out for a short entry equals the
-  actual charges exactly, never charges twice.
+- Test: a short entry reduces `available_cash + used_margin` by exactly the actual charges,
+  never twice that amount. Available cash itself falls by collateral plus charges; the collateral
+  remains in used margin.
 - **Gap-up test:** a short limit sell at ₹100 that fills at an observed ₹110 requires more collateral
   than it reserved. With sufficient cash it tops up via `MARGIN_BLOCK` and returns `ok = true`; with
   insufficient cash it returns `ok = false`, releases the whole reservation, and leaves
@@ -204,7 +211,10 @@ They catch different things — an arithmetic slip shows up in 08, while a path 
 - Test: collateral computed from `entry_reference_price` covers a full 20% adverse move **including
   closing charges**. Recompute it from `average_price` instead and confirm the assertion fails — that
   substitution under-collateralises by a small, easily-missed amount.
-- Test: covering half a short releases exactly half the collateral, not zero and not all of it; a full cover releases all of it and a flip to long releases all of it.
+- Test: covering half a short releases the old collateral minus the §6 requirement recomputed
+  for the remaining quantity, with the expected amount calculated by hand. Do not assume a
+  proportional half-release: closing charges and rounding can make it differ. A full cover and
+  a flip to long each release all collateral.
 - Test: the margin identity in §12.3 holds after a randomised sequence of 500
   reserve/release/fill/cancel operations on a **pinned seed**, alongside identities 1, 2, 4, 8 and 12.
   The suite asserts the churn actually happened first — a loop that quietly did nothing would
@@ -221,12 +231,11 @@ They catch different things — an arithmetic slip shows up in 08, while a path 
 
 ### 24 Order execution function
 
-The heart of the project. Built and tested entirely in SQL before any UI touches it. F23 already
-owns every movement of margin and collateral; this feature **sequences** those functions and adds
-everything else a fill does — pricing, charges, trades, holdings, positions, the ledger.
+Implement and test order fills entirely in SQL before connecting a UI. F23 owns margin and
+collateral movements. F24 calls those functions in the right order and adds fill pricing,
+charges, `trades`, `holdings`, `positions` and the cash ledger.
 
-**Two primitives first**, because two rules in `trading-contract.md` §5 currently have no
-implementation anywhere:
+Start with two supporting functions needed to enforce `trading-contract.md` §5 in the database:
 
 - `market_state(at timestamptz)` reading `market_holidays` — a **second implementation** of session
   logic, and deliberately so. `place_order` rejects a MARKET order placed outside the session with
@@ -246,19 +255,22 @@ implementation anywhere:
 - `place_order(p_symbol, p_side, p_order_type, p_product, p_quantity, p_limit_price)` returning
   **`(order_id uuid, status order_status, rejection_reason text)`**. It inserts the order, applies the
   pre-flight rejections, calls `reserve_margin`, and calls `execute_order` inline for a MARKET order.
-  - **The composite is not decoration.** A business rejection returns normally per
-    `code-standards.md`, so `error` is null and a bare uuid leaves the Server Action unable to tell a
-    fill from a rejection. Raising instead would roll back the REJECTED row that §4's lifecycle and
-    the Orders page both require. `architecture.md`'s example and `toRejectionCode`'s role are
-    corrected in the same change.
+  - Return all three fields. Business rejections return normally under `code-standards.md`, so
+    `error` is null; an order id alone cannot tell the Server Action whether the order filled or
+    was rejected. Raising an error would roll back the `REJECTED` row required by §4 and the
+    Orders page. Update `architecture.md`'s example and its account of `toRejectionCode` in the
+    same change.
   - Pre-flight rejections, each writing the order row first so it exists to be read:
     `MARKET_CLOSED`, `INVALID_QUANTITY`, `NO_HOLDING` (a CNC sell beyond `holdings.quantity`),
     `INSUFFICIENT_FUNDS` (`reserve_margin` returned false).
   - Derives the user from `auth.uid()` and never accepts a `user_id` argument.
 - `execute_order(order_id)` per the golden pattern: lock the order row, **return unless it is still
   `OPEN`**, lock the funds row, price it per §5, reject `NO_QUOTE` when there is no row or
-  `fetched_at` is beyond the staleness window, compute charges, retire the reservation, insert the
-  trade, upsert the holding or position, update funds, append the ledger, complete the order.
+  `fetched_at` is beyond the staleness window, compute charges, settle any closing leg before
+  retiring the reservation (§6), insert the trade, upsert the holding or position, finish the funds
+  and ledger changes, and complete the order. A sell crossing from long to short posts its
+  `SELL_CREDIT` before the new collateral check; an unfundable opening leg rolls the entire fill
+  back in one subtransaction.
 - On completion the function retires the reservation the right way, **before writing the trade and the
   position**: `release_margin` for buys, long closes, cancellations and rejections;
   `transfer_margin_to_position(order_id, fill_price, actual_charges)` for a fill that opens a short.
@@ -319,8 +331,9 @@ the two concurrency cases, tier 4 for the two primitives.
 - Test, **two concurrent sessions**: two buys that each individually fit but together exceed the
   balance produce exactly one fill and one rejection — the row lock holds.
 - Test, **two concurrent sessions**: both call `execute_order` on the same open order at the same time.
-  Exactly one trade, one ledger entry, and one debit. Run this against a build with the status guard
-  removed and confirm it fails — a test that cannot fail is not a test.
+  Exactly one trade and one `BUY_DEBIT`, with each ledger row required by §7 written once.
+  Run this against a build with the status guard removed and confirm it fails; duplicate calls
+  must never produce a second fill or debit.
 - Test: an open limit buy reserves margin at placement; `used_margin` rises and `available_cash` falls
   by the same amount.
 - Test: cancelling that order restores both figures exactly; cancelling twice is a no-op.
@@ -337,14 +350,14 @@ the two concurrency cases, tier 4 for the two primitives.
 
 ### 25 Order ticket UI
 
-The first Phase 4 feature with a screen. The engine is complete and proven in SQL, so this feature
-adds no money arithmetic that reaches the database — it shows a **labelled estimate** of what the
-engine will do, per `trading-contract.md` §1, and hands the values to a caller.
+Build the order-entry dialog on top of the engine already verified in SQL. The dialog shows a
+**labelled estimate** of the engine's money calculations, as `trading-contract.md` §1 permits.
+Its TypeScript arithmetic must never produce a value stored in the database.
 
-**The seam with F26 is the `onSubmit` prop.** This feature ships the dialog, the schema, the
-estimates and the in-flight guard, calling an injected handler that returns `ActionResult`; F26
-supplies the real `placeOrder` action and the toasts. That keeps the whole ticket tier-1 testable
-with no database, and the double-submit guard is a UI concern that belongs here either way.
+Use an `onSubmit` prop to connect this feature to F26. F25 supplies the dialog, validation schema,
+estimates and submission guard; the injected handler returns `ActionResult`. F26 supplies the
+real `placeOrder` action and toast notifications. This separation keeps the ticket's logic
+testable in tier 1 without a database and keeps its double-submit guard here.
 
 **UI:**
 
@@ -355,14 +368,15 @@ with no database, and the double-submit guard is a UI concern that belongs here 
 - Quantity, product toggle (CNC/MIS), order type toggle (MARKET/LIMIT), limit price shown only for
   limit orders.
 - Live margin required, available cash, and the estimated charge breakdown, all updating as inputs
-  change **and as the price ticks** — a MARKET order estimates against the live `ltp` from F19's
-  store, so the panel moves with the price it will fill at.
+  change **and as server prices arrive**. A MARKET order estimates against the server `anchor`
+  in F19's store, never its interpolated `ltp`, as `architecture.md` requires for the order ticket.
+  A LIMIT order uses its entered limit price.
 - Inline validation errors and a disabled submit while in flight.
-- **Mounted once, in the terminal layout**, beside `<QuoteChannel/>`. A `useOrderTicket` store holds
-  `{ open, symbol, side }` and any call site imports `openTicket({ symbol, side })` — a button, not a
-  dialog. This is not premature: F18's panel renders **twice** (the `md` rail and the mobile sheet),
-  so a per-row dialog would mount two copies of the same form for the same symbol, and F31's
-  exit-position button then costs three lines.
+- Mount one ticket in the terminal layout beside `<QuoteChannel/>`. The `useOrderTicket` store
+  holds `{ open, symbol, side }`; each call site renders a button that calls
+  `openTicket({ symbol, side })`. F18 renders its panel twice, in the `md` rail and mobile sheet,
+  so mounting dialogs in rows would duplicate each form. F31's exit button can reuse the same
+  ticket without another dialog.
 - F25 wires one call site: the watchlist rows' B/S buttons, in the existing `focus-within` hover
   cluster so they are never keyboard-hidden.
 
@@ -376,14 +390,14 @@ with no database, and the double-submit guard is a UI concern that belongs here 
 - Charge estimate from `src/lib/trading/charges.ts`, labelled as an estimate.
 - **`src/lib/trading/margin.ts` — the TypeScript half of §6's reservation rules**, and the reason
   this feature has a parity test. Margin required is what `reserve_margin` will actually block: for a
-  buy, `opening quantity × price + charges`; for an MIS sell,
-  `short_collateral_requirement(shorting excess, price) + charges`. A figure that ignores the
-  existing position tells a user covering a 100-share short that they need ₹10,029 when the engine
-  reserves ₹29.
-- **The position is fetched on open**, one RLS-scoped select against `holdings` and `positions` for
-  that symbol. Fresh by construction, one round trip per dialog open rather than per keystroke, and
-  nothing extra loads on pages where the ticket is never opened. The margin panel shows a skeleton
-  while it resolves.
+  buy, `opening quantity × price + charges`; for an MIS sell opening a short,
+  `short_collateral_requirement(shorting excess, price) + charges`. A CNC sell or an MIS sell fully
+  covered by a long reserves nothing. A figure that ignores the
+  existing position would tell a user covering a 100-share short that they need the full trade
+  value plus estimated closing charges, when the engine reserves only those charges.
+- Fetch the symbol's holdings and positions through one RLS-scoped select when the dialog opens.
+  This gives the estimate current exposure without a request per keystroke or extra reads on
+  pages where no ticket opens. Show a skeleton in the margin panel while the read resolves.
 
 **Verify:**
 
@@ -409,9 +423,9 @@ with no database, and the double-submit guard is a UI concern that belongs here 
   equality, not "within one paisa"** — that is the bar the charge estimator already meets, and a
   looser one here would hide precisely the drift the test exists to catch. Falsified by perturbing
   `SHORT_MARGIN_BUFFER` in TypeScript only.
-- Test: a cover shows charges-only margin — short of 100 open, covering 100 @ ₹100 reserves the
-  charges alone, not ₹10,029.00. Asserted at tier 1 against `estimateMargin`, and again against the
-  engine at tier 4.
+- Test: with a short of 100 open, covering 100 @ ₹100 reserves estimated closing charges alone,
+  without reserving the trade value again. Assert this at tier 1 against `estimateMargin` and
+  against the engine at tier 4.
 - Browser: the panel ticks with the price for a MARKET order, and holds still on a LIMIT one.
 - Read: every money figure in the ticket is labelled an estimate. §1 forbids an unlabelled TypeScript
   money figure anywhere.
@@ -425,15 +439,14 @@ with no database, and the double-submit guard is a UI concern that belongs here 
 
 ### 26 Place order end to end
 
-The action behind F25's seam, and the toast layer that reports what it did. No new SQL: `place_order`
-is exactly what F24 proved at tiers 2–4, and this feature is the boundary between it and the screen —
-parsing the input, mapping the row it returns onto `ActionResult`, and revalidating what a fill moved.
+Connect F25's dialog to `place_order` and show the outcome in a toast. No new SQL is needed:
+F24 already verified the function at tiers 2–4. This feature parses the input, converts the
+returned row to `ActionResult`, and revalidates pages affected by the order.
 
-**The three outcomes are the whole design.** `place_order` returns `(order_id, status,
-rejection_reason)` with `error` null in all three cases: `REJECTED` with a stable code, `OPEN` for a
-limit order that rests, `COMPLETE` for a market order filled in the same transaction. A *fault* — a
-raised Postgres error or a transport failure — is a fourth thing, and is the only one that is not a
-normal return.
+`place_order` returns `(order_id, status, rejection_reason)` with `error` null for three normal
+outcomes: `REJECTED` with a stable reason code, `OPEN` for a resting limit order, or `COMPLETE`
+for a market order filled in the same transaction. Treat a raised Postgres error or transport
+failure separately; those are faults, not normal business outcomes.
 
 **UI:**
 
@@ -441,10 +454,10 @@ normal return.
   is currently rendered nowhere. The terminal, not the root: the marketing side uses `useActionState`
   with inline state and needs no toast, and this keeps `sonner` out of the public bundle. It moves up
   if that ever changes.
-- **Success and failure both toast, and the ticket closes either way.** A rejection is a *recorded
-  outcome* — the row is already filed as `REJECTED` and F27 will list it — so leaving the dialog open
-  would imply it is still editable, and each retry would file another order. F25's inline `failure`
-  state becomes unreachable and is deleted with it.
+- Show a toast and close the ticket after either success or failure. A rejection has already been
+  recorded as a `REJECTED` order for F27 to display. Leaving its form open would suggest the same
+  order could still be edited, when another submit creates another order. Remove F25's inline
+  `failure` state, which is no longer reachable.
 - **The success toast names the price**: "Bought 10 TCS at ₹2,999.50" for a fill, "Limit order placed
   — 10 TCS at ₹2,950.00" for one that rests.
 - Rejection copy is specific and actionable — `MARKET_CLOSED` says when the market opens, `NO_HOLDING`
@@ -494,7 +507,7 @@ normal return.
 - Browser: **revalidation reaches the layout with no manual reload** — place the limit order from
   `/dashboard` and the server-rendered available cash has already moved, with
   `performance.getEntriesByType('navigation').length` still 1 so it cannot have been a reload. The
-  *row* appearing under a tab is F27's check; `/orders` is still a stub here.
+  _row_ appearing under a tab is F27's check; `/orders` is still a stub here.
 - **Blocked until a live session: a market buy fills and appears in Holdings without a reload.** Every
   MARKET order is rejected outside market hours, so this rides along with F16's pending items on the
   next trading day. The fill itself is already proven at tiers 2–4 by F24; what waits is the action,
@@ -504,28 +517,26 @@ normal return.
 
 ### 27 Orders page
 
-The page that makes an order inspectable after it is placed, and the two write paths that act on one
-still open. Most of the engine beneath it is already proven: `cancel_order` shipped in F24, locks the
-row and re-checks `status = 'OPEN'`, and `orders` is already in the `supabase_realtime` publication.
-What this feature owns is `modify_order` — which `code-standards.md`'s grant list names and F24
-deliberately left unbuilt — and the surface over both.
+Show orders after placement and provide cancel and modify controls for those still open.
+`cancel_order` already shipped in F24 with a row lock and a post-lock `status = 'OPEN'` check;
+`orders` is also in the `supabase_realtime` publication. Add `modify_order`, which the grant list
+in `code-standards.md` names and F24 explicitly left for this feature, then build the page over
+both write paths.
 
-**Scope is today's orders plus every `OPEN` order, whatever its age.** An open order has to escape the
-date filter or a Friday limit order vanishes from the terminal on Monday while still holding margin.
-F34 covers completed *trades*, not orders, so a strict today-only page would leave a cancelled order
-with no surface at all; the open-order exemption is what makes the today filter safe.
+**Show today's orders and every `OPEN` order, regardless of age.** An older resting order still
+holds margin and must remain visible. F34 covers completed trades rather than orders, so a
+strict today-only page would leave a cancelled order with no surface. The original plan relied
+on the open-order exemption to make the date filter safe.
 
-**Open, found at the Phase 4 checkpoint — an older order that fills today vanishes from the page at
-the moment it fills.** Watched live: a limit order placed on 22 Aug filled on 6 Sept and went from
-Open straight to *absent*, never appearing under Executed, because the fill ended the `OPEN`
-exemption and the order was not placed today. The reasoning above covers a Friday order still
-*resting* on Monday but not one that *fills* — and the fill is the most interesting moment in that
-order's life, so the surface disappears exactly when the user most wants it. The trade is still in
-`trades` and reaches F34, so nothing is lost from the record; what is lost is the confirmation. Three
-candidate fixes, none chosen: widen the exemption to "placed today, **or** executed today", which is
-one more `.or()` clause and probably right; keep a filled order visible for the rest of the session;
-or accept it and let F34 carry the whole story. Decide it when F34 is built, since that is what
-determines whether the Orders page still owes the user anything here.
+**Open issue found at the Phase 4 checkpoint: an older order disappears when it fills today.**
+A limit placed on 22 Aug and filled on 6 Sept was observed moving from Open to absent, rather
+than Executed. Completion removes the `OPEN` exemption, and its placement date is outside the
+filter. The trade remains in `trades` for F34, but the Orders page loses the fill confirmation.
+
+No fix was chosen. The candidates were to include orders executed today as well as placed today
+(one more `.or()` clause), retain filled orders until the session ends, or leave the record to
+F34. The original follow-up was to decide this when F34 was built, once its history surface made
+the remaining need clear. This note does not mark that decision resolved.
 
 **UI:**
 
@@ -545,21 +556,21 @@ determines whether the Orders page still owes the user anything here.
 **Logic:**
 
 - **`modify_order(p_order_id, p_quantity, p_limit_price)` returning `(ok, reason)`** — `security
-  definer`, `set search_path = ''`, deriving the user from `auth.uid()` and taking no user id.
+definer`, `set search_path = ''`, deriving the user from `auth.uid()` and taking no user id.
   Locks the order, then: not found or not the caller's → `(false,'NOT_FOUND')`, the same answer
   either way so it declines to confirm an id exists, as `cancel_order` already does; `status <>
-  'OPEN'` → `(false,'NOT_OPEN')`; a limit price against a MARKET order → `(false,'NOT_MODIFIABLE')`.
+'OPEN'` → `(false,'NOT_OPEN')`; a limit price against a MARKET order → `(false,'NOT_MODIFIABLE')`.
   Granted to `authenticated`, revoked from `public, anon`.
-- **The re-reservation reuses `reserve_margin` rather than recomputing the requirement.**
-  `release_margin` → write the new terms → `reserve_margin`, wrapped in a plpgsql block with an
-  `EXCEPTION` clause. A failed re-reservation raises inside that block, rolling back only that block,
-  and the function returns `(false,'INSUFFICIENT_FUNDS')` normally — the order keeps its original
-  terms *and* its original reservation. Computing the requirement here instead would put a second
-  copy of §6 in the codebase, which `constraints.md` rules out. The release must come first:
-  `reserve_margin` returns early when `blocked_margin <> 0`.
+- Reuse `reserve_margin` to calculate the new reservation; do not duplicate §6's arithmetic.
+  Run `release_margin` → write the new terms → `reserve_margin` inside a plpgsql block with an
+  `EXCEPTION` clause. If re-reservation fails, raise inside that block so only those changes roll
+  back, then return `(false,'INSUFFICIENT_FUNDS')` normally. The original terms and reservation
+  must both survive. Release must come first because `reserve_margin` returns early when
+  `blocked_margin <> 0`.
 - **No third writer of `blocked_margin`.** `architecture.md`'s invariant names `release_margin` and
-  `transfer_margin_to_position` as the only functions that zero it and forbids any other path writing
-  the column; a delta-adjust inside `modify_order` would be exactly that.
+  `transfer_margin_to_position` as the only functions that zero it and forbids any other path
+  zeroing the column. `modify_order` must use `release_margin` and `reserve_margin` rather than
+  adjusting the reservation directly.
 - **Modify never executes inline.** `place_order` does not execute a resting LIMIT order either —
   F28's matcher owns crossing, and a modified limit that already crosses fills on the next tick.
 - `istDayStart(at)` exported from `_shared/market-hours.ts`, built on the `toIst`/`fromIst` pair
@@ -608,20 +619,19 @@ determines whether the Orders page still owes the user anything here.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and
   `pnpm format:check` all exit zero.
 
-
 ### 28 Limit order matching
 
-The resting side of the book. A LIMIT order placed away from the market waits as `OPEN`; this is the
-function that notices a quote has crossed it. It adds **no fill logic and no pricing** — `execute_order`
-is still the only place a fill happens, and it was already built to be called on any open order.
+Match resting LIMIT orders when a fresh quote crosses their limit. This function finds eligible
+orders and calls `execute_order`; **it must contain no fill logic or pricing rules**. Only
+`execute_order` may fill an order.
 
 **Logic:**
 
 - `match_open_orders()` returning `(filled integer, faulted integer)`, `security definer`, `set search_path = ''`, revoked from `public, anon, authenticated`. It selects `OPEN` `LIMIT` orders joined to `quotes` — fresh quote, buys at or below, sells at or above — and calls `execute_order` for each.
-- **The selection is an optimisation, not a correctness boundary.** `execute_order` re-checks `status = 'OPEN'` *and* re-checks limit eligibility under the row lock, so a bug in the predicate here can cost a fill a tick; it cannot cause a wrong one. It exists to avoid taking row locks on orders that would decline anyway.
+- Use the selection to avoid unnecessary row locks. `execute_order` must still re-check both `status = 'OPEN'` and the limit condition while holding the row lock. A selection bug may delay a valid fill until another tick; it must never permit an invalid fill.
 - **No symbol argument.** Sweeping every crossing order is simpler than passing the refreshed list, and strictly better: it also catches an order placed between ticks that already crosses the last quote.
 - **`order by placed_at, id`**, load-bearing twice. Fairness: where a user's cash covers only one of two crossing orders, the one resting longer fills — the exchange's time-priority rule. Deadlock avoidance: two simultaneous runs take the same order-row locks in the same sequence.
-- **One subtransaction per order**, the `BEGIN/EXCEPTION` shape `modify_order` established (F27). A faulting order rolls back alone, logs `raise warning`, and the run continues; the alternative lets one poisoned order block every user's fills on every tick. Business rejections never come through here — `execute_order` files those as `REJECTED` rows and returns normally.
+- Use one subtransaction per order, following F27's `BEGIN/EXCEPTION` pattern. A subtransaction is a block whose changes can roll back without undoing the whole run. If one order faults, roll back that order, log `raise warning`, and continue; one bad row must not stop every user's fills. Business rejections do not enter this handler: `execute_order` records them as `REJECTED` and returns normally.
 - **`filled` counts orders that reached `COMPLETE`**, read back after the call, because `execute_order` returning is not the same as a fill. Under two overlapping runs both may report the same fill; the count is per-run bookkeeping for the tick's log line, never a claim of exclusivity.
 - Called by `market-tick` **strictly after the quote upsert**, inside the existing session gate — matching before the upsert would match this tick's orders against last tick's prices. `matched` and `faulted` join the tick's response body so `cron.job_run_details` shows them.
 
@@ -634,24 +644,31 @@ is still the only place a fill happens, and it was already built to be called on
 - Test (tier 2): with a fault injected on one order, `faulted` is 1, `filled` is 1, the following order fills normally, and the faulting order is rolled back to `OPEN` so the next tick retries it. **Falsifiability: remove the `EXCEPTION` clause and this suite dies on the injected fault.**
 - Test (tier 2): identities 1, 3 and 8 all hold after the run.
 - **The fixture empties `orders` and `quotes` first.** The matcher takes no user and no symbol, so a suite that left real resting orders in place would fill them and its result would depend on what the developer happens to be holding (F16's rule). Orders are retired with `cancel_order`, never `delete` — `fund_ledger` and `trades` reference `orders on delete cascade`, so a delete would take the `MARGIN_BLOCK` row with it while the cash stayed moved, and §12.1 would pass for the wrong reason.
-- Test (tier 3, `matcher.race.test.ts`): two simultaneous `match_open_orders()` runs produce exactly one trade, one `BUY_DEBIT`, and `filled_quantity` 10. **The interleaving is forced, not hoped for**: session A takes the order's row lock first, B's sweep selects the still-`OPEN` order and blocks inside `execute_order`, and A only proceeds once `pg_stat_activity` confirms B is waiting. Issuing B's sweep and immediately committing A is *not* enough — if B's query has not reached the wire, its own SELECT filters the filled order out and the test passes with the guard removed, the selection having deduplicated instead of the guard. **Falsifiability: remove `execute_order`'s post-lock status re-check and this fails with two trades.**
-- **Tier 3 commits, and the matcher sweeps every symbol**, so the test first asserts that no *other* fresh-quoted crossing order exists and fails loudly if one does. Outside market hours nothing qualifies, because quotes go stale within minutes; during a session it would fill a real user's order into their real ledger.
+- Test (tier 3, `matcher.race.test.ts`): two simultaneous `match_open_orders()` runs must produce
+  exactly one trade, one `BUY_DEBIT`, and `filled_quantity` 10. Force the overlap: A takes the
+  order's row lock; B selects the still-`OPEN` order and blocks inside `execute_order`; A proceeds
+  only after `pg_stat_activity` confirms B is waiting.
+
+  Do not commit A immediately after starting B. If B has not sent its query yet, its SELECT
+  excludes the completed order and the test passes even without the status guard. **Remove
+  `execute_order`'s post-lock status re-check to prove the test fails with two trades.**
+
+- **Tier 3 commits, and the matcher sweeps every symbol**, so the test first asserts that no _other_ fresh-quoted crossing order exists and fails loudly if one does. Outside market hours nothing qualifies, because quotes go stale within minutes; during a session it would fill a real user's order into their real ledger.
 - Observed live: a limit order placed just off the market fills within two minutes during market hours. **Needs an open session** — pair it with F27's remaining items and F26's filled path.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### 29 MIS auto square-off
 
-Intraday positions do not survive the day. At or after 15:20 IST every open MIS position is exited at
-the last traded price — the same thing a user exit does, which is why this feature settles nothing of
-its own.
+Close every open MIS position at or after 15:20 IST using the last traded price. Reuse the same
+order-execution path as a user exit, so this job adds no separate settlement rules.
 
 **Logic:**
 
 - `square_off_mis(p_at timestamptz default now())` returning `(squared integer, faulted integer)`, `security definer`, `set search_path = ''`, revoked from `public, anon, authenticated`. `p_at` exists so the 15:19/15:20 boundary is testable, mirroring `market_state(at)`.
 - **The exit is a real order filled by `execute_order`**, because `architecture.md`'s invariant admits no other route: a square-off is a fill. So it writes a MARKET order and calls `execute_order`, inheriting §3's charges, §6's collateral release and loss cap, §7's ledger rows and §9's P&L without restating any of them. The order appears on the Orders page under Executed, as Kite presents an auto square-off.
 - **`is_auto_squareoff` is set by `square_off_mis` after the fill**, matching on `order_id`, rather than by widening `execute_order`. Atomic — `execute_order` runs inside its transaction — and it leaves a function proven at three tiers alone.
-- **It re-reads the position under its own lock before writing the exit order**, and skips when it has gone. Without this, two overlapping runs both select a position, the first closes it, and the second's exit order executes against nothing — which `execute_order` correctly reads as *opening* a short. The job could create a naked position at 15:20 with collateral blocked against it. Same guard `execute_order` applies to an order's status, for the same reason.
-- **It takes the user's `funds` row before that position row**, because it holds the position lock across its `execute_order` call and `execute_order` acquires the two in the opposite order. Taking them the other way round made this function the only path in the system that inverted the pair, and any concurrent order on the same user and symbol closed an ABBA cycle. Ordering, not extra locking: the funds lock is redundant on its own, since `execute_order` takes the same row moments later.
+- Lock and re-read the position before creating the exit order. Skip it if another run has already removed it. Otherwise, two overlapping runs could select the same position: the first closes it, then the second submits an exit against no position, which `execute_order` treats as a new short. Re-checking after the lock prevents the job from opening fresh exposure at 15:20, just as the order-status guard prevents duplicate fills.
+- Acquire the user's `funds` row before the position row. The job holds both while calling `execute_order`, which also acquires funds before positions. The earlier reverse order allowed a deadlock with a concurrent order on the same user and symbol: each transaction held the row the other needed, an ABBA cycle. Taking funds first fixes the acquisition order; `execute_order` would take that same funds lock shortly afterwards anyway.
 - No margin is reserved: the exit is entirely a closing leg.
 - Oldest position first (`opened_at`), one subtransaction per position — the fairness and deadlock reasoning of F28.
 - A stale quote rejects the exit with `NO_QUOTE` and the next run retries; §5's window is not bypassed for this caller. Called by `market-tick` **after** the matcher, so an order crossing on this tick fills on this tick before being squared off.
@@ -663,23 +680,69 @@ its own.
 - Test (tier 2): the short's collateral is fully released and identities 1 and 3 hold after it.
 - Test (tier 2): the CNC holding is untouched and no exit order is written for a CNC-only account.
 - Test (tier 2): a short whose loss exceeds collateral plus cash still closes — cash lands at exactly `0.00`, a `SIMULATION_ADJUSTMENT` carries the remainder, and `trades.realised_pnl` keeps the true uncapped loss.
-- Test (tier 2): **two underwater shorts on one account both close.** The case that found `execute_order` rejecting a *closing* leg for want of funds — its solvency check demanded `available_cash >= charges` with no opening leg, while the collateral about to pay them sat in `positions.blocked_margin` where the check could not see it. **Falsifiability: drop `v_open_quantity > 0` and this goes red with the second position stranded.**
+- Test (tier 2): **two underwater shorts on one account both close.** The case that found `execute_order` rejecting a _closing_ leg for want of funds — its solvency check demanded `available_cash >= charges` with no opening leg, while the collateral about to pay them sat in `positions.blocked_margin` where the check could not see it. **Falsifiability: drop `v_open_quantity > 0` and this goes red with the second position stranded.**
 - Test (tier 2): after a square-off, a duplicate exit order opens a naked short — characterising, deterministically, the hazard the position lock exists to prevent.
 - Test (tier 2): a second run in the same minute squares off nothing.
-- Test (tier 3, `squareoff.race.test.ts`): two simultaneous runs exit a position exactly once. **Falsifiable — apply `20260905150000_square_off_mis.sql` (the body with no re-read) and it goes red on B returning `(1, 0)`,** having filled its exit against a position A had already closed. Confirmed 2026-09-05; restore with `20260905190000_square_off_funds_before_position.sql`. Two earlier versions of this test were weaker and both failures are recorded in its header: it asserted only the end state, which was *identical* on the broken build, and it staged the interleaving by locking the position row, which the corrected lock order turns into a deadlock with the sweep. It blocks B on the funds row now — the lock `square_off_mis` takes first — and the hazard reports as itself rather than as a fault counter.
-- Test (tier 2, `15-lock-order.sql`, 6 assertions): the acquisition sequence read back out of each live definition, pinning `orders → funds → holdings → positions`. **Falsifiability: inject `20260905180000`'s body after the suite's own `begin;` and assertion 2 fails with `have: {positions}` against `want: {funds,positions}`** — done that way so the rollback restores the function and the live database is never changed. An audit of all eight lock-taking functions found two more inversions: `transfer_margin_to_position` and `recompute_position_collateral` take `positions` before `funds`, safe today only because `execute_order` holds both before calling them. Asserted as they are rather than changed, and the precondition is now on each function's own comment (`20260905200000`).
-- Test (tier 3, `squareoff-lockorder.race.test.ts`): a sweep and a user's own order on the same position do not deadlock. **Falsifiable — apply `20260905180000_square_off_locks_position.sql` and it goes red.** The test asserts *both* possible victims, so it does not depend on which backend Postgres aborts: the user's `execute_order` must not carry a `40P01`, and the sweep must return `(1, 0)` with no MIS position left open. Confirmed 2026-09-05 — the sweep was the victim, returning `(0, 1)` with the position still open.
-- The intermittent timeout was `waitUntilBlocked` identifying the blocked backend by `pg_stat_activity.query`, which is not dependable through Supavisor. It polls `pg_blocking_pids()` on the watched pid now, and the pre-flight check runs before seeding across every symbol so a stray fixture cannot make the sweep multi-row. `seedRaceTrader`, `assertNoOpenMisPositions` and `waitUntilBlocked` moved into `helpers.ts` rather than being copied a third time.
-- **Follow-up, found at the Phase 4 checkpoint — the lock order is fixed per *user*, not across users.** `15-lock-order.sql` pins the sequence inside each function and structurally cannot see this. `match_open_orders` walks `order by o.placed_at, o.id` and `square_off_mis` walks `order by p.opened_at, p.user_id, p.symbol`; each `execute_order` call locks its own owner's `funds` row and **holds it for the rest of the run transaction**, so the two sweeps accumulate different users' funds locks in unrelated orders. A match run holding `funds(U1)` and waiting on `funds(U2)` can meet a sweep holding `funds(U2)` and waiting on `funds(U1)` — an ABBA cycle across users that the per-user ordering rule says nothing about. Postgres resolves it with `40P01`, which both functions swallow as a "fault", and for the sweep that means an MIS position left open past 15:20 against §10 and identity 7. **Narrow today and not yet worth a fix:** within one tick the two run sequentially, so it needs overlapping ticks, and F16 measured a 200-symbol run at under 10 seconds against a 60-second schedule. The cheap mitigation if it ever bites is an overlap guard on the tick (a `pg_try_advisory_lock`) rather than a global ordering across users, which would mean sorting both sweeps by `user_id` first and would cost the matcher its `placed_at` time-priority fairness. Decide it with the counter question below — both are about the same handler.
+- Test (tier 3, `squareoff.race.test.ts`): two simultaneous runs exit a position exactly once.
+  **The test was falsified on 2026-09-05:** applying `20260905150000_square_off_mis.sql`, whose
+  body has no re-read, made B return `(1, 0)` after filling an exit against the position A had
+  closed. Restore with `20260905190000_square_off_funds_before_position.sql`.
 
-- **Follow-up, still undecided — narrowed.** `square_off_mis`'s `exception when others` swallows `40P01` and `40001` alongside a genuine row fault, and **`match_open_orders` carries the identical handler**, so whatever is decided applies to both. The inversion that made that reachable is fixed, so a deadlock here now means a *new* one, which argues for making it loud rather than counting it. Re-raising is still wrong — it would abort the sweep for every other user, which is exactly what the per-position subtransaction exists to prevent (F28). The open question is therefore narrower: whether to return a third counter separating a concurrency abort from a bad row. Widening `returns table` forces a DROP, and a dropped function is re-granted to `anon` and `authenticated` by Supabase's defaults — so this waits until something actually reads the counter, in Phase 5.
+  The test header records two weaker earlier versions. Checking only the end state passed on
+  the broken build; staging the overlap with a position lock caused a deadlock under the fixed
+  acquisition order. The test now blocks B on funds, the first lock `square_off_mis` takes, so
+  it exposes the duplicate exit directly rather than only a fault counter.
+
+- Test (tier 2, `15-lock-order.sql`, 6 assertions): inspect the installed function definitions
+  to pin acquisition order to `orders → funds → holdings → positions`. **Falsify it by injecting
+  `20260905180000`'s body after the suite's `begin;`: assertion 2 must fail with
+  `have: {positions}` against `want: {funds,positions}`.** The transaction rollback then restores
+  the function; the live definition is never left changed.
+
+  The audit of all eight lock-taking functions found two further inversions:
+  `transfer_margin_to_position` and `recompute_position_collateral` take `positions` before
+  `funds`. They are safe only because `execute_order` already holds both when calling them.
+  Keep assertions for those existing definitions and the precondition in each function's comment
+  (`20260905200000`), rather than silently treating them as ordinary entry points.
+
+- Test (tier 3, `squareoff-lockorder.race.test.ts`): a sweep and a user's own order on the same position do not deadlock. **Falsifiable — apply `20260905180000_square_off_locks_position.sql` and it goes red.** The test asserts _both_ possible victims, so it does not depend on which backend Postgres aborts: the user's `execute_order` must not carry a `40P01`, and the sweep must return `(1, 0)` with no MIS position left open. Confirmed 2026-09-05 — the sweep was the victim, returning `(0, 1)` with the position still open.
+- The intermittent timeout was `waitUntilBlocked` identifying the blocked backend by `pg_stat_activity.query`, which is not dependable through Supavisor. It polls `pg_blocking_pids()` on the watched pid now, and the pre-flight check runs before seeding across every symbol so a stray fixture cannot make the sweep multi-row. `seedRaceTrader`, `assertNoOpenMisPositions` and `waitUntilBlocked` moved into `helpers.ts` rather than being copied a third time.
+- **Follow-up found at the Phase 4 checkpoint: lock ordering is consistent within a user, but not
+  across users.** `15-lock-order.sql` checks the order inside each function and cannot detect this
+  wider problem. `match_open_orders` visits `order by o.placed_at, o.id`; `square_off_mis` visits
+  `order by p.opened_at, p.user_id, p.symbol`. Each `execute_order` call keeps its user's `funds`
+  lock until the entire sweep transaction ends. The sweeps can therefore accumulate different
+  users' locks in different orders.
+
+  For example, matching may hold `funds(U1)` and wait for `funds(U2)` while square-off holds
+  `funds(U2)` and waits for `funds(U1)`. Postgres ends this deadlock with `40P01`. Both handlers
+  count it as a fault; square-off could then leave an MIS position open past 15:20, violating §10
+  and identity 7.
+
+  **No fix is planned yet.** A single tick runs the sweeps sequentially, so the problem needs
+  overlapping ticks. F16 measured fewer than 10 seconds for 200 symbols against a 60-second
+  schedule. If needed, the smaller fix is a tick overlap guard using `pg_try_advisory_lock`.
+  Sorting both sweeps by `user_id` first would also align locks, but would remove the matcher's
+  `placed_at` time priority. Consider this alongside the counter question below.
+
+- **Follow-up still undecided: distinguish concurrency aborts from bad rows.** Both
+  `square_off_mis` and `match_open_orders` use `exception when others`, so they count `40P01`
+  and `40001` alongside ordinary row faults. The known per-user inversion has been fixed; a
+  deadlock would now reveal another problem worth exposing.
+
+  Re-raising would abort the sweep for other users and defeat F28's per-position
+  subtransactions. The remaining proposal is a third result counter for concurrency aborts.
+  Changing `returns table` requires a DROP, after which Supabase's defaults grant the recreated
+  function to `anon` and `authenticated`; grants must be restored deliberately. The original
+  decision was to wait until Phase 5 had a consumer for that counter. This remains an open note.
+
 - Constants stay mirrored: `pnpm test:parity` asserts `square_off_ist` field by field.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db`, `pnpm test:parity`, `pnpm build` and `pnpm format:check` all exit zero.
 
 ### Phase checkpoint
 
-The engine is correct and covered by tests. Re-run the full suite, reconcile a randomised trading session end to end, and confirm every identity in `trading-contract.md` §12 holds.
+Before closing Phase 4, re-run the full suite and reconcile a randomised trading session end to
+end. Every identity in `trading-contract.md` §12 must hold; passing UI checks alone does not
+establish that the engine is correct.
 
 ---
-
-

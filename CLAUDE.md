@@ -1,110 +1,165 @@
 # ZerodhaRebuild
 
-A paper-trading platform with Zerodha/Kite's product model and the design system in `context/DESIGN.md`:
-a public marketing site plus a live NSE terminal where
-Google-authenticated users trade ~200 stocks with ₹1,00,000 of simulated cash. No real money anywhere.
+ZerodhaRebuild is a paper-trading platform based on Zerodha's public website and Kite terminal.
+Users sign in with Google and practise trading roughly 200 NSE stocks with ₹1,00,000 of simulated
+cash. Prices are simulated too. The visual design is defined in `context/DESIGN.md`.
+
+This file tells contributors and AI agents how to work in the repository. For a product introduction
+and local setup, start with `README.md`. For brief explanations of trading and engineering terms,
+see `context/project-overview.md` → Terms used in these docs.
 
 ## Project context lives in `context/`
 
-The `context/` folder is the source of truth for this project. It is **not** read whole at session
-start — reading all of it costs well over 100k tokens, most of it about work already shipped or
-libraries this session will not touch. Read the always list, then pull what the session's work
-actually triggers.
+The context files define the product, its technical rules, and its build history. Read the six core
+files below at the start of a development session, in this order. Then read the references relevant
+to your task. Loading the entire folder adds more than 100,000 tokens, mostly from completed work.
+A documentation review may need a broader read; routine development does not.
 
-**Always, in this order** — start with the tracker, because what it names resolves every trigger below:
+1. `context/progress-tracker.md`: current work, completed features, and the next step.
+2. `context/constraints.md`: decisions and lessons that still apply. Its seven topic references
+   live in `context/constraints/`; read those when the table below calls for them.
+3. `context/project-overview.md`: what the product does, who it is for, and its scope.
+4. `context/architecture.md`: the stack, component boundaries, price sources, authentication,
+   and invariants. An invariant is a rule that must remain true after every change.
+5. `context/code-standards.md`: conventions every code change must follow.
+6. `context/trading-contract.md`: the authoritative rules for cash, orders, positions, and charges.
 
-1. **`context/progress-tracker.md`** — what's done, in progress, and next. **The session's brief.**
-2. **`context/constraints.md`** — what still binds from past work. Read before any decision that might conflict with it. It is a **core plus reference halves**: seven topics live in `context/constraints/` and are triggered below, never read at session start.
-3. **`context/project-overview.md`** — what the product is, who it's for, what's in and out of scope.
-4. **`context/architecture.md`** — stack, system boundaries, quote provenance, auth, and the **invariants you must never violate**. The data model and the golden patterns are in `architecture/`, on demand.
-5. **`context/code-standards.md`** — the rules every change must follow. The worked boundary patterns and the testing tiers are in `code-standards/`, on demand.
-6. **`context/trading-contract.md`** — how money, orders, positions and charges behave. **Authoritative for anything involving money**, and most features in Phases 4 and 5 are.
+Read additional files as follows:
 
-**On demand — read when the work triggers it, not before:**
+| When you are…                                                                               | Read                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Starting or continuing a numbered feature                                                   | That feature's section in `context/build-plan/phase-<n>.md`. Routine feature work does not need other phases or the whole phase file.                          |
+| Changing the schema, writing a migration, or adding a file                                  | `context/architecture/data-model.md` for tables, columns, views, and folders; `context/constraints/security.md` for permissions and database-constraint traps. |
+| Writing a Server Action, Postgres function, Supabase client, subscription, or Edge Function | `context/architecture/patterns.md` for examples and data flows; `context/code-standards/boundary-patterns.md` for the rules behind them.                       |
+| Writing or debugging a test                                                                 | `context/code-standards/testing.md` and `context/constraints/testing.md`.                                                                                      |
+| Using a third-party library                                                                 | The relevant section of `context/library-docs.md`, after checking Context7 as described below.                                                                 |
+| Building or restyling a UI                                                                  | `context/DESIGN.md`. Where its values differ from the shipped tokens in `library-docs.md` → Tailwind, the shipped tokens win.                                  |
+| Checking behaviour in a browser or interpreting an automated audit                          | `context/constraints/verification.md` for checks that can produce misleading results.                                                                          |
+| Running a Supabase migration, type generation, or function deployment                       | `context/constraints/supabase-cli.md`.                                                                                                                         |
+| Changing money calculations, orders, or a Postgres money function                           | `context/constraints/trading.md` for rationale, order-entry rules, and safe locking.                                                                           |
+| Changing a displayed price, quote store, source label, or quote provider                    | `context/constraints/market-data.md`.                                                                                                                          |
+| Changing a public `(marketing)` page                                                        | `context/constraints/marketing.md`.                                                                                                                            |
+| Investigating a past feature's decisions                                                    | That feature's entry in `context/build-journal.md`. Do not load the journal at session start.                                                                  |
 
-| Trigger | Read |
-| ------- | ---- |
-| Starting or continuing a numbered feature | **That feature's section only**, from `context/build-plan/phase-<n>.md`. Not the whole file, and never a phase you are not in |
-| Touching the schema, writing a migration, or adding a file | `context/architecture/data-model.md` — every table, view and column, and the folder structure — and `context/constraints/security.md` for the grant, revoke and CHECK traps |
-| Writing a Server Action, a Postgres function, a Supabase client, a subscription, or the Edge Function | `context/architecture/patterns.md` (the golden patterns and the data-flow diagrams) and `context/code-standards/boundary-patterns.md` (the rules those patterns obey) |
-| Writing or debugging a test in any tier | `context/code-standards/testing.md` for the tiers themselves, and `context/constraints/testing.md` for the traps found running them |
-| Using any third-party library | The one relevant section of `context/library-docs.md` — after Context7, per the authority order below |
-| Building or restyling any UI | `context/DESIGN.md`. The tokens that actually ship are in `library-docs.md` → Tailwind, and they win where the two disagree |
-| Verifying in a real browser, or judging an automated check | `context/constraints/verification.md` — the traps that make a check report a false result rather than fail |
-| Running the Supabase CLI — a migration, a type regeneration, a function deploy | `context/constraints/supabase-cli.md` — the traps in this machine's CLI setup |
-| Touching money, an order, or a Postgres money function | `context/constraints/trading.md` — the charge and contract rationale, the order-entry rules, and the lock-order and concurrency rules |
-| Touching a surface that renders a price, the quote store, provenance, or a quote provider | `context/constraints/market-data.md` — the interpolation, provenance and provider traps |
-| Building or changing a public `(marketing)` page | `context/constraints/marketing.md` — what the public pages have already settled |
-| Reconstructing why one past feature went the way it did | That feature's entry in `context/build-journal.md`. **Never read this file at session start** |
+To find one feature's section, run `rg -n '^### ' context/build-plan/phase-4.md`, then read the
+relevant lines with `sed -n '<start>,<end>p'`.
 
-Every one of those files states its own rules; none of them restates an invariant. Where a reference
-file and `architecture.md`'s invariants disagree, **the invariants win** — and fix the loser in the
-same change.
+### When documents disagree
 
-To read one feature without loading its whole phase:
-`grep -n '^### ' context/build-plan/phase-4.md` for the line numbers, then `sed -n '<start>,<end>p'`.
+Use this order, from highest authority to lowest:
 
-**When two documents disagree**, resolve in this order — higher wins, and fix the loser in the same change rather than leaving the contradiction:
-`trading-contract.md` (money only) → `project-overview.md` scope → `architecture.md` invariants → `code-standards.md` → the current feature in `build-plan/phase-<n>.md` → `library-docs.md` → any code example. If the conflict is not resolvable this way, stop and ask.
+1. `trading-contract.md` for anything involving money.
+2. `project-overview.md` for product scope.
+3. The invariants in `architecture.md`.
+4. `code-standards.md`.
+5. The current feature in `build-plan/phase-<n>.md`.
+6. `library-docs.md`.
+7. Code examples.
+
+Correct the lower-priority statement in the same change. Reference files must follow the
+architecture invariants. If this order does not resolve the conflict, ask the user.
 
 ## Standing rules
 
-- **Read the always list first**, then follow the triggers above. Never assume — verify against `project-overview.md` and `architecture.md`. Reading a document the work does not touch is a cost with no benefit; so is guessing at a rule that one of them states.
-- **Obey the invariants** in `architecture.md`. They are non-negotiable.
-- **Follow `code-standards.md`** on every change.
-- **For libraries**, follow the authority order: **Context7** (`resolve-library-id` → `query-docs`) → skills (per the project instruction file, `CLAUDE.md`/`AGENTS.md`) → `context/library-docs.md` → official docs via web search. Never write an API shape from training-data memory — if none of those answers it, ask.
-- **Stay in scope.** Build only what the current feature — in `build-plan/phase-<n>.md`, named by `progress-tracker.md` — requires.
-- **Use logical commits.** Keep each commit focused, easy to review, and in a working state whenever possible.
-- **Number every commit subject `<phase>.<feature>.<n>`**, followed by a plain lowercase imperative summary — `2.05.03 wire profile form submit`. `<phase>` and `<feature>` are the current phase and feature numbers from `progress-tracker.md`, feature zero-padded to two digits. `<n>` is a **counter that restarts at `01` for every feature**: read the most recent commit (`git log -1 --format=%s`) — if it carries the same `<phase>.<feature>`, add one to its `<n>`; otherwise start again at `01`. Pad `<n>` to two digits.
-- **Reserve feature `00` for work that isn't a numbered feature.** Phase checkpoints, chores, and fixes outside a feature use `<phase>.00.<n>` (`2.00.01 phase 2 checkpoint`); anything before Phase 1 begins uses `0.00.<n>` (`0.00.01 init repo + context docs`). Feature `00` has its own per-phase counter, restarting at `01` in each phase.
-- **Ask before committing.** Never create a commit without explicit user approval, and never add coauthors unless the user explicitly requests them.
-- **Checkpoint every phase.** Before moving to the next phase, run the relevant verification commands, inspect the phase diff, check for obvious bugs/regressions, confirm code consistency, update `progress-tracker.md`, compact `build-journal.md` (see below), and record any follow-up work.
-- **Update `progress-tracker.md`** after every completed feature — tick the box, **overwrite** Current Status (never append to it; it holds only the latest state), and add the single most important decision to the top of "Key Decisions". That section holds the 10 most recent decisions, newest first — when adding an 11th, file the oldest under its topic in `context/constraints.md`.
-- **Keep `context/constraints.md` short.** It is read every session, so every line costs on every session — one or two sentences per bullet, stating the rule and the reason it exists. Worked examples, transcripts and the story of how it was found belong in `build-journal.md`. A constraint that binds only one kind of work belongs in the matching `context/constraints/` reference half, behind its trigger — not in the core.
-- **Append to `context/build-journal.md`** after each completed feature — a dated entry with the decisions made, gotchas hit, and verification results. **Never read this file at session start**; it grows for the life of the project. Open it only to reconstruct one specific feature's history.
-- **Compact `build-journal.md` at phase checkpoints**, never continuously — that file's own `How this file is maintained` section carries the procedure. Never remove a constraint that still binds.
+- Read the core files first, then the relevant references. Check scope and architecture before
+  making assumptions. Follow the invariants and code standards on every change.
+- For library APIs, check Context7 (`resolve-library-id` → `query-docs`), then applicable skills
+  from `CLAUDE.md`/`AGENTS.md`, then `context/library-docs.md`, then official documentation via
+  web search. Do not invent an API from memory. Ask if those sources do not answer the question.
+- For feature work, build only what the feature named in `progress-tracker.md` requires.
+- Keep each commit focused, reviewable, and working where possible. Ask before committing;
+  explicit user approval is required. Add coauthors only when the user requests them.
+
+### Commit numbering
+
+Start each commit subject with `<phase>.<feature>.<n>`, followed by a lowercase imperative summary:
+`2.05.03 wire profile form submit`. Use the current phase and feature from `progress-tracker.md`.
+Pad the feature and counter to two digits.
+
+Read the latest subject with `git log -1 --format=%s`. If it has the same phase and feature,
+increment its counter; otherwise start at `01`. The counter restarts for each feature.
+
+Use feature `00` for checkpoints, chores, and fixes outside a numbered feature, such as
+`2.00.01 phase 2 checkpoint`. Before Phase 1, use `0.00.<n>`. Feature `00` has a separate counter
+for each phase, starting at `01`.
+
+### Keeping project records current
+
+- After completing a feature, tick its checkbox in `progress-tracker.md` and replace Current Status
+  with the latest state. Do not append previous statuses. Add the most important decision to the
+  top of Key Decisions, which holds at most ten entries. Move the oldest entry into the relevant
+  constraints topic when an eleventh is added.
+- Keep `context/constraints.md` brief: one or two sentences per bullet explaining the rule and its
+  reason. Put rules for a specific type of work in `context/constraints/<topic>.md`. Detailed
+  examples and investigation history belong in the journal.
+- After completing a feature, append a dated journal entry with decisions, problems encountered,
+  and verification results. Read the journal only when investigating a specific feature.
+- At each phase checkpoint, run the relevant checks, review the phase diff for bugs and consistency,
+  update the tracker, and record follow-ups. Compact the journal using its own maintenance procedure
+  before moving to the next phase. Compact only at checkpoints; preserve every rule that still applies.
 
 ## Project-specific rules
 
-- **Money math belongs in Postgres.** Never compute a balance, average price, charge total, or realised P&L in TypeScript and store it. TypeScript formats numbers; Postgres calculates them.
-- **`trading-contract.md` governs every money decision.** Fill pricing, rounding, charges, margin, ledger rows, P&L and reset are all decided there — do not re-derive any of them, and do not invent a rule it does not state. **After editing it, run the sweep in its §13** and reconcile every hit; derived statements in other files do not update themselves.
-- **Order fills happen only inside `execute_order`.** Not in a Server Action, not in a route handler, not in the Edge Function.
-- **RLS is the security boundary**, not application code. Every user-owned table is scoped to `auth.uid() = user_id`.
-- **Never label simulated data as live.** Every quote stores `provider` and `provider_ts`; the source badge is **derived at render time**, never stored, and every rendered price exposes its provenance.
-- **This project moves no real money.** Do not add a payment SDK, a broker API client, or any deposit flow — simulated or otherwise.
+- Postgres calculates stored balances, average prices, charges, and realised profit or loss.
+  TypeScript formats values and may show the clearly labelled estimates allowed by the trading contract;
+  it must never calculate a monetary value for storage, including an estimate.
+- Follow `trading-contract.md` for fill prices, rounding, charges, margin, ledger entries, P&L, and
+  resets. Do not invent extra rules. After editing it, run its §13 consistency sweep and reconcile
+  every match in the other files.
+- Only the Postgres function `execute_order` may fill an order.
+- Row Level Security (RLS) enforces account isolation in the database. User-owned tables must be
+  scoped to `auth.uid() = user_id`; application checks alone do not provide this protection.
+- Every quote stores `provider` and `provider_ts`. Derive its source label when rendering rather
+  than storing a freshness label. Every displayed price must expose where it came from; simulated
+  prices must never be labelled live.
+- No real money moves through this app. Do not add payment SDKs, broker API clients, or deposit
+  flows, including simulated deposit flows.
 
 ## Commands
 
-- `pnpm install` — install dependencies
-- `pnpm dev` — run the app locally at `localhost:3000`
-- `pnpm build` — production build
-- `pnpm start` — serve the production build (Render's start command)
-- `pnpm lint` — ESLint
-- `pnpm typecheck` — `tsc --noEmit`
-- `pnpm audit:a11y` — Lighthouse accessibility score against a **running** server (`pnpm start` first)
-- `pnpm audit:overflow` — fails if any route scrolls sideways at 375, 768, 1024, 1280 or 1440px. Also needs a **running** server. Terminal routes need `OVERFLOW_GUARD_COOKIE` (a `document.cookie` string from a signed-in tab) and it **fails rather than skips** without it; `OVERFLOW_GUARD_PUBLIC_ONLY=1` accepts public-only coverage deliberately
-- `pnpm capture:screenshots` — regenerates all nine screenshots into `docs/screenshots/`, the order ticket included. Needs a **running** server and the same `OVERFLOW_GUARD_COOKIE`; fails rather than skips without it. The ticket is opened with puppeteer's `page.mouse` (trusted input), because a dispatched pointer sequence does not open that dialog (`constraints/verification.md`)
-- `pnpm test` — tier 1: Vitest logic tests, no database
-- `pnpm test:db` — tier 2: pgTAP suites in `supabase/tests/`, run by `scripts/run-pgtap.mts`. **Not** `supabase test db`, which needs Docker even against a remote database (F09)
-- `pnpm test:race` — tier 3: two-connection concurrency tests. **Commits to the real database**; needs `ALLOW_RACE_TESTS` set
-- `pnpm test:parity` — tier 4: proves the TypeScript charge estimator and the Postgres calculator agree exactly. Read-only, so it is not gated — but it needs `TEST_DATABASE_URL` and **fails rather than skips** without it
-- `pnpm test:all` — all four tiers
-- `pnpm supabase db push` — apply migrations to the linked project
-- `pnpm supabase gen types typescript --linked > src/types/database.ts` — regenerate DB types (run after every migration)
-- `pnpm supabase functions deploy market-tick` — deploy the scheduled job
+| Command                                                               | Purpose and requirements                                                                                                                                                                                                                                                                                          |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install`                                                        | Install dependencies.                                                                                                                                                                                                                                                                                             |
+| `pnpm dev`                                                            | Run locally at `localhost:3000`.                                                                                                                                                                                                                                                                                  |
+| `pnpm build`                                                          | Build for production.                                                                                                                                                                                                                                                                                             |
+| `pnpm start`                                                          | Serve the production build; also Render's start command.                                                                                                                                                                                                                                                          |
+| `pnpm lint`                                                           | Run ESLint.                                                                                                                                                                                                                                                                                                       |
+| `pnpm typecheck`                                                      | Run `tsc --noEmit`.                                                                                                                                                                                                                                                                                               |
+| `pnpm audit:a11y`                                                     | Run Lighthouse accessibility checks against a running server; start it with `pnpm start`.                                                                                                                                                                                                                         |
+| `pnpm audit:overflow`                                                 | Check for sideways page scrolling at 375, 768, 1024, 1280, and 1440px. Requires a running server and `OVERFLOW_GUARD_COOKIE` from a signed-in tab's `document.cookie` for terminal routes. Missing cookies fail the check; use `OVERFLOW_GUARD_PUBLIC_ONLY=1` only when deliberately checking public pages alone. |
+| `pnpm capture:screenshots`                                            | Regenerate all nine screenshots in `docs/screenshots/`, including the order ticket. Requires a running server and the same signed-in cookie; fails without it. The ticket needs Puppeteer's trusted `page.mouse` input; see `constraints/verification.md`.                                                        |
+| `pnpm test`                                                           | Tier 1: Vitest logic tests; no database.                                                                                                                                                                                                                                                                          |
+| `pnpm test:db`                                                        | Tier 2: pgTAP suites in `supabase/tests/`, using `scripts/run-pgtap.mts`. Do not substitute `supabase test db`; it requires Docker even for a remote database.                                                                                                                                                    |
+| `pnpm test:race`                                                      | Tier 3: concurrent tests using two connections. Writes committed data to the hosted database; requires `ALLOW_RACE_TESTS`.                                                                                                                                                                                        |
+| `pnpm test:parity`                                                    | Tier 4: compare TypeScript estimates with Postgres calculations exactly. Read-only; requires `TEST_DATABASE_URL` and fails without it.                                                                                                                                                                            |
+| `pnpm test:all`                                                       | Run all four tiers.                                                                                                                                                                                                                                                                                               |
+| `pnpm supabase db push`                                               | Apply migrations to the linked project.                                                                                                                                                                                                                                                                           |
+| `pnpm supabase gen types typescript --linked > src/types/database.ts` | Regenerate database types after every migration.                                                                                                                                                                                                                                                                  |
+| `pnpm supabase functions deploy market-tick`                          | Deploy the scheduled job.                                                                                                                                                                                                                                                                                         |
 
 ## Environment notes
 
-- **This machine has Brave, not Google Chrome.** `chrome-launcher` finds no install, so `pnpm audit:a11y` points `CHROME_PATH` at Brave's binary with a `${CHROME_PATH:-…}` override. Brave is Chromium, so Lighthouse drives it unchanged.
-- **No Docker on this machine** — and `supabase test db` needs it **even with `--db-url`**: it connects to the remote database first, then dies with `LegacyDockerRunError`. Tier 2 therefore runs through `scripts/run-pgtap.mts`. Everything runs against the **one hosted project** (`zerodha-rebuild-dev`, `kefggygenlprjzhiocai`, ap-south-1). There is deliberately no separate test project. **Tier 3 commits into that database**, so `pnpm test:race` is gated behind `ALLOW_RACE_TESTS` — see `code-standards/testing.md`. Free projects pause after a week idle.
-- **A blank white page on `localhost:3000` is HTTP 431, not a render bug.** Cookies ignore port, so other Supabase projects run on `localhost` leave `sb-<ref>-auth-token` chunks that push the request header past Node's 16 KB limit; the request dies before Next.js sees it, with no log line. Check `document.cookie.length` first. (F12)
-- **Render free tier has no cron jobs and no background workers**, and spins down after 15 minutes idle. All scheduled work lives in Supabase `pg_cron` (1-minute minimum) calling the `market-tick` Edge Function.
-- **Next.js 16 renamed `middleware.ts` to `proxy.ts`** with a named `proxy` export, running on the Node.js runtime only.
-- Upstream quote endpoints are undocumented and rate-limited. Verify a live response with `curl` before writing or changing a parser.
+- This machine uses Brave rather than Chrome. The accessibility command sets `CHROME_PATH` to
+  Brave's binary using a `${CHROME_PATH:-…}` override. Lighthouse works with its Chromium engine.
+- There is no Docker. `supabase test db --db-url` still attempts to use Docker and fails with
+  `LegacyDockerRunError`, so tier 2 uses the custom runner. All database work uses one hosted project:
+  `zerodha-rebuild-dev` (`kefggygenlprjzhiocai`, ap-south-1). There is deliberately no separate test
+  project. Tier 3 commits to that database and is gated by `ALLOW_RACE_TESTS`; read
+  `code-standards/testing.md` before running it. Free projects can pause after a week without activity.
+- If `localhost:3000` shows a blank page, check for HTTP 431 and inspect `document.cookie.length`
+  first. Cookies are shared across ports: other Supabase projects can leave `sb-<ref>-auth-token`
+  chunks that exceed Node's 16 KB request-header limit. These requests fail before reaching Next.js,
+  leaving no application log. (F12)
+- Render's free web service sleeps after 15 minutes idle and provides no cron jobs or background
+  workers. Supabase `pg_cron` calls `market-tick` at a minimum interval of one minute instead.
+- Next.js 16 uses `proxy.ts` with a named `proxy` export in place of `middleware.ts`. It runs only
+  on the Node.js runtime.
+- Before changing a parser for an upstream quote endpoint, inspect an actual response with `curl`.
+  Those endpoints are undocumented and rate-limited.
 
 ## Tooling available
 
-- **Context7 MCP** — `resolve-library-id` then `query-docs`. First stop for any library API question.
-- **Supabase MCP** — inspect tables, apply migrations, query logs, check advisors against the linked project.
-- **`architect` skill** — run before building a non-trivial feature; it replaces that feature's `**Verify:**` block with confirmed criteria.
-- **`code-review` skill** — run at phase checkpoints over the phase diff.
+- Context7 MCP: look up library APIs using `resolve-library-id`, then `query-docs`.
+- Supabase MCP: inspect tables, migrations, logs, and advisors where the linked account is accessible.
+- `architect` skill: use before a non-trivial feature to replace its `**Verify:**` block with agreed criteria.
+- `code-review` skill: use at phase checkpoints to review the phase diff.

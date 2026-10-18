@@ -1,155 +1,262 @@
 # Standing Constraints
 
-> **Role:** What still binds — the decisions and non-obvious facts that constrain future work, grouped by topic.
-> **Read before any decision that might conflict with past work.**
-> **Relates to:** receives decisions displaced from `progress-tracker.md` and decisions promoted out of `build-journal.md` at phase checkpoints.
+These are past decisions and findings that still affect future work. Read this core file every
+session; open its topic references when your task needs them. Rules define what to do, and the
+short explanation beside each rule says why. Feature references such as `(F02)` identify its origin.
 
 ## How this file is maintained
 
-This file is read **every session**, so every line costs on every session. It is the one place where
-brevity is a hard rule rather than a preference.
-
-- **One or two sentences per bullet:** the rule, and the reason it exists. Worked examples, measured transcripts, and the story of how something was found belong in `build-journal.md`. Git history holds anything trimmed from here.
-- **Grouped by topic** (auth, theming, accessibility…), never by date. Add a `##` heading when a new topic is needed.
-- **Core plus reference halves.** A topic that binds only one kind of work lives in `context/constraints/<topic>.md` behind a trigger in `CLAUDE.md`, leaving a `##` stub here pointing at it; a topic that binds every change stays in this file. Adding a bullet means asking which side it belongs on — the wrong side is billed on every session, or never read at all.
-- **Holds only what still binds.** Never a narrative of what happened — that is the journal's job.
-- **Two things feed it,** both moves and never copies: the oldest bullet of `progress-tracker.md` → Key Decisions when that section would exceed 10, and each phase's still-binding decisions promoted out of `build-journal.md` at the phase checkpoint.
-- **Cite the feature each bullet came from,** e.g. `(F02)`.
-- **Deduped on write.** A new constraint that supersedes one already here replaces that bullet in place.
-- **Removed only when verifiably dead** — reversed by a later decision, or the thing it describes no longer exists. A sequencing decision that has since been carried out is dead; a rule the code still depends on is not.
-- **Don't restate `trading-contract.md`.** It is authoritative and always read. Where a bullet exists only to explain why the contract says what it says, keep the reason and point at the section.
+- Use one or two sentences per bullet: the rule and its reason. Detailed examples, measurements,
+  and investigation history belong in `build-journal.md`; git retains removed wording.
+- Group entries by topic, with a `##` heading when needed, rather than by date.
+- Keep broadly applicable rules here. Put task-specific rules in `context/constraints/<topic>.md`,
+  link them here, and add their reading trigger to `CLAUDE.md`.
+- Move entries here from the tracker's Key Decisions when it exceeds ten entries, or from the
+  journal at phase checkpoints. Move rather than copy, and preserve the feature reference.
+- Replace an existing entry when a new decision supersedes it. Remove a rule only after verifying
+  it was reversed or no longer applies; completed sequencing instructions may be retired.
+- Keep history in the journal. Do not repeat the trading contract: link its section and retain
+  only the additional reason for the rule.
 
 ## Build plan sequencing
 
-- **A feature straddling a phase boundary ships as lettered slices under one number**, as F07 did (A in Phase 1, B after F09). Renumbering invalidates every journal and commit reference already written. (F07, F08)
-- **The market-status pill recomputes on a client timer**, because server-rendering it once leaves a tab open past 15:30 still reading OPEN. The server passes the holiday set as a `string[]` and a client component calls the same pure `marketStatusAt` the tick gates on. (F17)
-- **Watchlist search filters a preloaded universe in `cmdk`** — no trigram index, no migration, no round trip per keystroke. 200 rows is ~12KB and Postgres seq-scans a table that small whatever index sits on it. (F18)
+- Keep one feature number when work crosses phases; use lettered parts, as F07 did with A in Phase 1
+  and B after F09. Renumbering breaks journal and commit references. (F07, F08)
+- Recompute the market-status pill on a client timer so a tab left open past 15:30 changes to CLOSED.
+  Pass holidays as `string[]` and use the same pure `marketStatusAt` function as the tick gate. (F17)
+- Filter the preloaded stock list with `cmdk` for watchlist search; do not add a trigram index,
+  migration, or request per keystroke. Roughly 200 rows take about 12 KB, and Postgres uses a
+  sequential scan for a table this small anyway. (F18)
 
 ## Environment and secrets
 
-- **There is exactly one Supabase project and it is the real one:** `zerodha-rebuild-dev` / `kefggygenlprjzhiocai` / ap-south-1, in a separate account the workspace MCP cannot see — the CLI authenticates by personal access token. A second test project was deliberately deleted: one project cannot silently pause while the other stays warm. (F08, revised 1.00.03)
-- **`pnpm db:push:test` does not exist and must not be reintroduced.** One database means one push command, and `pnpm supabase db push` already is it. (F09)
-- **`TEST_DATABASE_URL` must use the session-mode pooler, port 5432.** Tier 3 holds a transaction open across statements, which transaction-mode pooling on 6543 structurally cannot express. The port is load-bearing. (1.00.03)
-- **The seed authenticates as the service role**, not through a test connection string. `instruments` and `market_holidays` grant `select` only, and seeding reference data is the administrative act that key exists for. (F14)
-- **Environment validation is split across two modules:** `env.ts` for the `NEXT_PUBLIC_*` values, and `env.server.ts` carrying `import 'server-only'` so a client import of the service-role key fails the build. `register()` forces validation at boot and Next skips it during `next build` — `build` stays green without secrets while `dev` and `start` fail by name. (F01)
+- Use the one hosted Supabase project: `zerodha-rebuild-dev` / `kefggygenlprjzhiocai` / ap-south-1.
+  It is in a separate account inaccessible to workspace MCP; the CLI uses a personal access token,
+  and the second test project was deliberately deleted to avoid independent idle pauses. (F08, revised 1.00.03)
+- Do not reintroduce `pnpm db:push:test`. There is one database and one push command,
+  `pnpm supabase db push`. (F09)
+- `TEST_DATABASE_URL` must use the session-mode pooler on port 5432. Transaction-mode port 6543
+  cannot preserve the multi-statement transactions required by tier 3. (1.00.03)
+- Seed reference data with the service role, not a test connection string. Client roles have only
+  `select` access to `instruments` and `market_holidays`. (F14)
+- Validate public variables in `env.ts` and secrets in `env.server.ts`, which imports `server-only`
+  so a client import fails the build. `register()` validates at boot; `next build` skips it, while
+  `dev` and `start` fail with the missing variable's name. (F01)
 
 ## Dependencies
 
-- **TypeScript is pinned to 6.0.3 and ESLint to 9.39.5**, both below latest: `typescript-eslint` refuses to load against the TS 7 API, and `eslint-plugin-react` 7.37.5 crashes on ESLint 10's rule-context API. Each breaks `pnpm lint` outright; re-test when those upstreams ship support. (F01)
-- **Dependencies are pinned exactly, with no caret ranges**, so `architecture.md`'s table, the lockfile and `package.json` can only diverge by a deliberate edit. (F01)
-- **`lighthouse` is a pinned dev dependency** behind `pnpm audit:a11y`, landed in Phase 1 so every public page is audited as it ships rather than all at once at F38. (F04)
+- Keep TypeScript pinned to 6.0.3 and ESLint to 9.39.5 until compatibility is rechecked.
+  `typescript-eslint` failed with TS 7, and `eslint-plugin-react` 7.37.5 failed with ESLint 10's
+  rule-context API; either broke linting. (F01)
+- Pin exact dependency versions without caret ranges, keeping `package.json`, the lockfile, and
+  the architecture table aligned. (F01)
+- Keep the pinned Lighthouse dev dependency behind `pnpm audit:a11y`. It was added in Phase 1 so
+  public pages could be audited as they shipped, rather than waiting for F38. (F04)
 
 ## Auth
 
-- **The `(terminal)` layout checks the session once and pages trust it.** Every page beneath reads through RLS-scoped queries that return nothing without a session, so a per-page re-check buys nothing — and no future page can forget it. (F17)
-- **Sign-in is initiated server-side, not from a browser client.** A `<form>` posts to a Server Action that calls `signInWithOAuth` and `redirect()`s, so sign-in works with JavaScript disabled and the PKCE verifier is written by the same client that reads it back. (F12)
-- **The intended destination survives sign-in, guarded by a pure `safeNext()`** in `src/lib/auth/routes.ts` — it honours `next` only when it starts with a single `/`. The logic lives there rather than in `src/proxy.ts` because the proxy is unreachable from tier 1 and an open redirect must be testable. (F12)
-- **The signed-in identity and sign-out control live in the terminal, never the public header.** Reading a session in the marketing header would force dynamic rendering on every public page and break the session-free `(marketing)` boundary. (F12)
-- **All four Supabase clients ship together, `admin.ts` included**, so its `import 'server-only'` guard is observed failing a build rather than assumed. (F12)
-- **Signup is the only path that ever creates an account.** The trigger on `auth.users` fires only on insert, so an orphaned user is deleted and re-created rather than backfilled. (F13)
+- Check the session once in the `(terminal)` layout; child pages use RLS-scoped reads that return
+  no account data without a session. Separate checks in every page are unnecessary. (F17)
+- Start sign-in with a form posting to a Server Action that calls `signInWithOAuth` and `redirect()`.
+  This works without browser JavaScript and keeps the PKCE verifier (OAuth's request-verification
+  value) with the client that reads it back. (F12)
+- Preserve the intended destination through `safeNext()` in `src/lib/auth/routes.ts`, accepting
+  only values starting with a single `/`. Keep it outside `src/proxy.ts` so tier 1 can test the
+  open-redirect protection. (F12)
+- Keep signed-in identity and sign-out controls in the terminal. A session read in the public header
+  would make every marketing page dynamic and violate its session-free boundary. (F12)
+- Ship all four Supabase clients together, including `admin.ts`, and verify its `server-only`
+  protection actually rejects a client import during a build. (F12)
+- Create accounts only through signup's `auth.users` insert trigger. Delete and recreate orphaned
+  users rather than backfilling accounts through a second path. (F13)
 
 ## Security and RLS
 
-**Moved to `context/constraints/security.md`** — read before a migration, a grant, an RLS policy or a `security definer` function. On demand, because RLS as *the* security boundary is already an invariant in `architecture.md`; what moved is the operational detail behind it.
+Read `context/constraints/security.md` before migrations, grants, RLS policies, or `security definer`
+functions. It covers permission and constraint traps; the security invariants remain in `architecture.md`.
 
 ## Money, orders, and the order engine
 
-**Moved to `context/constraints/trading.md`** — read before touching money, an order, or a Postgres money function. Carries the charge and contract rationale, the order-entry rules, and the database-concurrency rules. On demand, because `trading-contract.md` stays always-read and remains authoritative for every money decision.
+Read `context/constraints/trading.md` before changing money, orders, or Postgres money functions.
+It explains order-entry and locking decisions. `trading-contract.md` remains authoritative for money.
 
 ## Testing
 
-**Moved to `context/constraints/testing.md`** — read before writing or debugging a test in any tier, alongside `code-standards/testing.md`. On demand, because none of it binds a session that writes no test.
+Read `context/constraints/testing.md` with `code-standards/testing.md` before writing or debugging tests.
 
 ## Verification routine
 
-**Moved to `context/constraints/verification.md`** — read before driving a browser or trusting an automated check. On demand, because none of it binds a session that never opens one.
+Read `context/constraints/verification.md` before browser checks or interpreting automated audits.
+It records checks that can appear to pass while testing the wrong thing.
 
 ## Deployment
 
-- **`NEXT_PUBLIC_*` is inlined at build time, so setting one on the host and not rebuilding changes nothing.** It has now cost three things in one session: a Render deploy that sent every sign-in to `localhost`, and two falsification attempts that appeared to pass while testing nothing. **Any check that overrides one at runtime is invalid** — rebuild, or test the value through a pure function instead. (F39)
-- **A wrong `NEXT_PUBLIC_SITE_URL` is silent by construction**, because the OAuth `redirectTo` is built from env rather than the request — deliberately, since a request-derived origin is a host-header-injection vector and Supabase must have the URL allow-listed. Every page renders and `/api/health` passes; only sign-in breaks. `assertDeployableSiteUrl` in `instrumentation.ts` refuses to boot a deployed instance carrying a localhost URL, gated on `RENDER` rather than `NODE_ENV` because `pnpm start` locally is also a production build and the audits need it. (F39)
-- **An instrumentation throw does not stop a Next server** — it logs `Failed to prepare server` and leaves the process alive but not serving, which on a platform is an instance failing its health check forever rather than a failed deploy. Exit non-zero instead. (F39)
-- **The `pg_cron` schedule is live on production and evidenced, whatever F16's unticked box suggests.** `cron.job` holds an active per-minute `market-tick`, `cron.job_run_details` records 7,200 successful runs, and `quotes` stopping at 15:29 IST is the session gate working — so quote refresh, limit matching and MIS square-off all run while the web service sleeps. **F16 is held open by choice, not by a gap.** (F40)
-- **`corepack enable` cannot run on Render**: it writes a shim into a read-only `/usr` and dies with `EROFS` before installing anything. `npx --yes pnpm@<pinned>` needs no privileged write. (F39)
+- Rebuild after changing any `NEXT_PUBLIC_*` value; Next.js embeds these values in the browser bundle
+  during the build. A runtime override is not a valid test of the new value; rebuild or test its
+  validation as a pure function. (F39)
+- Use the configured `NEXT_PUBLIC_SITE_URL` for OAuth redirects, with the URL allow-listed in Supabase;
+  request-host-derived origins permit host-header injection. `assertDeployableSiteUrl` in
+  `instrumentation.ts` rejects deployed localhost values using `RENDER`, not `NODE_ENV`, since local
+  audits also use production builds; pages and `/api/health` alone do not detect a wrong redirect. (F39)
+- Exit non-zero on a startup validation failure. Next.js catches an instrumentation throw, logs
+  `Failed to prepare server`, and can leave the process alive without serving requests. (F39)
+- Do not interpret F16's unchecked box as an undeployed schedule: F40 recorded an active per-minute
+  `market-tick` in `cron.job`, 7,200 successful `cron.job_run_details`, and quotes stopping at
+  15:29 IST as expected. F16 remains open by choice; scheduling supports refresh, matching, and
+  square-off while Render sleeps. (F40)
+- Use `npx --yes pnpm@<pinned>` on Render. `corepack enable` tries to write a shim into read-only
+  `/usr` and fails with `EROFS`. (F39)
 
 ## Local development environment
 
-- **HTTP 431 on `localhost:3000`** (see `CLAUDE.md` → Environment notes) **also silently kills Server Action POSTs**, not just document requests. Escape hatch if clearing the foreign `sb-*` cookies is impractical: `NODE_OPTIONS=--max-http-header-size=32768`. (F12)
+- HTTP 431 from excess localhost cookies can block Server Action POSTs as well as page requests
+  before application logging. If clearing foreign `sb-*` cookies is impractical, use
+  `NODE_OPTIONS=--max-http-header-size=32768`; see `CLAUDE.md` → Environment notes. (F12)
 
 ## Supabase CLI
 
-**Moved to `context/constraints/supabase-cli.md`** — read before a migration, a type regeneration or a function deploy. On demand, because none of it binds a session that never invokes the CLI.
+Read `context/constraints/supabase-cli.md` before migrations, type generation, or function deployment.
 
 ## Accessibility
 
-- **Lighthouse cannot audit any `(terminal)` page**, and `pnpm audit:a11y` only ever loads one theme. It carries no session, follows the redirect, and reports a perfect score for the login page — a 1.00 that says nothing about the page requested. **`pnpm audit:a11y:axe` is the answer to both**: a real session by cookie, a named theme, and it fails rather than skips without one. (Phase 3 checkpoint, answered F38)
-- **A Lighthouse 100 is not evidence about tap targets** — target size is not in its audit set. `/support` scored 100 with every `<summary>` 20px tall, under WCAG 2.2's 24px minimum. Measure `getBoundingClientRect()` at 375px. (F07)
-- **An `sr-only` element inside a wide table escapes its `overflow-x-auto` region and scrolls the whole page sideways**, because `.sr-only` is `position: absolute` and without a positioned ancestor is never clipped. **Every scroll wrapper carries `relative`.** (F27, F30; the last two holdouts fixed at the Phase 5 checkpoint)
-- **Measure sideways overflow per page, not per component.** `documentElement.scrollWidth` against `clientWidth` on the page itself — F31's scroll region was focusable, labelled and `relative` while `/positions` still overflowed 94px, because the shared `TopNav` did. Re-measure every page after touching shared chrome. (F31, F30, F27)
-- **The terminal wordmark is hidden below `sm`, and that is what makes the top bar fit 375px.** The burger, market pill, provenance badge, theme toggle and avatar need 333 of the 347px available; the wordmark's 109px is the only element there carrying no function, so it is what gives way. Do not re-show it without re-measuring. (F31)
-- **A `role="combobox"` keeps its listbox mounted.** cmdk's `CommandInput` always emits `aria-controls` pointing at the list; rendering that list only when a query exists left the reference dangling — a **critical** axe failure on all eight terminal routes, because the watchlist rail lives in the layout. Hide the list, never unmount it. (F38)
-- **A `role="img"` chart container must contain nothing focusable.** Lightweight Charts injects an attribution anchor inside it, which axe reports as `nested-interactive`. `attributionLogo: false` removes it — and **the licence still requires the TradingView link**, so `StockChartCard` renders a named one outside the chart. Do not set that option without keeping the link. (F38)
-- **A horizontally scrollable region needs `tabIndex={0}` and a labelled `role="region"`**, or keyboard users cannot reach the overflowing columns. Lighthouse does not audit this; axe does. Applies to every table in Phase 5. (F05)
-- **A dialog opened from a store restores focus itself; Radix cannot.** Radix returns focus to its `DialogTrigger`, and a dialog mounted once and opened imperatively has none. The store captures `document.activeElement` at the click and `onCloseAutoFocus` puts it back, guarding `isConnected`. Applies to every call site F31 and later add. (F25)
-- **A Radix `DropdownMenuItem asChild` must wrap the interactive element, never a `<form>`.** The menu item handles Enter and Space with `event.currentTarget.click()`, and `HTMLFormElement.click()` has no default action — so a form-as-menu-item is mouse-operable and dead to the keyboard. (F17)
-- **Recharts stamps `role="application"` on its SVG**, which hands a screen reader every keystroke and breaks browse mode. Pair every chart with a table carrying the same numbers and mark the chart `aria-hidden`. (F21)
-- **Reorder ships as move-up / move-down, not drag.** Drag alone is unreachable by keyboard and the project has no drag-and-drop dependency; buttons write the same `sort_order`. (F18)
+- Use `pnpm audit:a11y:axe` with a signed-in cookie and an explicit theme for terminal audits; it
+  fails if the session is missing. Lighthouse has no session, follows the login redirect, and checks
+  only one theme, so even a perfect score can describe the wrong page. (Phase 3 checkpoint, F38)
+- Measure tap targets with `getBoundingClientRect()` at 375px; Lighthouse does not check their size.
+  Support scored 100 while its 20px `<summary>` targets were below WCAG 2.2's 24px minimum. (F07)
+- Put `relative` on every `overflow-x-auto` scroll wrapper. Absolutely positioned `sr-only` content
+  can otherwise escape the table wrapper and make the entire page scroll sideways. (F27, F30; Phase 5 checkpoint)
+- Compare page-level `documentElement.scrollWidth` with `clientWidth`, then recheck every page after
+  changing shared headers or navigation. A correct table wrapper did not prevent the shared `TopNav`
+  from adding 94px of overflow on `/positions`. (F31, F30, F27)
+- Keep the terminal wordmark hidden below `sm` unless the header is remeasured. Its controls use
+  333 of 347 available pixels at 375px, leaving no room for the 109px wordmark. (F31)
+- Keep a combobox's listbox mounted, hiding it when needed. cmdk's `CommandInput` always emits
+  `aria-controls`; an unmounted list left a broken reference and a critical axe finding on all eight
+  terminal routes. (F38)
+- A `role="img"` chart container must have no focusable content. Use `attributionLogo: false` to
+  remove Lightweight Charts' injected anchor, but retain the licence-required named TradingView
+  link outside the chart in `StockChartCard`. (F38)
+- Give horizontally scrollable regions `tabIndex={0}` and a labelled `role="region"` so keyboard
+  users can reach their columns. Axe checks this; Lighthouse does not. (F05)
+- A store-opened dialog must restore focus itself because it has no Radix `DialogTrigger`. Capture
+  `document.activeElement` when opening and restore it in `onCloseAutoFocus` only if `isConnected`;
+  apply this to every new call site. (F25)
+- Wrap the interactive element, never a `<form>`, with `DropdownMenuItem asChild`. Radix activates
+  it through `event.currentTarget.click()` on Enter or Space, and clicking the form does not submit it. (F17)
+- Pair every Recharts chart with a table of the same data and mark the chart `aria-hidden`.
+  Its SVG's `role="application"` otherwise captures screen-reader keystrokes and disrupts browse mode. (F21)
+- Reorder watchlists with move-up/move-down buttons writing `sort_order`. Drag-only interaction
+  excludes keyboard users, and this project has no drag-and-drop dependency. (F18)
 
 ## Theming and design tokens
 
-- **Every `dark:` utility is stripped from added components.** Tailwind v4 binds `dark:` to `prefers-color-scheme`, so a leftover `dark:` class follows the visitor's OS rather than this project's theme class. A grep guard enforces it. (F02)
-- **Interpolated class names generate no CSS.** Tailwind scans source for complete strings, so `bg-chart-${n}` produces nothing. Write every variant out literally. (F02)
-- **`cn()` silently deletes a custom type size when it meets a colour.** tailwind-merge cannot tell `text-number-sm` (a size) from `text-ink` (a colour) and drops one with no warning. `src/lib/utils.ts` declares the project's `--text-*` scale to `extendTailwindMerge`; **a size added to `globals.css` and not to that list starts disappearing.** (F19)
-- **`theme-tokens.test.ts` computes AA ratios for the tokens in its `foregrounds` list** — against canvas, surface and surface-elevated in both themes — rather than trusting the eye. **A colour rendered as text but missing from that list is unguarded**, which is exactly how the trading pair shipped at 1.95:1 on light: it appeared only in `mustNotFlip`, which says nothing about contrast. Adding a text colour means adding it there. The muted tones invert in `.light`, because on a light ground "more prominent" means darker. (1.00.01, corrected F38)
-- **The trading fills are not text colours.** `--color-up`/`--color-down` stay byte-identical across themes (F02) and are only ever a candle body, a filled button or a status dot; every price figure uses `--color-up-text`/`--color-down-text`, which **do** flip. The fills measure 3.72:1 on dark `surface-elevated` and as low as 1.95:1 on light. DESIGN.md §Trading Semantics specifies them as text and this deviates deliberately, as F04's links do. (F38)
-- **Measure a text colour against the tint it sits on, not just the surface.** A `bg-up/10` badge and a `bg-destructive/10` button put the background ~10% nearer the text than the plain surface does, and both cleared the surface while failing the tint. (F38)
-- **`text-brand` carries a `light:` override at every text site; the token itself never changes.** Brand yellow is 11–13.5:1 on dark and 1.37–1.43:1 on light, because F02's invariant keeps `--color-brand` byte-identical across themes — so the *class* becomes theme-aware instead: `text-brand light:text-ink`. Decorative `aria-hidden` brand glyphs are exempt. A new `text-brand` without a `light:` partner reopens a WCAG AA failure. (F06, resolved F38)
-- **`--color-info` is not a text colour.** It is `#3b82f6` in both themes and fails AA for normal text on five of six surfaces — 3.68:1 on the light canvas and **4.30:1 on `--color-surface`**, the surface every table sits on. It clears AA only on the dark canvas. It exists as `--color-ring`; the proven text set is `ink`, `body`, `muted`, `muted-strong`. (F38)
-- **`--color-muted` is for links, captions and column headers — never running paragraph copy**, which uses `--color-body`. Both muted tones now carry `.light` overrides, which fixed their contrast but not the rule: running copy is still `body`. (F04, F38)
-- **Validation errors are `text-body`, not `text-down-text`.** `--color-down` means "price fell" everywhere in the app. The red signal comes from the shadcn bridge instead, where `--color-destructive` maps onto **`--color-down-text`** — the text tier, not the fill, because `text-destructive` is the only foreground use in the codebase and the fill measured 3.12:1 behind the Cancel button. (F25, retargeted F38)
-- **The `--color-chart-*` ramp is measured, not chosen**, and `chart-ramp.test.ts` holds it that way: it steps *lightness* as well as hue (ten categories are not separable by hue for a deuteranope), targets `--color-surface` for contrast, and uses **no green and no red at all** — green reads as "up" on a trading screen. (F21)
-- **An aggregated `Others` slice takes the neutral, never a ramp colour** — it is drawn last, so `index % 10` would hand it chart-1 and the legend would show two identical swatches. (F21)
-- **Inline links inside a text block carry a persistent underline**, deviating from DESIGN.md, because WCAG 1.4.1 forbids identifying a link by colour alone. Nav and footer links are not in a text block and keep hover-only. (F04)
-- **The marketing footer is `bg-surface`, not DESIGN.md's always-light `#fafafa`.** That token already *is* `#fafafa` in the light theme, so the source value is reached through the token rather than hardcoded. (F03)
-- **An account-following preference is applied client-side, because `next-themes` accepts no server value.** Its injected script reads `localStorage` and `setTheme` is the only write path, so the terminal layout passes `profiles.theme` down and a client component calls `setTheme` once per full load — the price is one frame of the wrong theme on a browser that has never seen the account. (F35)
-- **The marketing theme toggle cannot persist to the account, and the terminal's must.** Reading a session in the public header would force dynamic rendering on every marketing page (F12), so `SiteHeader` stays `localStorage`-only. The terminal top-bar toggle is the mirror image: if it did *not* persist, the layout's stored `profiles.theme` would silently revert the user's choice on the next full load. (F35)
-- **`profiles.theme` defaults to `'dark'`.** `architecture.md` said `light` and was corrected: the scope document specifies a dark-default terminal and outranks it. (F10)
-- **Measure a theme by loading it, not by toggling the class from script.** Elements with `transition-colors` return stale computed colours after a scripted class change, fabricating failures that do not exist. (1.00.01)
-- **`pnpm audit:a11y` only ever sees the dark theme**; the contrast assertions in `theme-tokens.test.ts` are what cover light. **Lighthouse also cannot audit the 404**, returning `ERRORED_DOCUMENT_REQUEST` for any non-200 document. (F06, F08)
+- Remove `dark:` utilities from added components. Tailwind v4's default variant follows the OS
+  preference rather than this project's theme class; a grep guard checks for leftovers. (F02)
+- Write Tailwind variants as complete literal class names. A constructed string such as
+  `bg-chart-${n}` is not detected by the CSS scanner. (F02)
+- Register every custom `--text-*` size in `extendTailwindMerge` in `src/lib/utils.ts` when adding
+  it to `globals.css`. Otherwise `cn()` can mistake `text-number-sm` for a colour and silently
+  remove it when combined with `text-ink`. (F19)
+- Add every text colour to `theme-tokens.test.ts`'s `foregrounds` list, which checks WCAG AA contrast
+  on canvas, surface, and surface-elevated in both themes. `mustNotFlip` checks equality, not contrast;
+  muted colours become darker in `.light` to remain readable. (1.00.01, F38)
+- Use `--color-up`/`--color-down` only for candle bodies, filled buttons, and status dots; keep them
+  identical across themes. Price text uses `--color-up-text`/`--color-down-text`, which change by
+  theme because the fills measured 3.72:1 on dark elevated surfaces and as low as 1.95:1 on light;
+  this deliberately corrects DESIGN.md's older text guidance. (F02, F38)
+- Check contrast against the actual tinted background. Both `bg-up/10` and `bg-destructive/10`
+  passed on a plain surface but failed on their roughly 10% tints. (F38)
+- Pair every text use of `text-brand` with `light:text-ink`; exempt decorative `aria-hidden` glyphs.
+  Brand yellow remains constant, measuring 11–13.5:1 on dark but only 1.37–1.43:1 on light. (F06, F38)
+- Do not use `--color-info` for normal text: `#3b82f6` passes AA only on the dark canvas, with
+  3.68:1 on light canvas and 4.30:1 on surface. It supplies `--color-ring`; use `ink`, `body`,
+  `muted`, or `muted-strong` for tested text colours. (F38)
+- Use `--color-body` for running paragraphs, reserving `--color-muted` for links, captions, and
+  column headings. The light-theme contrast fix does not change those roles. (F04, F38)
+- Use `text-body` for validation messages; trading red means a falling price. The shadcn destructive
+  bridge maps `--color-destructive` to `--color-down-text`, since its foreground use must meet
+  contrast and the fill measured only 3.12:1 behind the Cancel button. (F25, F38)
+- Keep chart categories free of trading green and red. `chart-ramp.test.ts` checks a ramp varying
+  both lightness and hue against `--color-surface`, since hue alone cannot distinguish ten categories
+  for people with deuteranopia, a form of red-green colour blindness. (F21)
+- Use the neutral colour for an aggregated `Others` slice. Giving the last slice `index % 10`
+  can repeat chart-1 and create identical legend swatches. (F21)
+- Underline inline links persistently, as required by WCAG 1.4.1's rule against colour-only link
+  identification. This overrides DESIGN.md; navigation and footer links retain hover-only underlines. (F04)
+- Use `bg-surface` for the marketing footer. It resolves to `#fafafa` in light mode while supporting
+  dark mode, rather than hardcoding DESIGN.md's always-light value. (F03)
+- Pass `profiles.theme` from the terminal layout and apply it with client-side `setTheme` once per
+  full load. `next-themes` reads `localStorage` and accepts no server value, so an account's first
+  visit on a browser may briefly show that browser's existing theme. (F35)
+- Keep `SiteHeader`'s theme toggle local to `localStorage`; persist the terminal toggle to the
+  account. Reading a session in the marketing header breaks static rendering, while failing to
+  save the terminal choice lets `profiles.theme` revert it on the next full load. (F12, F35)
+- Default `profiles.theme` to `'dark'`, as specified by product scope. The architecture's earlier
+  `light` default was corrected. (F10)
+- Load the intended theme before measuring colours. Scripted class changes can return stale values
+  during `transition-colors` and produce false contrast failures. (1.00.01)
+- Treat `pnpm audit:a11y` as a dark-theme check; use `theme-tokens.test.ts` for light-theme contrast.
+  Lighthouse also refuses non-200 documents such as the 404 with `ERRORED_DOCUMENT_REQUEST`. (F06, F08)
 
 ## Formatting and display
 
-- **Two money formatters, not one with flags.** `formatCurrency` always renders ₹ and 2dp; `formatSignedCurrency` renders an explicit +/− where the sign carries meaning. `Intl.NumberFormat('en-IN')` gives Indian digit grouping natively. (F02)
-- **`formatPercent` is fixed at 2dp and is wrong for statutory rates** — it renders 0.00307% as "0.00%". `formatRate` (up to 5dp, no trailing zeros) exists for those. (F06)
+- Use `formatCurrency` for ₹ and two decimal places, and `formatSignedCurrency` when an explicit
+  +/− is meaningful. Both use `Intl.NumberFormat('en-IN')` for Indian digit grouping. (F02)
+- Use `formatRate` for statutory rates: up to five decimal places with no trailing zeros.
+  `formatPercent` is fixed at two and incorrectly displays 0.00307% as 0.00%. (F06)
 
 ## shadcn/ui
 
-- **shadcn's token vocabulary is bridged onto this project's, never merged.** A `@theme inline` block maps their names onto our palette so `shadcn add` keeps working. `--color-muted` is the one real collision — shadcn means a *surface*, this project means the *text* grey — resolved in this project's favour. (F02)
-- **The shadcn CLI needs `init -b radix -t next -p nova --css-variables -y`.** It picks between Base UI, Radix and React Aria and prompts for a style preset that `-y` does not skip. `shadcn` is also a *runtime* dependency shipping `shadcn/tailwind.css`. (F02)
-- **Overriding a variant-prefixed utility needs the same prefix.** `SheetContent` sizes itself with `data-[side=right]:w-3/4`; a plain `w-full` loses on specificity and `tailwind-merge` keeps both, so the class list looks right while the width is wrong. Only measuring exposes it. (F03)
-- **`components/ui/table.tsx` is a Client Component**, so importing it puts a hydrated boundary on the page. Marketing tables use a plain semantic `<table>`; the terminal is where the primitive earns its cost. (F05)
-- **The watchlist rail lives in the layout beside `<main>`; only the sheet trigger lives in the nav.** One component rendering both shells put the 288px `aside` inside the header's 64px flex row. `WatchlistRail` and `WatchlistSheet` are separate exports over one shared `WatchlistPanel`. The sheet is the terminal's **menu** below `xl`, carrying the nav links above the watchlist, so the shared panel claims height with `min-h-0 flex-1` rather than `h-full` — it has a sibling now. (F17, F37)
-- **The terminal header has no spare width, and anything added to it re-opens a sideways scroll.** The nav is `xl` and the rail `lg` because the six links need 404px and the right-hand cluster 442px; at 768px the bar has ~106px spare. Below `xl` the sheet carries navigation instead. (F37)
-- **`DialogContent` caps its height at `calc(100dvh-2rem)` and scrolls internally — do not remove it.** It is `fixed` and centred with `-translate-y-1/2`, so taller content hangs off both ends with neither reachable: a fixed element creates no page scroll. The order ticket is 591px and clipped to top −46 on a 500px-tall viewport without the cap. (F37)
+- Bridge shadcn tokens to the project palette through `@theme inline` so `shadcn add` keeps working.
+  Preserve this project's text-grey meaning of `--color-muted`, despite shadcn using that name for
+  a surface. (F02)
+- Initialise with `init -b radix -t next -p nova --css-variables -y`; `-y` alone does not skip the
+  style-preset prompt. Keep `shadcn` as a runtime dependency for `shadcn/tailwind.css`. (F02)
+- Override a variant-prefixed utility with the same prefix. Plain `w-full` cannot override
+  `data-[side=right]:w-3/4` on `SheetContent`; both survive `tailwind-merge`, so measure the result. (F03)
+- Use a plain semantic `<table>` for marketing tables. Importing `components/ui/table.tsx` creates
+  a client-hydrated boundary, which is appropriate for the terminal primitive. (F05)
+- Keep `WatchlistRail` beside `<main>` in the layout, with only the sheet trigger in the nav;
+  `WatchlistRail` and `WatchlistSheet` share `WatchlistPanel`. Below `xl`, the menu sheet also holds
+  navigation above it, so the panel uses `min-h-0 flex-1` rather than `h-full`. (F17, F37)
+- Remeasure header overflow after adding anything: the desktop nav starts at `xl`, the watchlist
+  rail at `lg`, and below `xl` the sheet provides navigation. Links need 404px and right-hand
+  controls 442px; the bar has about 106px spare at 768px. (F37)
+- Keep `DialogContent` internally scrollable and capped at `calc(100dvh-2rem)`. A fixed, vertically
+  centred dialog creates no page scroll; the uncapped 591px order ticket started at −46px on a
+  500px-high viewport, leaving content unreachable. (F37)
 
 ## Marketing site
 
-**Moved to `context/constraints/marketing.md`** — read before building or changing a page under `(marketing)`. On demand, because none of it binds work inside the terminal.
+Read `context/constraints/marketing.md` before changing a `(marketing)` page.
 
 ## Live prices, interpolation, and quote providers
 
-**Moved to `context/constraints/market-data.md`** — read before touching a surface that renders a price, the quote store, provenance, or a quote provider. On demand, because the provenance *invariants* stay in `architecture.md`; what moved is the operational detail behind them.
+Read `context/constraints/market-data.md` before changing displayed prices, the quote store, provenance,
+or a provider. The invariants remain in `architecture.md`; this reference holds the operational details.
 
 ## Next.js behaviour
 
-- **Two identical GET reads in one render return the same answer, even across a write between them** — Next memoizes identical `fetch` calls per render pass and supabase-js is built on `fetch`. **`cache: 'no-store'` does not defeat it**; have the writer return what it wrote instead of re-reading. (F33)
-- **PostgREST answers `PGRST103` for an offset past the end, returning null rows *and* a null count.** A total read off the paged query is therefore lost exactly when the page is out of range, rendering "no rows" over an account that has them. **Every pager takes its total from a separate unranged count and carries a "past the end" branch** — Funds had neither. (F34, Funds fixed at the Phase 5 checkpoint)
-- **Moving or renaming a route file leaves a stale `.next/types/validator.ts`** that fails `pnpm typecheck` *and* `pnpm build` on a module that no longer exists. `rm -rf .next` clears it. (F03)
-- **A Server Component throw renders nothing server-side; the boundary appears on hydration.** `curl` shows an empty body and a 500, which looks like a white screen — the check only means something in a browser. (F08)
-- **Next treats leading-underscore directories as private and does not route them**, so a `__boom/` test page builds clean and simply does not exist. (F08)
-- **The 404 carries full public chrome; the error boundary carries none.** An unmatched URL never enters the `(marketing)` group, so `PublicShell` is extracted and shared; an error means the subtree already failed, so its fallback depends on as little as possible. (F08)
+- Have a write return its result rather than rereading it in the same render. Next.js memoizes
+  identical GET fetches per render, including Supabase reads, even across an intervening write;
+  `cache: 'no-store'` does not disable this behaviour. (F33)
+- Use a separate unranged count for every pager and provide a past-the-end state. PostgREST's
+  `PGRST103` returns null rows and null count for an excessive offset, which can otherwise make a
+  populated account look empty. (F34; Funds corrected at the Phase 5 checkpoint)
+- Clear `.next` with `rm -rf .next` after moving or renaming route files if stale
+  `.next/types/validator.ts` references break typecheck or build. (F03)
+- Check Server Component error boundaries in a browser. Their fallback appears on hydration;
+  `curl` may show an empty body and HTTP 500 instead. (F08)
+- Do not use leading-underscore folders for temporary test routes. Next.js treats them as private,
+  so a `__boom/` page can build successfully without creating a route. (F08)
+- Share `PublicShell` with the 404 because unmatched routes do not enter `(marketing)`.
+  The root error fallback has no page chrome so it depends on as little failed code as possible. (F08)
 
 ## Documentation upkeep
 
-- **Nothing sweeps the non-money documents, so the phase checkpoint is where they get reconciled.** `trading-contract.md` §13 sweeps money rules because they are restated in four files; the same problem exists outside money with no guard. Re-read the non-money docs against the code at every checkpoint. (1.00.06)
-- **`context/` is read in tiers, not whole** — reading it all cost >100k tokens, mostly shipped phases and untouched libraries. `CLAUDE.md` carries the always list and the trigger table, and `pnpm context:cost` guards the 40k always-read budget. **It is not saturated** — measured 34.5k of 40k on 2026-09-13, after the reference-half split freed ~8k; an earlier line here claiming otherwise was stale. (4.00.02, corrected F40)
+- Reconcile non-money documentation with the code at phase checkpoints. Money has the explicit
+  `trading-contract.md` §13 sweep; other subjects have no equivalent automatic review. (1.00.06)
+- Follow `CLAUDE.md`'s core reading list and task triggers rather than loading all context for routine
+  work; `pnpm context:cost` checks its 40,000-token budget. The recorded 2026-09-13 measurement was
+  34.5k after the reference split saved roughly 8k; rerun the command for the current size. (4.00.02, F40)

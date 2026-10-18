@@ -1,27 +1,23 @@
 # Progress Tracker
 
-> **Role:** Live build status — what's done, in progress, and next.
-> **Read at the start of every session**; **update after every completed feature.**
-> **Relates to:** mirrors the phase files under `build-plan/` exactly; evicts old decisions to `constraints.md`.
-> **Read first every session** — it names the current feature, which is what decides the rest of what gets read.
-
-Any AI agent reading this should immediately know what is done, what is in progress, and what is next.
+This is the current build status: what is complete, what remains open, and what to do next.
+Read it first at the start of a session, then follow the reading order in `../CLAUDE.md`.
+Feature numbers match the phase plans in `build-plan/`.
 
 ## How this file is maintained
 
-- **Current Status is overwritten, never appended.** It holds three lines describing only the latest state. Do not keep previous statuses here — the record of what happened lives in `build-journal.md`.
-- **Progress checkboxes are edited in place** — tick the box for the completed feature. Never restate, duplicate, or re-list the checklist.
-- **Key Decisions holds the 10 most recent decisions, newest first.** When adding an 11th, file the oldest bullet under its topic in `constraints.md`, so this section never exceeds 10. Eviction is a move, never a delete — an old decision can still bind.
-
----
+- Replace Current Status after each completed feature. Keep its three entries focused on the latest
+  state; the journal holds previous work and verification records.
+- Tick the existing feature checkbox in place. Do not copy or repeat the checklist.
+- Keep the ten most recent Key Decisions, newest first. When adding an eleventh, move the oldest
+  entry into its topic in `constraints.md` or the relevant topic reference. Preserve the decision
+  until it is explicitly superseded or no longer applies.
 
 ## Current Status
 
-**Phase:** Phase 6 — Polish & Ship, **checkpoint run, not ticked**: its production regression still needs a sign-up and a session-hours trade. **F16 and the Phase 2 checkpoint stay open by decision**; F16 lands at the very end. Do not tick either
-**Last completed:** **the Phase 6 checkpoint's automated half (2026-09-24).** All four test tiers, lint, typecheck, format and build pass; production serves HEAD with a healthy database. The phase-diff review found four real bugs, all fixed: the stock page never threw on a failed read, the layout dropped `profiles`/`funds` errors, the menu sheet duplicated the watchlist from `lg` to `xl`, and the order-ticket screenshot skipped the chart-paint wait. The journal is compacted and two lessons are promoted
-**Next:** the regression legs in `phase-6.md` → Phase checkpoint: sign up with a fresh Google account, place a CNC and an MIS market order during a session (Mon–Fri 09:15–15:30 IST), reset, sign out, and look at the `lg`–`xl` sheet and the stock page while there. Then tick the checkpoint. Three follow-ups are filed there, and F16 remains the last item in the project
-
----
+**Phase:** Phase 6 — Polish & Ship. The checkpoint's automated checks are complete, but its checkbox remains open pending production sign-up and trading checks. F16 and the Phase 2 checkpoint also remain open by decision; F16 is the final project item.
+**Last completed:** The automated part of the Phase 6 checkpoint, on 2026-09-24. All four test tiers, lint, typecheck, formatting, and build passed in that run; production served HEAD with a healthy database. Four review findings were fixed: swallowed stock-page read errors, ignored profile/funds errors in the layout, a duplicated watchlist between `lg` and `xl`, and a screenshot captured before the order-ticket chart finished painting. The journal was compacted and two lessons were promoted to constraints.
+**Next:** Follow `phase-6.md` → Phase checkpoint: sign up with a fresh Google account, place CNC and MIS market orders during an NSE session (Mon–Fri, 09:15–15:30 IST), reset, and sign out. Inspect the menu sheet between `lg` and `xl` and the stock page. Then tick the checkpoint if the checks pass. Three follow-ups are recorded there; F16 stays last.
 
 ## Progress
 
@@ -93,22 +89,57 @@ Any AI agent reading this should immediately know what is done, what is in progr
 
 ## Key Decisions
 
-- **The demo is the screenshots and the live URL; a seeded demo account is not buildable as specified.** Holdings exist only through `execute_order`, which needs an open NSE session and a non-stale quote, so a portfolio cannot be conjured by INSERT without breaking an invariant — and a *shared* demo login is separately impossible, because Google OAuth is the only sign-in path and there are no credentials to hand a visitor. The account was **reset** to its post-signup state instead, so the handoff starts from something a reader can reproduce. The cost, accepted: the README's hero image shows an untraded account until the capture is re-run during a session. (F40)
+- **The demo uses screenshots and the deployed URL.** A seeded portfolio would bypass `execute_order`,
+  which requires an open session and a fresh quote. Google-only authentication also prevents handing
+  visitors shared login credentials. The account was reset to a reproducible post-signup state;
+  the README hero therefore shows an untraded account until screenshots are captured during a
+  session. (F40)
 
-- **The simulator is the whole quote chain, permanently — this is a scope decision, not a deferral.** Twelve Data's free plan carries no NSE symbols and Yahoo IP-blocked this machine during validation; no keyless source proved workable, so `project-overview.md`'s scope now says the tick engine *is* the chain rather than its fallback. **What it buys is the closing of three standing obligations**: the circuit-breaker state fix, the token-bucket limiter, and the TODO to measure Yahoo's real lag — all of which existed only to serve an outbound provider. The chain, breaker and limiter stay in the code as seams, because `deriveSource` refusing to overclaim is the most interesting thing in the pipeline and deleting it would leave only the simulator. F16 is **unchanged**; it was always simulator-only. (6.00.05)
+- **The simulator is the permanent quote source for this build.** Development checks found no NSE
+  symbols on Twelve Data's free plan, and Yahoo blocked this machine. This closes the provider-only
+  obligations to fix circuit-breaker state, build a token-bucket limiter, and measure Yahoo's lag.
+  Their interfaces remain in the code for a future provider. F16 remains simulator-only and its
+  status is unchanged. (6.00.05)
 
-- **A deployed instance refuses to boot rather than sign users in to the wrong origin.** `NEXT_PUBLIC_SITE_URL` is the OAuth `redirectTo`, built from env rather than the request on purpose — a request-derived origin is a host-header-injection vector — so a wrong value is **silent**: every page renders, `/api/health` passes, and only sign-in breaks. `assertDeployableSiteUrl` exits non-zero when a platform marker is present and the URL is localhost. Gated on `RENDER`, not `NODE_ENV`, because `pnpm start` locally is also a production build and both audits need it; and it *exits* rather than throws, because Next catches an instrumentation throw and leaves the process alive but not serving. (F39)
+- **Deployed instances refuse to start with a localhost `NEXT_PUBLIC_SITE_URL`.** OAuth redirects use
+  that configured origin to avoid trusting an attacker-controlled request host. A bad value can
+  break sign-in while pages and health checks still work. `assertDeployableSiteUrl` exits non-zero
+  when `RENDER` is present; it does not use `NODE_ENV`, since audits run a production server locally.
+  Throwing is insufficient because Next.js catches instrumentation errors. (F39)
 
-- **The trading colours split into a fill tier and a text tier, and only the text tier flips.** `--color-up`/`--color-down` stay byte-identical across themes per F02 and are now *only* candle bodies, filled buttons and status dots; `--color-up-text`/`--color-down-text` carry every price figure and are redefined in `.light`. The fills were never AA as text — 3.72:1 on dark `surface-elevated`, **1.95:1 on the light canvas** — and nothing caught it because `theme-tokens.test.ts` asserted only that they *don't flip*, never their contrast. They are in its `foregrounds` list now. DESIGN.md specifies them as text colours and this deviates deliberately, exactly as F04's inline links do. (F38)
+- **Trading fill colours (`--color-up`/`--color-down`) stay identical across themes.** Price text uses
+  `--color-up-text`/`--color-down-text`, which change in the light theme to meet contrast requirements.
+  Fill colours measured as low as 1.95:1 on the light canvas; a test that only checked theme equality
+  missed this. Text colours are now in the contrast test's `foregrounds` list. This is a deliberate
+  correction to DESIGN.md's text-colour guidance, like the earlier inline-link correction. (F38)
 
-- **Every axe violation on the terminal routes gets fixed at any impact level — but the guard still only *fails* on `serious`/`critical`.** Remediation scope and exit threshold are deliberately different: the threshold is what lets `audit:a11y:axe` ship switched **on**, and a guard nobody can keep green gets disabled, which is how this property rotted in the first place. The consequence to accept is that moderate/minor fixes are not regression-protected until the threshold is tightened. (F38)
+- **Fix every axe violation found on terminal routes, regardless of impact level.** The audit command
+  currently fails only on `serious` or `critical` findings so the guard can remain enabled. Moderate
+  and minor issues are therefore fixed when found but are not protected by the failure threshold. (F38)
 
-- **Terminal navigation below `xl` lives in the header sheet; the watchlist rail starts at `lg`.** Below 1024px there was no page navigation at all — the hamburger opened the watchlist and at 375px even the wordmark's `/dashboard` link is hidden — so the six links now render above the watchlist inside one sheet, from the same `TERMINAL_NAV_LINKS` the desktop nav uses. The nav sits at `xl` rather than `lg` because the header bar has no room for it below that: the links need 404px, the right-hand cluster 442px, and `lg:` had been forcing both into a 1024px bar, scrolling every terminal page sideways by up to 202px from 1024 to ~1226. That was **pre-existing**, proven by stashing F37 and rebuilding. (F37)
+- **Below `xl`, terminal navigation lives in the header's menu sheet.** The watchlist sidebar starts at
+  `lg`. The six links and the right-hand controls could not fit together at 1024px: they caused up to
+  202px of sideways page scrolling. The sheet uses the same `TERMINAL_NAV_LINKS` list as desktop
+  navigation and shows links above the watchlist. The overflow predated F37, as a rebuilt earlier
+  version confirmed. (F37)
 
-- **The no-horizontal-overflow property gets a guard, because it was already true and nobody knew.** Both causes this phase recorded were fixed in passing during Phase 5, which is exactly how the property would rot again. `pnpm audit:overflow` drives headless Brave over every route at five widths — 375, 768, 1024, 1280, 1440 — resolving `puppeteer-core` through `lighthouse` rather than adding a dependency. **The two breakpoint boundaries are the point:** sampling only the comfortable widths is what had hidden a 202px scroll on every terminal page. Standalone like `audit:a11y`, not a `test:all` tier, because it needs a running server. (F37)
+- **`pnpm audit:overflow` guards against sideways page scrolling.** It checks all routes at 375, 768, 1024,
+  1280, and 1440px. Breakpoint boundaries matter: comfortable widths missed the 202px navigation
+  overflow. The command uses headless Brave and `puppeteer-core` from Lighthouse, with no new
+  dependency. It runs separately from `test:all` because it needs a running server. Earlier overflow
+  causes had already been fixed during Phase 5; the guard makes those fixes testable. (F37)
 
-- **A failed read now throws, because an empty state and a broken query were the same pixel.** Six terminal pages and the terminal layout logged read errors and fell through to the empty state — their own comments named it as "how a broken read hides behind a plausible empty state" — which also made F36's own `**Verify:**` line unprovable. They now log and throw. The consequence is deliberate: a layout's `error.tsx` does not catch its own throw, so a failed watchlist read surfaces at the *root* boundary as a chrome-less error rather than a terminal-shaped one. (F36)
+- **A failed page read must be logged and thrown so the error boundary can handle it.** Six terminal
+  pages and the layout previously displayed empty states after query failures, making a broken
+  query look like an empty account. A layout cannot catch its own error in its child `error.tsx`,
+  so layout failures intentionally reach the root fallback without terminal chrome. (F36)
 
-- **A boundary's retry is `retry()`, not `reset()`.** Next.js passes `error`, `reset` and `retry`; `reset` only resets the boundary, while `retry` calls `router.refresh()` first. On a page whose *server-side* read failed, `reset` re-renders the same failed payload — a retry button that visibly does nothing. Confirmed against Context7, and `src/app/error.tsx` was using `reset`. (F36)
+- **Error-boundary buttons use `retry()`.** `reset()` resets the boundary but reuses its existing failed
+  server payload; `retry()` refreshes the route first. Context7 confirmed the API, and the root
+  boundary's old `reset()` call was corrected. (F36)
 
-- **`constraints.md` is now a core plus reference halves, and the always-read set has room again.** Five topics that bind only one kind of work — money and the order engine, market data, testing, security, marketing — moved to `context/constraints/` behind triggers in `CLAUDE.md`, taking the always-read set from 39,770 to 31,807 of 40,000. Accessibility, theming, shadcn/ui and Next.js behaviour stayed, because Phase 6 is UI polish and they bind every change in it. Adding a constraint now means first asking which side of the line it belongs on. (6.00.02)
+- **The constraints are split into a short core and task-specific references.** Money, market data,
+  testing, security, and marketing details moved behind the triggers in `CLAUDE.md`, reducing the
+  always-read set from 39,770 to 31,807 tokens against its 40,000-token budget at that checkpoint.
+  Accessibility, theme, shadcn/ui, and Next.js rules stayed in the core because they applied across
+  Phase 6 UI work. Place new constraints according to when they need to be read. (6.00.02)

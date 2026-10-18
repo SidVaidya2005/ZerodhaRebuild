@@ -1,12 +1,18 @@
 # Architecture — Data Flow & Key Patterns
 
-> **Reference half of `context/architecture.md`.** The invariants, stack, boundaries and auth
-> rules live there and are read every session; this is looked up when the work reaches it.
-> **Where this file and the invariants disagree, the invariants win.**
+> Read this part of `context/architecture.md` when working on Server Actions, Postgres
+> functions, Supabase clients, subscriptions, or the tick job. The core architecture's
+> invariants take precedence if an example here disagrees with them.
 
 ## Data Flow
 
+These diagrams show where work happens and how data reaches the screen. Read them with the
+invariants and `trading-contract.md`; they summarise the flow without spelling out every branch.
+
 ### Quote refresh (scheduled, every minute during market hours)
+
+Postgres starts the job; the web server does not need to be awake. The broad cron window limits
+cost, while the session check decides whether any market work is allowed.
 
 ```
 pg_cron ('* 3-10 * * 1-5' — UTC, ≈ 08:30–16:29 IST; a coarse cost window, NOT the gate)
@@ -28,8 +34,8 @@ pg_cron ('* 3-10 * * 1-5' — UTC, ≈ 08:30–16:29 IST; a coarse cost window, 
         │    └─ SimulatorProvider    → last resort, cannot fail; walks from the last
         │                              quote, else instruments.prev_close (F15)
         ├─ upsert quotes (ltp, prev_close, ohlc, volume, provider, provider_ts, fetched_at)
-        ├─ match_open_orders()   → F28 wires this in; not called yet
-        └─ square_off_mis()      → F29 wires this in; not called yet
+        ├─ match_open_orders()   → matches eligible open limit orders (F28)
+        └─ square_off_mis()      → closes due MIS positions (F29)
 
   The token-bucket limiter is deliberately absent: it caps nothing in front of a
   local simulator, and waits for a provider that makes outbound requests (F15).
@@ -46,6 +52,9 @@ pg_cron ('* 3-10 * * 1-5' — UTC, ≈ 08:30–16:29 IST; a coarse cost window, 
 
 ### Placing an order (user mutation)
 
+The browser submits an instruction. A Server Action validates it, and Postgres reserves margin
+and executes the order in one transaction. The database owns every stored money calculation.
+
 ```
 Order ticket (Client Component)
   └─> Server Action `placeOrder` ('use server')
@@ -53,40 +62,51 @@ Order ticket (Client Component)
         ├─ createClient() from lib/supabase/server → session-scoped, RLS applies
         └─ rpc('place_order', {...})            ── Postgres, one transaction ──
               ├─ insert orders row (status OPEN)
-              ├─ reserve_margin(order_id)  → moves the requirement from
-              │        available_cash into used_margin, stamps orders.blocked_margin.
-              │        A buy reserves notional + charges; a short reserves its
-              │        collateral (§6), so a clean fill needs no top-up
+              ├─ reserve_margin(order_id) → available_cash to used_margin;
+              │    stamps orders.blocked_margin using §6:
+              │      buy → opening quantity's value + whole-order estimated charges
+              │      sell covered by a long → no reservation
+              │      sell opening a short → shorting-excess collateral + charges
+              │    failed reservation → REJECTED, no cash or ledger change
               ├─ if MARKET → execute_order(order_id)
               │     ├─ SELECT ... FOR UPDATE on orders row
-              │     ├─ status still 'OPEN'? if not, return — a concurrent run got here first
+              │     ├─ status still 'OPEN'? if not, return without writing
               │     ├─ SELECT ... FOR UPDATE on funds row
-              │     ├─ compute charges (numeric)
-              │     ├─ margin check against (available_cash + blocked_margin)
-              │     │     └─ insufficient → REJECTED + release_margin(), return
-              │     ├─ retire the reservation, exactly once, BEFORE writing
-              │     │  the trade or the position:
-              │     │     ├─ fill opens a short →
-              │     │     │    transfer_margin_to_position(id, price, charges)
-              │     │     │      └─ ok=false → REJECTED, nothing else written
-              │     │     └─ otherwise         → release_margin()
-              │     ├─ insert trades row
-              │     ├─ upsert holdings (CNC) or positions (MIS),
-              │     │    averaging charges up for a long, down for a short;
-              │     │    a short writes back the collateral and
-              │     │    entry_reference_price the transfer returned
-              │     ├─ a fill that reduces a short →
-              │     │    recompute_position_collateral(user, symbol, new_qty, order),
-              │     │    BEFORE the new quantity is written
-              │     ├─ update funds (available_cash, used_margin)
-              │     ├─ insert fund_ledger rows
+              │     ├─ verify quote freshness and limit eligibility
+              │     ├─ calculate whole-order charges once; determine closing/opening legs
+              │     ├─ BUY opening leg only: compare available_cash + blocked_margin
+              │     │    with opening value + charges; insufficient → release_margin(),
+              │     │    then REJECTED. A pure cover skips this gate.
+              │     ├─ one subtransaction:
+              │     │    ├─ SELL closing a long → post SELL_CREDIT first
+              │     │    └─ retire the order reservation exactly once:
+              │     │         opens a short → transfer_margin_to_position(id, price, charges)
+              │     │         otherwise → release_margin()
+              │     │    shortfall → undo this attempt, release original reservation,
+              │     │    then REJECTED; no trade, position change or sale credit survives
+              │     ├─ BUY closing a short → recompute_position_collateral(user, symbol,
+              │     │    new_qty, order) BEFORE writing the new quantity;
+              │     │    derive cash settlement from gross entry_reference_price
+              │     ├─ reported closing P&L uses net average_price and closing charges
+              │     ├─ post one whole-order CHARGES row, unless the transfer already did
+              │     ├─ BUY opening a long → post BUY_DEBIT before settling any cover
+              │     ├─ settle BUY's closing leg, using SIMULATION_ADJUSTMENT if needed
+              │     │    so cash floors at zero while reported P&L retains the true loss
+              │     ├─ upsert holdings (CNC) or positions (MIS), or delete at zero;
+              │     │    capitalise opening charges upward for longs, downward for shorts;
+              │     │    persist the collateral and gross basis returned by the transfer
+              │     ├─ insert one trades row
               │     └─ update orders → COMPLETE (average_price, filled_quantity)
+              │       Cash changes and ledger rows are paired within the relevant steps.
               └─ else leave OPEN — margin stays reserved until fill or cancel
         ▲
         └── returns { ok: true, data: { orderId, status } } | { ok: false, error: { code, message } }
 ```
 
 ### Candle fetch (on demand, cached)
+
+The stock page requests the range it needs. Stored candles satisfy fresh requests; a refresh
+updates the cache and its provenance together. Cached fallback data keeps its real age.
 
 ```
 Stock detail page (Server Component)
@@ -105,6 +125,9 @@ Stock detail page (Server Component)
 
 ### Reading portfolio state (page load)
 
+The server reads through the user session, so RLS determines which portfolio rows are visible.
+The client can then update price displays from the shared quote store.
+
 ```
 Terminal page (Server Component)
   └─> createClient() from lib/supabase/server
@@ -114,6 +137,9 @@ Terminal page (Server Component)
 ```
 
 ### Support form submission
+
+The public form works without JavaScript. Validation and the honeypot run on the server before
+the insert; the public caller receives no read access to stored messages.
 
 ```
 Support form (React 19 form action + useActionState — no JavaScript required)
@@ -128,6 +154,9 @@ Support form (React 19 form action + useActionState — no JavaScript required)
 ## Key Patterns
 
 ### Supabase server client (RSC and Server Actions)
+
+Create the server client in the shared Supabase module. It reads session cookies for the request.
+A Server Component cannot write refreshed cookies, so the proxy handles that case.
 
 ```ts
 // src/lib/supabase/server.ts
@@ -163,52 +192,41 @@ export async function createClient() {
 
 ### Session refresh and route guard
 
+The proxy uses `createProxyClient` from `src/lib/supabase/proxy.ts`; only that shared module
+constructs the Supabase client and handles cookie writes. It redirects signed-out visitors to
+login with their intended destination, preserving any cookies refreshed or cleared during the
+check. Database RLS remains the authorisation boundary.
+
 ```ts
 // src/proxy.ts
-import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const TERMINAL_PREFIXES = [
-  '/dashboard', '/orders', '/holdings', '/positions',
-  '/funds', '/reports', '/settings', '/stocks',
-]
+import { LOGIN_PATH, isTerminalPath } from '@/lib/auth/routes'
+import { createProxyClient } from '@/lib/supabase/proxy'
 
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request })
+  const { supabase, response } = createProxyClient(request)
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  // Do not put code between createServerClient and getUser().
+  // Do not put code between client construction and getUser().
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isTerminal = TERMINAL_PREFIXES.some((p) => request.nextUrl.pathname.startsWith(p))
-
-  if (!user && isTerminal) {
+  if (!user && isTerminalPath(request.nextUrl.pathname)) {
     const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
-    return NextResponse.redirect(url)
+    url.pathname = LOGIN_PATH
+    url.search = ''
+    url.searchParams.set('next', request.nextUrl.pathname + request.nextUrl.search)
+
+    // Preserve refreshed or cleared cookies on the redirect too.
+    const redirect = NextResponse.redirect(url)
+    for (const cookie of response.cookies.getAll()) {
+      redirect.cookies.set(cookie)
+    }
+    return redirect
   }
 
-  return supabaseResponse
+  return response
 }
 
 export const config = {
@@ -217,6 +235,9 @@ export const config = {
 ```
 
 ### Server Action shape
+
+Parse input first, then call the database using the session client. A rejected order is a normal
+database result; a database fault follows the separate error path. Both return safe application copy.
 
 ```ts
 // src/server/actions/orders.ts
@@ -265,6 +286,11 @@ export async function placeOrder(input: unknown): Promise<ActionResult<PlacedOrd
 
 ### Live quote subscription
 
+Subscribe only to the symbols in view and keep each anchor with its provenance inputs. Derive
+freshness when rendering, since time can make a quote stale without changing its row. This shortened
+example omits the session setup: await `getSession()` and `realtime.setAuth(token)` before subscribing,
+and supply a status callback, as `constraints/market-data.md` requires.
+
 ```ts
 // src/lib/stores/quote-store.ts (subscription half)
 import { createClient } from '@/lib/supabase/client'
@@ -304,6 +330,10 @@ export function subscribeToQuotes(symbols: string[]) {
 ```
 
 ### Quote provider chain
+
+Try available providers in order, skipping an open circuit and recording attempts. In this build
+the simulator is the only wired provider. The chain remains available for a future scope change;
+its failure counts currently last only for the request, as `constraints/market-data.md` explains.
 
 ```ts
 // supabase/functions/_shared/quote-service.ts — shared with the app via `@shared/*`.
@@ -345,11 +375,9 @@ export function createQuoteService(options: QuoteServiceOptions) {
 }
 ```
 
-**It returns rather than throws when every provider declines.** An earlier draft
-of this example threw "every provider failed, including the simulator"; the
-shipped chain reports `{ provider: null }` and lets the tick decide, because the
-simulator is the last resort and a throw would make an empty symbol list
-indistinguishable from a broken upstream (F15).
+When all providers decline, the chain returns `{ provider: null }` and lets the tick decide
+what to do. It does not throw. The earlier example threw "every provider failed, including the
+simulator", which treated an empty symbol list like a broken upstream. The shipped chain keeps
+those cases distinguishable. (F15)
 
 ---
-

@@ -1,18 +1,21 @@
-> **One phase of `context/build-plan.md`.** That index carries the Core Principle and the phase list.
-> **Read only the phase you are building.** A finished phase is history — its still-binding decisions
-> live in `constraints.md`, its narrative in `build-journal.md`, and re-reading it here costs tokens for nothing.
+> Part of `context/build-plan.md`; see that index for the build principle and phase order.
+> Read the feature needed for the current task. `progress-tracker.md` holds current status.
+> These specifications retain implementation-time decisions and dated verification results. Check
+> current rules in the authoritative context files before reusing an older plan. Ongoing constraints
+> live in `constraints.md`; the account of past work lives in `build-journal.md`.
 
 ## Phase 6 — Polish & Ship
 
 ### 36 States, skeletons, and error boundaries
 
-Every terminal route streams a skeleton while its data loads and catches a failed read with a
-boundary whose retry actually refetches. The enabling change is that the six terminal pages and the
-terminal layout **stop swallowing read failures**: today each logs the error and falls through to the
-empty state, so a broken query and an empty account render the same pixels — the pages' own comments
-name this ("exactly how a broken read hides behind a plausible empty state"). After this, an empty
-state means empty and a boundary means broken. `global-error.tsx` closes the last uncaught case, an
-error thrown by the root layout itself.
+Give each terminal route a loading skeleton and an error boundary whose retry fetches the data
+again. A skeleton is a temporary shape matching the content still loading; an error boundary
+replaces a failed part of the page with recovery controls.
+
+First change the six terminal pages and the terminal layout to **throw after logging read
+failures**. Before F36, they fell through to the empty state, making a broken query look like an
+empty account. The intended distinction is simple: show an empty state for no data and an error
+boundary for a failed read. Add `global-error.tsx` for errors thrown by the root layout itself.
 
 **UI:**
 
@@ -20,41 +23,40 @@ error thrown by the root layout itself.
 - Skeletons compose from shared primitives in `src/components/terminal/skeletons/` (`PageSkeleton`, `TableSkeleton`, `SummaryCardsSkeleton`) over the existing `components/ui/skeleton.tsx`, rather than eight bespoke copies that drift from the pages they mirror. No new dependency.
 - An `error.tsx` for every terminal segment, each a thin `'use client'` wrapper over one shared `TerminalErrorBoundary` so the per-segment rule costs eight small files rather than eight copies.
 - `src/app/global-error.tsx`, which replaces the root layout entirely and therefore declares its own `<html>`/`<body>` and imports `globals.css` itself. It cannot reach the `next/font` variables or the `next-themes` class the root layout sets, so it renders in the dark palette — correct here, since the tokens are dark-by-default on `:root` and `.light` is the override.
-- Reviewed empty states across watchlist, holdings, positions, orders, ledger, and reports. **Largely already present** — `LedgerTable`, `TradeHistoryTable` and `WatchlistSidebar` carry them including past-the-end branches, and Dashboard, Holdings and Positions have components — so this is a review plus filling the Orders gap, not six new components.
+- Review empty states for watchlist, holdings, positions, orders, ledger and reports. Most already exist: `LedgerTable`, `TradeHistoryTable` and `WatchlistSidebar` include past-the-end cases, while Dashboard, Holdings and Positions have dedicated components. Reuse those and fill the Orders gap rather than create six replacements.
 
 **Logic:**
 
 - The six terminal pages and `(terminal)/layout.tsx` log the read error as they do today and then **throw**, so the boundary catches it.
-- **A layout's own `error.tsx` does not catch its own throw**, so a failed watchlist or universe read surfaces at the *root* boundary as a chrome-less full-page error rather than a terminal-shaped one. Accepted: the sidebar is part of the shell, so a shell that cannot load is not a working terminal.
-- `stocks/[symbol]` keeps `notFound()` for an unknown symbol; only its read *failures* throw.
-- **Boundaries use `retry`, not `reset`.** Verified against Context7: Next.js passes `error`, `reset` **and** `retry`; `retry()` calls `router.refresh()` internally *and* resets the boundary, while `reset()` only resets it — so on a page whose server-side read failed, `reset` re-renders the same failed payload and ships a retry button that visibly does nothing. `src/app/error.tsx` currently uses `reset` and is corrected in the same change.
+- **A layout's own `error.tsx` does not catch its own throw**, so a failed watchlist or universe read surfaces at the _root_ boundary as a chrome-less full-page error rather than a terminal-shaped one. Accepted: the sidebar is part of the shell, so a shell that cannot load is not a working terminal.
+- `stocks/[symbol]` keeps `notFound()` for an unknown symbol; only its read _failures_ throw.
+- Use `retry` for the recovery button. Context7 confirmed that Next.js passes `error`, `reset` and `retry`: `retry()` calls `router.refresh()` and resets the boundary; `reset()` only clears the boundary state. A failed server-side read needs a fresh payload, so `reset()` alone shows the same failure again. Replace `reset` in `src/app/error.tsx` in the same change.
 - `code-standards.md`'s loading/error rule stops saying "not yet true, and F36 owns it"; `library-docs.md`'s Next.js 16 section gains the `error.tsx` props finding, which it does not currently cover.
 
 **Verify:**
 
 - Throttled to Slow 3G, every terminal route shows a skeleton rather than a blank frame. Read `document.visibilityState` before believing the result — a backgrounded tab freezes animations and makes this unjudgeable rather than failing (`constraints/verification.md`).
-- Forcing a query failure renders the boundary, and its retry recovers the page once the failure is reverted. **Falsified first**: the same forced failure renders the *empty state* on the pre-F36 code, which is the defect this feature closes.
-- A brand-new account sees a purposeful empty state on the four surfaces that *are* empty for it — holdings, positions, orders and reports. **Two of the six cannot be empty for a new account, and the original wording was wrong:** bootstrap seeds a default watchlist (F13) and every account carries a `SIGNUP_CREDIT` row, so the watchlist and the ledger are non-empty by construction. Their empty states exist and are correct, but are reached by a user who empties them, not by a new account. Check all six exist; expect four to render.
+- Forcing a query failure renders the boundary, and its retry recovers the page once the failure is reverted. **Falsified first**: the same forced failure renders the _empty state_ on the pre-F36 code, which is the defect this feature closes.
+- Check that a brand-new account sees purposeful empty states for holdings, positions, orders and reports. Its watchlist and ledger cannot be empty: F13 seeds watched symbols and a `SIGNUP_CREDIT` row. Their empty-state implementations still need checking, but a new account cannot demonstrate them. Verify that all six states exist and expect only four to render on signup.
 - `find src/app/\(terminal\) -name error.tsx | wc -l` is 8 and `-name loading.tsx` is 9, so the `code-standards.md` rule is structurally true rather than asserted.
 - `pnpm test`, `typecheck`, `lint`, `format:check` and `build` all green.
 
 ### 37 Responsive pass
 
-Close the navigation gap below `lg`, make the order ticket survive a short viewport, and put a
-guard under the no-horizontal-overflow property so it stays true.
+Make navigation reachable on smaller screens, keep the order ticket usable in a short viewport,
+and add an automated check for horizontal page overflow.
 
-**The two causes this section used to record are fixed.** Re-measured before planning, on two
-independent mechanisms that agree — an in-page iframe harness and headless Brave — every route
-reports `scrollWidth === clientWidth` at 375px, 768px and 1440px. The `sr-only` label no longer
-escapes its scroll region (every wrapper carries `relative`, and each table says why), and the
-header no longer overflows (the wordmark is `hidden … sm:block`, which was the cause). Phase 5
-fixed both in passing. What is left is navigation, and it is worse than recorded.
+Before planning F37, two independent measurements agreed: an in-page iframe harness and headless
+Brave found `scrollWidth === clientWidth` on every route at 375px, 768px and 1440px. Phase 5 had
+already fixed the two recorded causes. Positioned scroll wrappers contained the `sr-only` labels,
+and `hidden … sm:block` kept the wordmark from overflowing the header. Those widths did not,
+however, cover the later 1024px breakpoint finding below.
 
-**Below 1024px there is no page navigation at all.** The header nav is `lg:flex`, the hamburger
-opens the watchlist rather than the menu, and `AvatarMenu` holds only Settings and Sign out — so
-at 375px not one of the six destinations is reachable without typing a URL, and at 768–1023px only
-`/dashboard` is, through the wordmark. **Lowering the nav's breakpoint is ruled out by
-measurement:** at 768px the header bar has ~106px spare and the nav needs 404px.
+**The remaining navigation gap was below 1024px.** The header used `lg:flex`, its hamburger
+opened only the watchlist, and `AvatarMenu` offered only Settings and Sign out. At 375px, none
+of the six page destinations was reachable without entering a URL. At 768–1023px, only the
+wordmark link to `/dashboard` was available. Do not lower the desktop-nav breakpoint: the 768px
+header had about 106px spare, while the links needed 404px.
 
 **UI:**
 
@@ -67,12 +69,11 @@ measurement:** at 768px the header bar has ~106px spare and the nav needs 404px.
   Collapsing Strategy. Each override repeats the `data-[side=left]:` prefix, or tailwind-merge
   drops it into a different variant group and it loses silently.
 - `WatchlistRail` moves from `md` to `lg`, returning 288px to the tables at tablet widths.
-- **The desktop nav moves from `lg` to `xl`, which was not in the plan.** Measuring the two new
-  breakpoint boundaries found a **pre-existing** 202px sideways scroll on every terminal page from
-  1024 to ~1226: the six links need 404px and the right-hand cluster 442px, and `lg:` brought both
-  into a 1024px bar. Proven pre-existing by stashing F37 and rebuilding — the baseline overflows by
-  the identical 202px, from the identical element. Below `xl` the sheet carries the links, which is
-  what made raising the breakpoint an option rather than a regression.
+- Move desktop navigation from `lg` to `xl`. This was added after measuring the breakpoint
+  boundaries: every terminal page already overflowed by 202px between 1024px and about 1226px.
+  The links needed 404px and the right-hand controls 442px, both forced into the 1024px header by
+  `lg:`. Stashing F37 and rebuilding reproduced the same overflow from the same element. The
+  sheet now supplies these links below `xl`, so raising the desktop breakpoint preserves access.
 - `DialogContent` gains `max-h-[calc(100dvh-2rem)] overflow-y-auto`. It is `fixed` and
   `-translate-y-1/2` with no max height, so a dialog taller than the viewport is clipped at both
   ends with no way to scroll. Fixed in the primitive rather than at the order ticket, because
@@ -83,14 +84,14 @@ measurement:** at 768px the header bar has ~106px spare and the nav needs 404px.
 - `WatchlistPanel`'s `h-full` becomes `min-h-0 flex-1`. With a sibling above it in the sheet's
   flex column, `h-full` claims the whole sheet and pushes the watchlist off-screen — the same
   failure this file already records for `Command`'s base `h-full`.
-- `scripts/audit-overflow.mts` behind `pnpm audit:overflow`: every route at 375, 768 and 1440,
+- `scripts/audit-overflow.mts` behind `pnpm audit:overflow`: every route at 375, 768, 1024, 1280 and 1440px,
   failing on `scrollWidth > clientWidth` and naming the widest offending element so a failure is
   actionable. Standalone rather than a `test:all` tier, because it needs a running server —
   exactly like `audit:a11y`, which is also outside `test:all`.
-- **`puppeteer-core` resolves through `lighthouse`**, so the guard adds no dependency:
-  `createRequire(require.resolve('lighthouse'))` reaches it. A direct `require.resolve` fails
-  under pnpm's isolation, and hardcoding the `.pnpm/puppeteer-core@<version>` path would break
-  silently on a lighthouse bump.
+- Resolve `puppeteer-core` through the existing `lighthouse` dependency using
+  `createRequire(require.resolve('lighthouse'))`. A direct `require.resolve` fails under pnpm's
+  dependency isolation. Do not hardcode `.pnpm/puppeteer-core@<version>`; that path changes when
+  Lighthouse updates. This approach needs no new dependency.
 - Terminal routes need a session and headless Brave has none, so the guard replays a cookie from
   `OVERFLOW_GUARD_COOKIE` and **fails rather than skips** when terminal routes are requested
   without it — `test:parity`'s behaviour without `TEST_DATABASE_URL`. Public routes always run.
@@ -100,7 +101,7 @@ measurement:** at 768px the header bar has ~106px spare and the nav needs 404px.
 - `pnpm audit:overflow` exits 0 across every route at 375, 768, 1024, 1280 and 1440px.
 - The guard can fail: inject a `w-[2000px]` element, confirm it names the route, the overflow and
   the offending element, then revert.
-- The guard cannot *false*-pass on a stale session: a garbage `OVERFLOW_GUARD_COOKIE` must report
+- The guard cannot _false_-pass on a stale session: a garbage `OVERFLOW_GUARD_COOKIE` must report
   every terminal route as redirected, not as narrow. Falsifiable without handling a real token.
 - All six destinations are reachable below `xl` with `aria-current` on the active link, and at
   `xl` and above the header nav shows and the trigger is gone.
@@ -111,13 +112,14 @@ measurement:** at 768px the header bar has ~106px spare and the nav needs 404px.
 
 ### 38 Accessibility pass
 
-Close the two holes in this project's accessibility evidence — Lighthouse cannot reach a
-`(terminal)` page, and `audit:a11y` only ever loads one theme — then fix what that reveals.
-**The measurement comes first and its output is the remediation list**, because part of this
-feature is already built: `HoldingsTable.tsx` carries an F38-attributed comment and nine
-components already call the signed formatters, so the bullets below are not a reliable
-statement of what is broken. F37 shipped against a plan whose recorded causes were already
-fixed; this one measures before it edits.
+Audit authenticated terminal pages and both themes, then fix the findings. Earlier Lighthouse
+runs reached the login redirect rather than the terminal, and `audit:a11y` loaded only the
+default theme. Those results could not establish terminal or light-theme accessibility.
+
+**Measure before editing.** The audit output defines the work. Several planned fixes were
+already present: `HoldingsTable.tsx` had an F38 comment, and nine components used signed
+formatters. F37 also found that recorded causes had already been fixed, so do not treat an old
+list as proof of a current defect.
 
 **UI:**
 
@@ -132,7 +134,7 @@ fixed; this one measures before it edits.
 
 - **`pnpm audit:a11y:axe` (new, `scripts/audit-a11y-axe.mts`)** — the authenticated, both-themes
   audit. Clones `audit-overflow.mts`'s harness: headless Brave, cookie-borne session,
-  stale-redirect detection, and a load check on `304 || 2xx`. **axe-core is resolved *through*
+  stale-redirect detection, and a load check on `304 || 2xx`. **axe-core is resolved _through_
   `lighthouse`**, as that script resolves `puppeteer-core` — axe-core 4.13.0 is already on disk as
   lighthouse's transitive dependency, so this costs **no new dependency** and
   `code-standards.md`'s approved list is untouched. No widths loop: axe is width-independent, so
@@ -153,16 +155,15 @@ fixed; this one measures before it edits.
     about, so a pass here is conclusive; a failure gets re-checked with real input before being
     called a bug (shape confirmed against Context7 `/puppeteer/puppeteer`: modifiers do affect
     `press`).
-- **Remediation covers every impact level on the terminal routes; the guard's exit threshold does
-  not.** The two are deliberately different — `serious`/`critical` is what lets the guard ship
-  switched **on**, and a guard nobody can keep green gets disabled, which is how this property
-  rotted before. The consequence to accept: a moderate/minor fix is not regression-protected until
-  the threshold is tightened.
-- **The finding list is reported before any component is edited.** Reading the code predicts
-  nothing — headings are clean (`h1` then `id`-bearing `h2`s on every page), all five terminal
-  tables are labelled focusable regions carrying `relative`, `ReportsFilter` has real `htmlFor`
-  labels, and the one unpaired `overflow-x-auto` is the shadcn `Table` primitive
-  (`ui/table.tsx:9`), imported only by `/dev/styleguide` and therefore not an audited route.
+- Fix terminal findings at every impact level, even though the guard fails only on `serious`
+  and `critical`. This lower exit threshold lets the guard remain enabled and usable. It has a
+  clear limit: regressions in `moderate` or `minor` findings remain notes until the threshold
+  is tightened.
+- Report the findings before changing components. A code read alone did not identify the actual
+  failures: headings already used `h1` followed by `id`-bearing `h2`s, all five terminal tables
+  had labelled focusable regions with `relative`, and `ReportsFilter` had `htmlFor` labels. The
+  unmatched `overflow-x-auto` belonged to the `Table` primitive in `ui/table.tsx:9`, used only by
+  the unaudited `/dev/styleguide` route.
 - **Keyboard:** the search shortcut focuses the inline `CommandInput` in the watchlist rail.
   **Scoped to `lg` and up**, because search is an inline `<Command>` in `WatchlistSidebar`, not the
   unused `CommandDialog`, and F37 put the rail at `lg`. Below that the input is inside the sheet,
@@ -176,20 +177,18 @@ fixed; this one measures before it edits.
 - **Already fixed, do not redo (Phase 5):** colour is not the sole carrier of P&L sign.
   `formatSignedCurrency` / `formatSignedPercent` render an explicit +/− and nine components call
   them; `HoldingsTable.tsx`'s `toneOf()` already cites this pass by name.
-- **Decided — `text-brand` is restricted to dark surfaces.** Brand yellow is 11–13.5:1 as text on
-  dark and **1.37–1.43:1 on light**, under even the 3:1 large-text floor, and F02's invariant keeps
-  `--color-brand` byte-identical across themes. So the token does not change: `text-ink` carries
-  figures and headings, brand carries CTA **backgrounds**. **The recorded "4 elements on `/legal`"
-  understates it** — that was measured by `audit:a11y`, which reaches neither the terminal nor the
-  light theme, and F35 made a light terminal reachable where `text-brand` also lives (the `TopNav`
-  wordmark, and `OPEN` in two tables).
+- Restrict `text-brand` to dark surfaces. Yellow text measures 11–13.5:1 on dark surfaces but
+  only **1.37–1.43:1 on light**, below even the 3:1 minimum for large text. F02 requires
+  `--color-brand` to remain identical across themes, so use `text-ink` for figures and headings
+  and brand for CTA backgrounds. The old count of "4 elements on `/legal`" missed the light theme and
+  terminal: F35 also exposed the `TopNav` wordmark and `OPEN` in two tables in a light terminal.
 - **`pnpm audit:a11y` only ever loads the default theme**, so a clean score is never evidence about
   light mode.
 - **Measure a theme by loading it, never by toggling the class from script.** Elements carrying
   `transition-colors` return stale computed colours after a scripted class change — that produced a
   17-failure phantom during 1.00.01 which vanished on a real page load. Set the stored theme,
   reload, then measure.
-- **The light-theme *terminal* pass needs `profiles.theme = 'light'` on the signed-in account.**
+- **The light-theme _terminal_ pass needs `profiles.theme = 'light'` on the signed-in account.**
   F35 has the layout apply the stored account theme client-side on every full load, so a
   `localStorage` value the script sets is overridden back. The honest run is two passes with the
   Settings toggle flipped between them. Marketing pages have no account theme, so `localStorage`
@@ -197,18 +196,18 @@ fixed; this one measures before it edits.
 
 **Verify:**
 
-**Status: done, both halves verified 2026-09-13.** `pnpm audit:a11y:axe` reports
-`14 of 14 routes audited` and exits 0 in **both** themes, with no `note [moderate]` or
-`note [minor]` line on any route. One bullet stays deferred by design — the keyboard-only order
-flow, which pairs with F37's outstanding submit check — and three follow-ups are recorded at the
-end of this block.
+**Recorded result: both audit halves verified on 2026-09-13.** In dark and light themes,
+`pnpm audit:a11y:axe` reported `14 of 14 routes audited` and exited 0. Neither run printed a
+`note [moderate]` or `note [minor]` line. The keyboard-only order flow remained deferred alongside
+F37's submit check; the follow-ups below retain the limits of that result.
 
-**What the terminal actually held**, none of which reading the code had predicted: a **critical**
-`aria-valid-attr-value` on all 8 routes, `color-contrast` on all 8, `link-in-text-block` on
-`/funds`, and `nested-interactive` on `/stocks/*`. The plan's own UI bullet above — move `OPEN` to
-`text-info` — was **superseded before this ran**: `--color-info` is 4.30:1 on `--color-surface`,
-so the public half landed `text-brand light:text-muted-strong` instead, and both components carry
-a comment saying why. The reclass never rested on an unobserved contrast figure in the end.
+The terminal audit found four problems the code review had not predicted: critical
+`aria-valid-attr-value` and serious `color-contrast` findings on all eight routes,
+`link-in-text-block` on `/funds`, and `nested-interactive` on `/stocks/*`.
+
+The planned `OPEN` change to `text-info` above was superseded before the audit. That token measured
+4.30:1 on `--color-surface`, so the public half instead used `text-brand light:text-muted-strong`.
+Both affected components explain the choice in comments. The final colour choice was measured.
 
 - ✅ `pnpm audit:a11y:axe` exits 0 on a dark pass **and** a light pass over the **6 public routes**.
   The light pass is the first time that theme has ever been audited, and it found all six failing
@@ -229,7 +228,7 @@ a comment saying why. The reclass never rested on an unobserved contrast figure 
     against an empty box.
   - **`color-contrast` (serious, all 8 routes)** — the finding this feature existed to catch. See
     the token split recorded in `constraints.md` → Theming. `--color-destructive` was a second,
-    separate cause: it bridged onto the *fill* red and measured **3.12:1** behind Cancel on
+    separate cause: it bridged onto the _fill_ red and measured **3.12:1** behind Cancel on
     `/orders`, `/funds` and `/settings`.
   - **`link-in-text-block` (serious, `/funds`).** `LedgerTable`'s symbol link is the only one in
     the app sharing a cell with other text, so it takes a persistent underline per F04; the same
@@ -254,30 +253,33 @@ a comment saying why. The reclass never rested on an unobserved contrast figure 
   have removed meaning.
 - ✅ ⌘K focuses the watchlist `CommandInput` on `/dashboard` at 1280px, printed as its own line in
   every run and passing in both themes — `✓ ⌘K focuses the watchlist search — "Search instruments
-  to add to your watchlist"`. CDP input is trusted, so this is conclusive.
+to add to your watchlist"`. CDP input is trusted, so this is conclusive.
 - ✅ `pnpm lint`, `typecheck`, `test` (528, up from 522 — six new contrast assertions), `build` and
-  `context:cost` green; `pnpm audit:overflow` clean over 70 checks (14 routes × 5 widths) *with* a
+  `context:cost` green; `pnpm audit:overflow` clean over 70 checks (14 routes × 5 widths) _with_ a
   session; `pnpm audit:a11y` scores 100 on `/`, `/legal` and `/pricing`, each confirmed by reading
   `finalDisplayedUrl` out of the report rather than trusting the score (F05).
 
 **Carried forward — recorded, not silently assumed:**
 
-- ☐ **Three of the five dense tables have never been audited with rows.** The account holds no
-  fills, so `/holdings`, `/positions` and `/reports` — and the dashboard's Recharts donut — were
-  measured as **empty states**. `/orders` and `/funds` did carry real rows (7 open, 1 cancelled,
-  2 rejected, a 10-row ledger). Filling the rest needs an open session *and* fresh quotes: the
-  stored quotes are weeks stale, and §5 refuses a fill against a stale quote. Blocked behind F16,
-  which is parked to the end of the project. **A clean F38 says nothing about those four surfaces.**
-- ☐ **The destructive button's hover state is 4.09:1 in dark.** `hover:bg-destructive/20` lightens
-  the tint toward the text. axe never renders hover so it appears in no pass, and clearing it would
-  have forced the dark red to `#fba6b2`, a pale pink, across the whole terminal. Deliberately left.
+- ☐ **At this audit, three of the five dense tables had no populated-state coverage.** The account
+  had no fills, so `/holdings`, `/positions`, `/reports` and the dashboard's Recharts donut were
+  audited only as empty states. `/orders` and `/funds` had rows: 7 open, 1 cancelled and 2 rejected
+  orders, plus a 10-row ledger. Populating the remaining surfaces required an open session and
+  fresh quotes; §5 rejects fills against the weeks-old stored quotes. The check was blocked on
+  F16, parked until the project's end. **The F38 result establishes nothing about those four
+  populated surfaces.** The later checkpoint below records the remaining coverage follow-up.
+- ☐ **The destructive button's dark hover state measures 4.09:1.** `hover:bg-destructive/20`
+  lightens the background toward the text colour. axe does not exercise hover, so no passing
+  audit covers this state. Fixing it would have changed the terminal's dark red to pale pink
+  `#fba6b2`; the issue was deliberately left open.
 - ⏸ **The keyboard-only order flow** stays deferred, with F37's 375×667 submit check, for the
   reason `constraints/verification.md` gives: a dispatched pointer sequence opens the Radix sheet
   but not the order ticket, so an automated negative would be unjudgeable rather than failing.
 
 ### 39 Deploy
 
-
+Publish the web application on Render using the existing Supabase project. Verify the public
+origin, sign-in redirects, health checks and handling of secrets on the deployed build.
 
 **Logic:**
 
@@ -297,8 +299,9 @@ a comment saying why. The reclass never rested on an unobserved contrast figure 
 
 **Verify:**
 
-**Status: deployed and verified 2026-09-13 at <https://zerodha-rebuild.onrender.com>**, except one
-item that structurally cannot pass yet — see the `pg_cron` line below.
+**Recorded deployment check: 2026-09-13 at <https://zerodha-rebuild.onrender.com>.** The results
+below were recorded at deployment. The `pg_cron` item remained deferred in this block; F40 later
+records evidence about the existing schedule. This is not a fresh deployment verification.
 
 - ✅ A cold visit to the Render URL loads and signs in successfully. All six public routes answer
   200, and `/dashboard` without a session 307s to `…onrender.com/auth/login?next=%2Fdashboard` —
@@ -314,42 +317,42 @@ item that structurally cannot pass yet — see the `pg_cron` line below.
   rather than `NO_HOLDING`, which is the correct precedence. **What this actually proves is the
   production half** — Server Actions execute on Render, the session carries `auth.uid()` into
   `place_order`, RLS admits the right user — since local and production share one Supabase project.
-- ✅ No secret appears in the client bundle — verified by grepping the built output for the
-  service-role key, the Twelve Data key and `TEST_DATABASE_URL`. All three absent from
-  `.next/static` **and** `.next/server`. **Scope the grep to those two directories**: run against
-  `.next` as a whole it reports all three as found, because Turbopack's build cache under
-  `.next/cache/` holds the loaded environment. That cache is gitignored and never deployed, so the
-  hit is a false positive — but a naive grep here reads as a leak and will cost someone an hour.
-  Re-run on the deployed build, since this one was built locally.
+- ✅ The locally built `.next/static` and `.next/server` contained none of the service-role key,
+  Twelve Data key or `TEST_DATABASE_URL`, checked by searching for their values. **Limit that
+  search to these two directories.** Searching all of `.next` finds the loaded environment in
+  Turbopack's `.next/cache/`, which is gitignored and not deployed; that is not evidence of a
+  deployed bundle leak. Repeat the search on the deployed build, since this result covered a
+  local build only.
 
 ### 40 README, demo, and handoff
 
-The handoff documentation. `README.md` is 16 bytes today and `public/` is empty, so everything
-below is written from nothing.
+Prepare the documentation and screenshots a visitor or new developer needs to understand and
+run the project. At the start of F40, `README.md` contained 16 bytes and `public/` was empty;
+the plan below records the handoff built from that starting point.
 
 **Logic:**
 
-- README, **recruiter-first**: hook and live link, hero screenshot, Features, a plain-language
-  "How it works", the grouped tech stack, then the honest data-source explanation — the simulator
-  is the whole chain by decision, every quote badges `SIMULATED`, `LIVE` is structurally
-  unreachable and `DELAYED` circumstantially so. Depth below the fold: the Mermaid diagram, the
-  five invariants worth reading, and the test tiers.
-- **Setup, commands, environment variables and deployment notes move to `docs/SETUP.md`** and the
-  README links to it. Not into `context/`, which has no human setup guide and is the agent's
-  tiered source of truth under a token budget — a getting-started doc there would be billed
-  against every session that never runs the app.
+- Write the README for a recruiter opening the project first: a short introduction and live
+  link, hero screenshot, Features, plain-language "How it works", grouped tech stack and an
+  accurate data-source explanation. The simulator is the whole chain by decision; every quote
+  says `SIMULATED`. `LIVE` cannot be produced by the provider definitions, and `DELAYED` does
+  not occur with the configured simulator. Put the Mermaid diagram, five central invariants
+  and test tiers farther down for technical readers.
+- Put setup instructions, commands, environment variables and deployment notes in
+  `docs/SETUP.md`, linked from the README. Keep this human setup guide outside `context/`, whose
+  files are loaded selectively by agents under a token budget. Sessions that do not run the app
+  should not have to load setup instructions.
 - **Seven badges, all verifiable claims.** No `build: passing` and no coverage badge: there is no
   CI, and a green badge over a repo with no pipeline is the same overclaim as a `LIVE` chip over a
   polled endpoint.
 - The stack renders **without version numbers**. `package.json` and `src/lib/stack.ts` already hold
   them under a bidirectional drift test; a third copy in the README has nothing keeping it honest.
-- ~~A seeded demo account with a varied portfolio~~ — **not built, and not buildable as written.**
-  Holdings exist only through `execute_order`, which requires an open NSE session and a non-stale
-  quote, so a portfolio cannot be conjured by INSERT without breaking an `architecture.md`
-  invariant. A *shared* demo account is separately impossible: Google OAuth is the only sign-in
-  path, so there are no credentials to hand a visitor. The demo is the screenshots plus the live
-  Render URL. The account is instead **reset** to its post-signup state, so the handoff starts
-  from the state a reader can reproduce.
+- ~~A seeded demo account with a varied portfolio~~ — **not built; the proposed approach is
+  incompatible with the project rules.** Only `execute_order` creates holdings, and it requires
+  an open NSE session and a non-stale quote. Inserting a portfolio directly would violate an
+  `architecture.md` invariant. Google OAuth also provides no shared credentials to give a
+  visitor. Use screenshots and the live Render URL as the demo. Reset the account to its
+  post-signup state so the handoff begins from a state readers can reproduce.
 - `scripts/capture-screenshots.mts` — **nine** shots regenerated by one command, into
   `docs/screenshots/`. **Four of them are empty until the account has traded** — Holdings,
   Positions, Reports and the Dashboard donut all come from `execute_order`, which needs an open NSE
@@ -361,15 +364,15 @@ below is written from nothing.
   the re-shot Dashboard to the README grid alongside `home.png`. The account was reset on
   2026-09-13, a Sunday, so the portfolio screens were unshootable that day. Until then the hero
   image shows an untraded account.
-- The script clones `audit-overflow.mts`'s skeleton: `puppeteer-core` resolved *through*
+- The script clones `audit-overflow.mts`'s skeleton: `puppeteer-core` resolved _through_
   `lighthouse`, Brave via `CHROME_PATH`, session from `OVERFLOW_GUARD_COOKIE`, and its
   landed-route guard so a bounce to `/auth/login` fails the run instead of photographing it.
   Asserts the theme it actually got, per F38.
-- **The order-ticket shot is scripted with `page.mouse`, not a dispatched event.** A dispatched
-  pointer sequence never opens the ticket (`constraints/verification.md`); puppeteer's mouse sends
-  trusted input through the DevTools protocol and does. The shot waits for
-  `[role="dialog"][data-state="open"]`, so a click that opened nothing fails the run instead of
-  photographing the page behind it. (Originally planned as a by-hand capture.)
+- Capture the order ticket with `page.mouse`. A dispatched pointer sequence does not open it
+  (`constraints/verification.md`), while Puppeteer's mouse sends trusted DevTools input and does.
+  Wait for `[role="dialog"][data-state="open"]` before capturing. If the click opens nothing,
+  fail the run rather than save a shot of the page behind the dialog. This replaces the original
+  manual-capture plan.
 - ~~Repository links from About and the footer~~ — **already shipped.** `REPOSITORY_URL` in
   `nav-links.ts`, rendered by `SiteFooter`, `HowItWasBuilt` on About and `SupportContact` on
   Support, all through the shared `ExternalLink`. Nothing to do.
@@ -399,9 +402,11 @@ below is written from nothing.
 
 ### Phase checkpoint
 
-Shipped. Full regression pass on production: sign up, trade, reset, sign out. Compact the build journal and promote every remaining constraint.
+To close Phase 6, run the full production journey: sign up, trade, reset and sign out. Compact
+the build journal and promote every constraint that still applies. The dated run below records
+which checks passed and which remained open; it does not close the checkpoint.
 
-**Run 2026-09-24 (Thursday, after the close).**
+**Recorded run: 2026-09-24, Thursday after the market close.**
 
 - ✅ All four test tiers: 534 tier-1, 26 pgTAP suites, 10 race tests, 36 parity tests. `lint`, `typecheck`, `format:check` and `build` pass.
 - ✅ Production: `/api/health` 200 with `database: reachable` and `commit` equal to HEAD (`4419f55`); six public routes 200; an unknown route 404; `/dashboard` 307 to `/auth/login?next=%2Fdashboard`.
@@ -412,7 +417,7 @@ Shipped. Full regression pass on production: sign up, trade, reset, sign out. Co
 
 **Follow-ups, filed rather than fixed:**
 
-- `/api/health` uses the cookie-bound server client, so a browser whose session can't refresh sends a stale JWT and the probe reports 503 `unreachable`. Render and schedulers send no cookie, so the real consumers are unaffected; the fix is a cookieless anon client in `src/lib/supabase/`.
+- `/api/health` uses the cookie-bound server client. If a browser cannot refresh its session, the stale JWT makes the probe return 503 `unreachable`. Render and schedulers send no cookie and are unaffected. The proposed fix is a cookieless anon client in `src/lib/supabase/`.
 - `audit-overflow.mts`, `audit-a11y-axe.mts` and `capture-screenshots.mts` each copy the cookie parsing, the puppeteer-through-lighthouse resolution and the Brave path, and the axe script reads the same cookie as `A11Y_AXE_COOKIE`. A shared `scripts/lib/browser.mts` and one variable name would remove both.
 - An axe pass over Holdings, Reports and the donut now that they have rows; Positions still has none.
 

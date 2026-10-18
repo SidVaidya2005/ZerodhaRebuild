@@ -1,11 +1,10 @@
 # Constraints — The Supabase CLI on this machine
 
-> **Reference half of `context/constraints.md`.** Read before running a migration, regenerating
-> types, or deploying an Edge Function — not at session start.
-> None of it binds a session that never invokes the CLI, which is why it is on demand.
+> Read this part of `context/constraints.md` before running a migration, regenerating types,
+> or deploying an Edge Function. These are local CLI traps; other sessions can skip it.
 
-- **`src/types/database.ts` is in `.prettierignore` and must stay there.** `supabase gen types` emits double quotes where Prettier wants single, so formatting it makes `format:check` fail after every regeneration — on a file that is never hand-edited. (F10)
-- **Dropping a function discards its ACL, and Supabase's defaults re-grant EXECUTE to `public`, `anon` and `authenticated`.** Widening a `returns table (...)` forces a drop, because `create or replace` cannot change an OUT-parameter row type — so repeat the revoke. `11-order-identities.sql` asserts which functions a browser can reach. (F29)
-- **`supabase functions deploy` does not typecheck without Docker** — it warns and uploads anyway, so "Deno typechecks the entrypoint on deploy" is false on this machine. Invoke the deployed function to know it even loads. (Phase 4 checkpoint)
-- **`supabase migration new` can hang past a 120s timeout having already written the file.** Check before assuming it failed and re-running. (F09)
-- **There are two Supabase CLIs on this machine** — Homebrew 2.111.0 and the project's pinned 2.115.0 — and authenticating one does not authenticate the other. An absent `~/.supabase/` proves nothing; `supabase projects list` failing is the only reliable check. (1.00.03)
+- Keep `src/types/database.ts` in `.prettierignore`. `supabase gen types` emits double quotes, while Prettier wants single quotes. Formatting generated output would make `format:check` fail after each regeneration, even though nobody should edit that file by hand. (F10)
+- Dropping a function removes its ACL, and Supabase's defaults grant EXECUTE back to `public`, `anon` and `authenticated`. Changing a `returns table (...)` shape requires a drop because `create or replace` cannot change an OUT-parameter row type. Repeat the revoke afterward; `11-order-identities.sql` checks which functions a browser can call. (F29)
+- Without Docker, `supabase functions deploy` warns and uploads without typechecking. On this machine, deployment does not prove the entrypoint passes Deno's checks. Invoke the deployed function to confirm that it loads. (Phase 4 checkpoint)
+- `supabase migration new` can write its file and then hang beyond a 120s timeout. Check for the file before retrying the command. (F09)
+- This machine has two Supabase CLIs: Homebrew 2.111.0 and the project's pinned 2.115.0. Signing in to one does not authenticate the other. A missing `~/.supabase/` directory tells you nothing; use `supabase projects list` to check authentication reliably. (1.00.03)

@@ -1,19 +1,16 @@
 # Constraints — The public marketing site
 
-> **Reference half of `context/constraints.md`.** Read **before building or changing a page under
-> `(marketing)`** — not at session start.
-> None of it binds work inside the terminal, which is where most of the build lives.
+> Read this part of `context/constraints.md` before building or changing a page under
+> `(marketing)`. These rules apply to the public site; terminal work can skip this file.
 
-
-- **The support form uses React 19's form action and `useActionState`, not react-hook-form**, so it submits and validates without JavaScript. `code-standards.md` carries the exception to its own Server Action shape rule. (F07B)
-- **FAQ disclosure is native `<details>`/`<summary>`** — zero JavaScript, and keyboard operation, focus handling and screen-reader semantics come from the browser rather than being hand-written and audited at F38. (F07)
-- **`support_messages` carries CHECK length bounds and a honeypot, and volume abuse is deliberately unmitigated.** The publishable key ships in the browser bundle, so bounds cap the damage per request and real rate limiting is out of scope for a portfolio contact form. (F07B)
-- **The three honesty sections divide by purpose, not subject.** Home carries price provenance, About carries the Real / Simulated inventory, `/legal` carries the consequences and divergences — because a notice has to stand alone. (F05)
-- **The home page documents all four provenance states and marks *two* of them unreachable.** `LIVE` is structural — `PROVIDER_IS_REALTIME` is `false` for all three providers. `DELAYED` is circumstantial: no real provider is wired, so every quote resolves `SIMULATED`. **The chips are hand-written and derive from nothing**, so landing a real provider means flipping `DELAYED` back to `reachable` by hand. (F04, extended 6.00.04)
-- **No public copy may describe prices as real, live, or provider-fetched while the chain holds only the simulator.** Eight places did — hero, feature tile, badge vocabulary, the About inventory's *Real* column, the About intro, `/legal`, the support FAQ, and the home page's `description` metadata. The honest framing is that the **instruments** are real NSE symbols and the **prices** are simulated from a real closing price. (6.00.04)
-- **The About page's stack table renders from a typed `src/lib/stack.ts` guarded by a bidirectional drift test** — every `installed` row's version must equal `package.json`'s, and every `planned` row's package must be absent from it. Packages later phases install render as "planned", never with an invented version. (F05)
-- **All external links go through a shared `ExternalLink`** carrying `target="_blank" rel="noreferrer"` and an sr-only "opens in a new tab", which turns a recurring requirement into a grep for raw `target="_blank"`. (F05)
-- **The hero is typographic — no mock terminal UI.** F40 can screenshot the finished terminal, which beats maintaining a hand-built fake. (F04)
-- **The simulator disclaimer is dismissible and remembered, with no flash.** A blocking inline script stamps `data-disclaimer` on `<html>` before first paint and CSS hides the strip off that attribute — the same technique `next-themes` already uses, keeping the layout a Server Component. (F03)
-- **Mobile nav is the shadcn `sheet` primitive**, which is Radix Dialog — no new dependency, and it brings focus trap, Escape handling and scroll lock rather than leaving all three to F38. (F03)
-
+- The support form uses React 19's form action and `useActionState` so it submits and validates with JavaScript disabled. Do not switch it to react-hook-form. `code-standards.md` records its exception to the usual Server Action shape. (F07B)
+- FAQs use native `<details>`/`<summary>`. The browser supplies keyboard operation, focus handling and screen-reader semantics with no JavaScript to implement or audit later at F38. (F07)
+- `support_messages` has CHECK length limits and a honeypot. Volume abuse is deliberately unmitigated: the publishable key is public in the browser bundle, and real rate limiting is outside this portfolio contact form's scope. The bounds limit damage from an individual request. (F07B)
+- Give each honesty section a distinct job. Home explains price provenance, About lists what is Real / Simulated, and `/legal` explains consequences and deliberate divergences. Each notice must make sense on its own. (F05)
+- Home explains all four provenance states and marks two unreachable. `LIVE` cannot occur because `PROVIDER_IS_REALTIME` is `false` for all three providers. `DELAYED` cannot occur because no real provider is wired and all quotes resolve to `SIMULATED`. The chips are hand-written, so adding a real provider requires changing `DELAYED` back to `reachable` manually. (F04, extended 6.00.04)
+- Public copy must not call prices real, live, or provider-fetched while the simulator is the only provider. The instruments are real NSE symbols; the prices are simulated from a real closing price. The correction covered eight places: the hero, feature tile, badge vocabulary, About's Real column and intro, `/legal`, the support FAQ, and Home's `description` metadata. (6.00.04)
+- About's stack table reads the typed `src/lib/stack.ts`. Its drift test works both ways: every `installed` version must match `package.json`, and every `planned` package must be absent from it. Show future packages as "planned" without inventing a version. (F05)
+- Use the shared `ExternalLink` for every external link. It supplies `target="_blank" rel="noreferrer"` and sr-only "opens in a new tab" text. Search for raw `target="_blank"` to find links that bypass it. (F05)
+- Keep the hero typographic. F40 can use a screenshot of the completed terminal; do not maintain a separate mock terminal UI. (F04)
+- The simulator disclaimer is dismissible, remembers the choice, and must not flash on load. A blocking inline script sets `data-disclaimer` on `<html>` before first paint, and CSS hides the strip from that attribute. This uses the same approach as `next-themes` while keeping the layout a Server Component. (F03)
+- Mobile navigation uses shadcn's `sheet`, built on Radix Dialog. It needs no new dependency and already supplies focus trapping, Escape handling and scroll locking. Do not defer those behaviours to F38. (F03)

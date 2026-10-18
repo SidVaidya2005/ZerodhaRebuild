@@ -1,25 +1,28 @@
-> **One phase of `context/build-plan.md`.** That index carries the Core Principle and the phase list.
-> **Read only the phase you are building.** A finished phase is history — its still-binding decisions
-> live in `constraints.md`, its narrative in `build-journal.md`, and re-reading it here costs tokens for nothing.
+> Part of `context/build-plan.md`; see that index for the build principle and phase order.
+> Read the feature needed for the current task. `progress-tracker.md` holds current status.
+> These specifications retain implementation-time decisions and dated verification results. Check
+> current rules in the authoritative context files before reusing an older plan. Ongoing constraints
+> live in `constraints.md`; the account of past work lives in `build-journal.md`.
 
 ## Phase 2 — Data Foundation & Auth
 
 ### 09 Test harness
 
-Stand up all three test tiers before the schema they will police exists, so no later feature can be
-written without a way to prove it. Tiers and rules are defined in `code-standards/testing.md`.
+Set up the first three test tiers before creating the application schema. Later features then
+arrive with a way to check their behaviour. `code-standards/testing.md` defines each tier and its
+rules; briefly, they cover pure logic, database behaviour and concurrent database sessions.
 
-**The spike in this feature's original Verify block has been run, and it failed.**
-`supabase test db --db-url` connects to the remote database and *then* dies with
-`LegacyDockerRunError` — the CLI shells out to `pg_prove` in a container regardless of where the
-database lives. The fallback that block pre-authorised is therefore mandatory, not optional. pgTAP
-itself installed cleanly on the hosted database (1.3.3), so only the *runner* was ever the problem.
+**The original verification experiment failed.** `supabase test db --db-url` reached the remote
+database, then stopped with `LegacyDockerRunError`. The CLI runs `pg_prove` in a container even
+when the database is remote, and this machine has no Docker. Use the fallback already authorised
+by that Verify block. pgTAP 1.3.3 installed successfully on the hosted database; the problem was
+the test runner, not pgTAP.
 
 **Logic:**
 
 - **Provisioning is already done** (2026-08-21): one project, `zerodha-rebuild-dev` / `kefggygenlprjzhiocai` / ap-south-1, linked, `.env.local` and `.env.test.local` written and both verified connecting. There is deliberately **no second project**.
-- **First migration of the project:** `enable_pgtap` creating the extension in the `extensions` schema. Tracked rather than created ad hoc by the runner — an untracked extension the tests silently depend on is worse than a tracked one, because a fresh database looks fine until the suite runs and the migration history stops describing the database. pgTAP adds functions in a schema nothing else uses and no tables, so the cost to the single production project is close to zero.
-- **`scripts/run-pgtap.mts` replaces `supabase test db`.** It reads `.env.test.local`, executes each `supabase/tests/*.sql` through `pg`, and collects the text rows the pgTAP functions return — `plan()` yields `1..n`, `ok()` yields `ok N - desc` or `not ok N - desc`, so those rows **are** the TAP stream and no reporter needs installing. It parses them, names the file and assertion on failure, and exits non-zero.
+- Create the first migration, `enable_pgtap`, to install the extension in the `extensions` schema. The migration history must include this test dependency so a fresh database can run the suite. Do not create it silently in the runner. pgTAP adds functions in an otherwise unused schema and no tables, so it has little cost in the shared production project.
+- Replace `supabase test db` with `scripts/run-pgtap.mts`. It reads `.env.test.local`, runs each `supabase/tests/*.sql` through `pg`, and parses the text rows pgTAP returns. Those rows already use TAP, the test-result format: `plan()` returns `1..n`, and `ok()` returns `ok N - desc` or `not ok N - desc`. No reporter package is needed. On failure, name the file and assertion and exit non-zero.
 - **Written in TypeScript with no new runner dependency.** Node 26 strips types natively (verified), so `node scripts/run-pgtap.mts` runs directly; adding `tsx` for one script would be a dependency the stack does not need.
 - **The runner must catch a plan mismatch, not only `not ok`.** A file declaring `plan(2)` that runs one assertion has to fail — that is the failure mode a naive grep misses.
 - `tests/concurrency/helpers.ts`: client-pair factory, seeded fixtures under the `zr-race-` prefix, and `afterEach` cleanup that runs on failure as well as success.
@@ -44,10 +47,10 @@ itself installed cleanly on the hosted database (1.3.3), so only the *runner* wa
 
 ### 10 Database schema: identity and market data
 
-The first real schema migration: two enums, eight tables, their RLS policies and grants, one
-shared `updated_at` trigger, the `quotes` Realtime publication entry, and the pgTAP suites that
-prove the policies hold. No seed data (F14), no bootstrap trigger (F13), and no write path for
-`symbol_demand` (F18) — this feature builds the shape, not the contents.
+Create the identity and market-data schema: two enums, eight tables, access policies and grants,
+a shared `updated_at` trigger, and the `quotes` entry in the Realtime publication. Add pgTAP
+suites to verify access. F14 supplies seed data, F13 creates accounts automatically, and F18
+provides the write path for `symbol_demand`; those remain outside this feature.
 
 **Logic:**
 
@@ -60,7 +63,7 @@ prove the policies hold. No seed data (F14), no bootstrap trigger (F13), and no 
 - **`profiles.theme` defaults to `'dark'`, not `'light'`.** `architecture.md` said light while `project-overview.md` specifies a dark-default terminal and `theme-provider.tsx` ships `defaultTheme="dark"`; the scope document wins and `architecture.md` is corrected in the same commit.
 - Indexes: `watchlist_items_symbol_idx` on the non-leading foreign key — that table's primary key leads with `user_id`, so symbol lookups are not covered by it. Search indexes on `instruments` wait for F18, which writes the query they would serve.
 - **RLS on all eight, with grants revoked and granted back** per the F07B posture. User-owned tables (`profiles`, `watchlist_items`) are scoped to the owner; the six reference tables get a `select` policy for `authenticated` and **no write policy for any role**.
-- **Policies read `(select auth.uid())`, never bare `auth.uid()`** — the bare call is re-evaluated per row, the subselect once per query (Supabase's Postgres best-practices guide). Semantically identical, so `architecture.md`'s invariant still reads true.
+- Write `(select auth.uid())` in policies, never bare `auth.uid()`. The subselect is evaluated once per query; the bare call is evaluated for each row, as explained in Supabase's Postgres best-practices guide. Both enforce the same ownership rule in `architecture.md`.
 - **No `anon` grant anywhere.** Every surface showing an instrument or a price is under `(terminal)`, and F04 already decided the marketing site quotes no prices; the publishable key sits in the browser bundle, so an `anon` grant would publish the whole instrument universe.
 - `profiles` gets no `insert` grant — F13's bootstrap trigger runs as definer — and no `delete`, which cascades from `auth.users`.
 - `quotes` added to the `supabase_realtime` publication, keeping **default replica identity**: `payload.new` is fully populated for `postgres_changes`, and `replica identity full` would roughly double WAL for an `old_record` nothing reads.
@@ -83,10 +86,10 @@ prove the policies hold. No seed data (F14), no bootstrap trigger (F13), and no 
 
 ### 11 Database schema: funds, orders, and portfolio
 
-The money schema. `trading-contract.md` is authoritative for every column, constraint and default
-here. Three of its §12 reconciliation identities are row-level and become **CHECK constraints**
-rather than test assertions, so a violating row cannot be stored at all. No functions (F22–F24),
-no bootstrap (F13), no seed.
+Create the money tables under the rules in `trading-contract.md`, which governs every column,
+constraint and default here. Three reconciliation identities in §12 can be enforced on individual
+rows. Encode them as **CHECK constraints** so Postgres refuses invalid data, in addition to
+testing them. Functions belong to F22–F24, account bootstrap to F13, and seed data is out of scope.
 
 **Logic:**
 
@@ -98,7 +101,7 @@ no bootstrap (F13), no seed.
   - Identity 8 — `check (status = 'OPEN' or blocked_margin = 0)`. Every order not `OPEN` holds no margin.
   - Identity 12 — `check (net_quantity < 0 or blocked_margin = 0)` and `check ((net_quantity < 0) = (entry_reference_price is not null))`. Longs hold no collateral and carry no reference price; shorts carry both.
   - Identity 6 — the seven `charge_breakdown` components sum exactly to `charges`. §2 makes `charges` the sum of already-rounded components, so the equality is exact and reconciliation cannot fail by a paisa.
-- **A CHECK is not deferrable, and that constrains F23/F24.** Identity 8 fires per statement, so a function that sets `status = 'REJECTED'` and *then* calls `release_margin` fails on the first statement. `code-standards.md`'s `execute_order` example does exactly that and **is corrected in this feature's commit** — release the margin first, or write both columns in one statement.
+- CHECK constraints run after each statement and cannot be deferred. For identity 8, setting `status = 'REJECTED'` before calling `release_margin` fails immediately because the order still holds margin. F23/F24 must release margin first or update both columns in one statement. Correct the `execute_order` example in `code-standards.md` in this feature's commit; its original sequence has this error.
 - The contract's other row-level rules, likewise as CHECKs: `available_cash >= 0` (§12.4), `orders.quantity > 0`, `holdings.quantity > 0` and `positions.net_quantity <> 0` (a row at zero is deleted, never retained, §8), all-or-nothing fills `check (filled_quantity = 0 or filled_quantity = quantity)` (§1), `check ((order_type = 'LIMIT') = (limit_price is not null))`, `check ((status = 'COMPLETE') = (average_price is not null))`, and `fund_ledger.balance_after >= 0`.
 - `positions.product` is CHECK-constrained to `MIS`. CNC settles into `holdings`, so a CNC position is a bug rather than a state; the constraint is dropped if that ever changes.
 - **`select` is the only grant, and only to the owner.** No client role gets insert, update or delete on any of the six, and no write policy exists. `code-standards.md` already forbids a Server Action writing these tables directly — every write arrives through a `security definer` function in F22–F24. `architecture.md`'s "policies restricting all commands" is reworded in the same commit to describe what is actually built.
@@ -130,11 +133,11 @@ no bootstrap (F13), no seed.
 
 ### 12 Google sign-in and route protection
 
-Google OAuth through Supabase Auth, session refresh and a route guard in `src/proxy.ts`, and a
-minimal signed-in landing page so `/dashboard` is a real destination rather than a 404. Sign-in is
-**initiated server-side** — a `<form>` posting to a Server Action that calls `signInWithOAuth` and
-redirects to Google — so it works with JavaScript disabled, the standard F07B set for the support
-form. `library-docs.md` → Google OAuth sign-in showed the client-side variant and is corrected here.
+Add Google OAuth through Supabase Auth, session refresh, and a route guard in `src/proxy.ts`.
+Provide a minimal `/dashboard` so a successful sign-in has somewhere to land. **Start sign-in on
+the server:** a `<form>` posts to a Server Action, which calls `signInWithOAuth` and redirects to
+Google. This must work with JavaScript disabled, following F07B's support-form standard. Update
+`library-docs.md` → Google OAuth sign-in, which previously showed the client-side approach.
 
 **UI:**
 
@@ -183,7 +186,7 @@ form. `library-docs.md` → Google OAuth sign-in showed the client-side variant 
 - Public routes are not intercepted: `curl -sI` on `/`, `/pricing` and `/support` each return **200**
   with no `Location` header.
 - The callback's failure branch is provable without Google: `curl -sI
-  'localhost:3000/auth/callback?code=bogus'` redirects to `/auth/login?error=auth`, and that page
+'localhost:3000/auth/callback?code=bogus'` redirects to `/auth/login?error=auth`, and that page
   renders the error copy.
 - **The callback is not an open redirect** — `pnpm test`: `safeNext()` rejects `https://evil.com`,
   `//evil.com` and `javascript:…`, returning `/dashboard` for each.
@@ -218,10 +221,10 @@ form. `library-docs.md` → Google OAuth sign-in showed the client-side variant 
 
 ### 13 Account bootstrap on first sign-in
 
-Everything an account needs, created inside the signup transaction: the `profiles` row and its
-`ZR######` client ID, the `funds` row at `OPENING_BALANCE`, the single `SIGNUP_CREDIT` ledger entry
-that accounts for that cash, and a default watchlist. All four succeed or the signup fails — a user
-who gets in without a `funds` row would break every money function that follows.
+Create the full account in the signup transaction: a `profiles` row with a `ZR######` client ID,
+a `funds` row at `OPENING_BALANCE`, one matching `SIGNUP_CREDIT` ledger entry, and a default
+watchlist. **All four must succeed together, or signup must fail.** Later money functions require
+the funds row, so a partially created account is unusable.
 
 **UI:**
 
@@ -245,7 +248,7 @@ who gets in without a `funds` row would break every money function that follows.
   trigger runs in Postgres and cannot import `src/lib/constants.ts`, so both sides are pinned to the
   contract's number by their own test rather than to each other.
 - **The default watchlist seeds by `INSERT…SELECT` against `instruments`**, intersecting a
-  ten-symbol large-cap list against whatever is seeded. F14 populates `instruments` and runs *after*
+  ten-symbol large-cap list against whatever is seeded. F14 populates `instruments` and runs _after_
   this feature, so a plain `INSERT` would violate the foreign key today. This is FK-safe by
   construction, idempotent, and starts working the moment F14 lands with no change here.
 - **No backfill path.** `auth.users` currently holds one row with no profile, created while
@@ -272,7 +275,7 @@ who gets in without a `funds` row would break every money function that follows.
   `CLIENT_ID_EXHAUSTED` after **exactly 10** attempts, counted by a sequence the stub increments, and
   leaves no `auth.users`, `profiles`, `funds` or `fund_ledger` row behind.
 - pgTAP: the trigger is not a client-callable write path — `has_function_privilege('authenticated',
-  'public.handle_new_user()', 'execute')` is false.
+'public.handle_new_user()', 'execute')` is false.
 - `pnpm test:race`: two connections signing up concurrently both succeed with **different** client
   IDs and complete accounts. Seeded as `zr-race-*@example.com` and cleaned in `afterEach`; this is
   the only tier that can express it, since pgTAP is one session in one transaction.
@@ -282,11 +285,14 @@ who gets in without a `funds` row would break every money function that follows.
 
 ### 14 Instrument and holiday calendar seed
 
-Two committed JSON files and two scripts, separating **refresh** (hit NSE and Yahoo, rewrite the
-files — done in January or on a rebalance) from **seed** (read the files, upsert into Postgres —
-deterministic, offline, idempotent). Both NSE endpoints are undocumented and one of them already
-403s on its warm-up URL from this machine, so a seed that depended on them live would break
-unpredictably and would change ~200 rows with no diff to review first.
+Keep reference data in two committed JSON files, with separate scripts for refresh and seed.
+**Refresh** fetches NSE and Yahoo data and rewrites the files, normally in January or after an
+index rebalance. **Seed** reads those files and upserts them into Postgres without network access.
+It must be deterministic and idempotent: repeating it must leave the same data.
+
+Both NSE endpoints are undocumented, and one already returns 403 from this machine on its warm-up
+URL. Separating the steps prevents an upstream outage from breaking seeding and gives reviewers
+a diff before roughly 200 rows change.
 
 **Logic:**
 
@@ -294,11 +300,11 @@ unpredictably and would change ~200 rows with no diff to review first.
   (`ind_nifty200list.csv`, which carries Company Name, Industry, Symbol and ISIN) and the trading
   calendar from NSE's holiday-master API (`CM` segment). `sector` comes from the `Industry` column
   rather than being invented, so every value is attributable to the source.
-- **Every `yahoo_symbol` is probed, not sampled.** The symbol is derived as `${symbol}.NS`, and that
-  rule is wrong for a handful of names every year. Yahoo answers 200 for a real symbol and 404 for a
-  fake one, so the script probes all ~200 with throttling and **refuses to write the JSON** if any
-  fail, naming them. A five-symbol spot check samples 2.5% of the universe and the failure it misses
-  stays invisible until someone opens that stock's page in Phase 5.
+- Probe every `yahoo_symbol`, with throttling. Deriving `${symbol}.NS` misses a few names each year.
+  Yahoo returns 200 for a real symbol and 404 for an invalid one, so check all roughly 200 and
+  **refuse to write the JSON if any fail**, naming each failure. A five-symbol spot check covers
+  only 2.5% of the universe and could leave an invalid symbol undiscovered until Phase 5. See the
+  dated deferral below for why this probe ships behind a flag.
 - `scripts/seed-reference.mts` — upserts both files through the **service-role client**.
   `instruments` and `market_holidays` grant `select` only, and seeding reference data is precisely
   the administrative act that key exists for. It reads `.env.local` and needs no connection string.
@@ -342,22 +348,27 @@ after a 200-symbol probe, and **Yahoo is deferred to the end of the project** by
 code ships behind `--probe` rather than being deleted, because it is exactly what must run when Yahoo
 returns. Until then the universe is seeded but unvalidated, and `yahoo_validated: false` in the JSON
 says so.
+
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:db` and `pnpm build` all exit zero.
 
 ### 15 Quote provider chain
 
-The market library everything in Phase 3 reads: NSE session logic, price provenance, a simulator that
-walks from a real market close, and the thin provider seam they plug into. Nothing here renders UI or
-writes to the database — F16's tick is the first caller.
+Build the market library Phase 3 will use: NSE session times, quote provenance, a simulator
+starting from a real market close, and a common provider interface. Provenance means the source
+and age of a price. This feature renders no UI and writes no database rows; F16's scheduled tick
+will be its first caller.
 
-**Yahoo is deferred to the end of the project (decided 2026-08-21), so this chain ships
-simulator-backed.** Twelve Data's free plan carries no NSE symbols at all (verified against the live
-API — `library-docs.md` → Quote providers), and NSE's own `quote-equity` endpoint answers 403 from
-here, so the simulator is the only provider that can serve a price until Yahoo returns. The interface,
-circuit breaker and provenance helpers are all built now — a real provider drops into a finished
-chain, not the reverse — but the running system quotes `SIMULATOR`, and every price on screen badges
-`SIMULATED`. That is honest by construction; what it must not do is coexist with copy promising real
-prices, so **`/` and `/about` must be reconciled before F39 deploys** if Yahoo has not landed by then.
+**Implementation-time decision, 2026-08-21: defer Yahoo to the end of the project and ship the
+chain with the simulator.** Twelve Data's free plan had no NSE symbols (checked against its live
+API; see `library-docs.md` → Quote providers), and NSE's `quote-equity` endpoint returned 403
+from this machine. Build the provider interface, circuit breaker and provenance helpers so another
+provider could be added later. The running provider is `SIMULATOR`, and every rendered price must
+say `SIMULATED`. **Reconcile `/` and `/about` before F39 deploys** if Yahoo has not been added;
+public copy must not promise real prices.
+
+The later decision in 6.00.05 made the simulator permanent. The Yahoo-dependent work described
+here records the original plan; use `project-overview.md` and `constraints/market-data.md` for
+current scope.
 
 **Logic:**
 
@@ -425,18 +436,15 @@ prices, so **`/` and `/about` must be reconciled before F39 deploys** if Yahoo h
 
 ### 16 Market tick Edge Function and schedule
 
-The scheduled job that puts prices in the database. Built now, with the simulator as its only
-provider, precisely so the risky parts — the schedule, the Vault credential, the gateway's
-authentication, and the session gate — are all proven before a real provider exists. Yahoo later drops
-into a pipeline that has already been exercised rather than into an untested one.
+Build the scheduled job that writes prices to the database, using only the simulator. The original
+plan was to verify scheduling, the Vault credential, gateway authentication and the session gate
+before adding Yahoo. Those checks matter independently of the provider choice.
 
-> **Superseded in part (6.00.05): no provider is coming.** The simulator is the whole chain by
-> decision, so the "Yahoo later drops in" framing above is now historical — it is why the feature was
-> shaped this way, not a pending obligation. **The feature itself is unchanged**: it was always
-> simulator-only, and it is still what makes prices move, matches limit orders and squares off MIS on
-> the deployed app. Two obligations it carried are closed rather than inherited — the circuit-breaker
-> state fix and the token-bucket limiter, both of which existed only to serve an outbound provider.
-> See `constraints/market-data.md` → Quote providers.
+> **Partly superseded by 6.00.05:** the simulator is now the whole quote chain, permanently.
+> Adding Yahoo is no longer pending work. **F16's scope is unchanged:** its simulator-only tick
+> updates prices, matches limit orders and squares off MIS on the deployed app. The circuit-breaker
+> state fix and token-bucket limiter are closed obligations because they served only outbound
+> providers. See `constraints/market-data.md` → Quote providers.
 
 **Logic:**
 
@@ -458,7 +466,7 @@ into a pipeline that has already been exercised rather than into an untested one
   per account, and this stays correct after F18 narrows refreshes to what is actually on screen.
 - `select_demanded_symbols(p_limit)` as a **SQL function rather than a query in TypeScript**, so
   pgTAP can test the union and its ordering directly. Ordered by `priority desc,
-  last_requested_at desc` and capped by `MAX_SYMBOLS_PER_TICK`, so batch size is bounded by the
+last_requested_at desc` and capped by `MAX_SYMBOLS_PER_TICK`, so batch size is bounded by the
   limiter and never by the size of the universe.
 - `roll_previous_close()` runs first inside the gate, before any price is read. `quotes.prev_close`
   is what a day change divides by and what the simulator's band is measured from; seeded from
@@ -473,7 +481,7 @@ into a pipeline that has already been exercised rather than into an untested one
   table nothing populates: the assertion would read "deleted zero rows from an empty table" and pass
   whether or not the rules were right. F33 builds the candle pipeline and its retention together.
 - `touch_symbol_demand` remains F18's, with its own grant and test.
-- **JWT verification stays enabled *and* the handler checks a shared secret.** Not a fallback —
+- **JWT verification stays enabled _and_ the handler checks a shared secret.** Not a fallback —
   both, always. The plan treated the `X-Scheduler-Secret` layer as contingency for a gateway that
   accepted no available credential; measurement found the opposite problem. `verify_jwt` rejects a
   caller with no `Authorization` header, but it accepts **any** valid project key, including the
@@ -515,7 +523,10 @@ into a pipeline that has already been exercised rather than into an untested one
 
 ### Phase checkpoint
 
-The complete schema exists, the three test tiers run green, auth works end to end, and prices land in the database on a schedule. Confirm a fresh account bootstraps correctly, tier 2 proves RLS blocks cross-user reads on every table, tier 3 proves the lock guards hold, and the cron job has run unattended for at least an hour.
+Before closing Phase 2, confirm the complete schema exists, all three test tiers pass, sign-in
+works end to end, and the schedule writes quotes. Create a fresh account to check bootstrap. Use
+tier 2 to prove RLS blocks cross-user reads on every table, and tier 3 to prove the lock guards
+hold. The cron job must also run unattended for at least an hour.
 
 **Carried over from the Phase 1 checkpoint — both closed in `2.00.01`:** the tier-3 cleanup
 assertion is no longer vacuous (it commits a prefixed row and asserts it is really there before
@@ -524,5 +535,3 @@ dropping, falsified by removing the `drop table`), and both test runners now sha
 and left in the other. Verified by running tiers 2 and 3 green against a CRLF copy of the real file.
 
 ---
-
-

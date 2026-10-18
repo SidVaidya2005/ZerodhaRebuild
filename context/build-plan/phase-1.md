@@ -1,17 +1,17 @@
-> **One phase of `context/build-plan.md`.** That index carries the Core Principle and the phase list.
-> **Read only the phase you are building.** A finished phase is history — its still-binding decisions
-> live in `constraints.md`, its narrative in `build-journal.md`, and re-reading it here costs tokens for nothing.
+> Part of `context/build-plan.md`; see that index for the build principle and phase order.
+> Read the feature needed for the current task. `progress-tracker.md` holds current status.
+> These specifications retain implementation-time decisions and dated verification results. Check
+> current rules in the authoritative context files before reusing an older plan. Ongoing constraints
+> live in `constraints.md`; the account of past work lives in `build-journal.md`.
 
 ## Phase 1 — Foundation & Public Site
 
 ### 01 Project scaffold and tooling
 
-
-
-Create the Next.js application and every piece of tooling the rest of the build assumes.
-**No Supabase login, link, or migration happens here** — provisioning moves to Phase 2, where
-feature 10 already calls for it. This feature is done when every command in `CLAUDE.md` → Commands
-that does not need a database exits zero.
+Create the Next.js application and the tools later features need. **Do not log in to Supabase,
+link a project or run a migration here.** Provisioning belongs to Phase 2, where feature 10 calls
+for it. To finish this feature, every command listed in `CLAUDE.md` → Commands that can run without
+a database must exit zero.
 
 **Logic:**
 
@@ -33,7 +33,7 @@ that does not need a database exits zero.
 - `pnpm build` exits zero.
 - `pnpm lint`, `pnpm typecheck`, and `pnpm test` all exit zero, and `test` runs at least one real assertion rather than passing on `passWithNoTests`.
 - Deleting a required variable from `.env.local` makes startup fail with a named error, not a runtime `undefined`: remove `NEXT_PUBLIC_SUPABASE_URL`, run `pnpm dev`, and read that the error names that variable.
-- **The service-role secret cannot reach the browser:** temporarily import `env.server.ts` from a `'use client'` file and confirm `pnpm build` *fails* with the `server-only` error, then revert. A guard never observed failing is not a guard.
+- **The service-role secret cannot reach the browser:** temporarily import `env.server.ts` from a `'use client'` file and confirm `pnpm build` _fails_ with the `server-only` error, then revert. A guard never observed failing is not a guard.
 - `ls tailwind.config.*` returns nothing — configuration is CSS, per `library-docs.md` → Tailwind CSS v4.
 - `grep -E '"\^' package.json` returns nothing; every version is exactly pinned.
 - `find src supabase tests -type d | sort` matches the tree in `architecture.md` → Folder Structure.
@@ -42,17 +42,16 @@ that does not need a database exits zero.
 
 ### 02 Design system and theme tokens
 
-
-
-Establish the visual language before any page is built, so nothing needs restyling later.
-shadcn's token vocabulary is **bridged onto** this project's, never allowed to replace it.
+Set the colours, typography and spacing before building pages. A theme token is a named design
+value, such as a surface colour. Map the token names shadcn expects onto the project's tokens;
+**shadcn must never replace the project palette.**
 
 **UI:**
 
 - The full `@theme` token set from `library-docs.md` → Tailwind: brand, trading semantics, surfaces, text, chart ramp, type scale, radius.
 - Dark values on `:root` with `.light` overriding them, plus `@custom-variant light`. There is no `dark:` variant in this project.
 - A `@theme inline` **bridge block** mapping the token names shadcn's components expect onto this project's palette — `--color-background` → `var(--color-canvas)`, `--color-primary` → `var(--color-brand)`, `--color-border` → `var(--color-hairline)`, and so on. Bridge tokens exist so `shadcn add` keeps working; **project code never uses them** and keeps using `bg-canvas`, `text-muted`, `border-hairline`.
-- **`--color-muted` stays this project's text grey.** shadcn uses that same name for a *surface* and puts the text colour in `--color-muted-foreground` — the same name with the opposite role, and the one genuine collision in the set. `--color-muted-foreground` is defined to the same value, so `text-muted` and `text-muted-foreground` both resolve correctly and only `bg-muted` is left wrong; that is hand-fixed to `bg-surface-elevated` on add. The full mapping is recorded in `library-docs.md` → shadcn/ui so every future `shadcn add` is mechanical.
+- **`--color-muted` stays this project's text grey.** shadcn uses that same name for a _surface_ and puts the text colour in `--color-muted-foreground` — the same name with the opposite role, and the one genuine collision in the set. `--color-muted-foreground` is defined to the same value, so `text-muted` and `text-muted-foreground` both resolve correctly and only `bg-muted` is left wrong; that is hand-fixed to `bg-surface-elevated` on add. The full mapping is recorded in `library-docs.md` → shadcn/ui so every future `shadcn add` is mechanical.
 - `next-themes` provider in the root layout, `attribute="class"`, `defaultTheme="dark"`, `enableSystem={false}` so the OS cannot override the intended default, `disableTransitionOnChange`, and `suppressHydrationWarning` on `<html>`. Theme persists to `localStorage` only — `profiles.theme` is feature 35's job.
 - Fonts wired through `next/font`: Inter as `--font-inter`, IBM Plex Sans as `--font-plex`, with `tabular-nums` on the numeric class and display line-heights reduced ~3% per `DESIGN.md`'s substitution note.
 - shadcn/ui initialised and the base primitives added — `button dialog dropdown-menu tabs input select command table skeleton sonner` — restyled to the system's density: 14px body, 6px radius, 1px hairlines, 40px controls. Styling changes freely; **component APIs do not**.
@@ -81,11 +80,10 @@ shadcn's token vocabulary is **bridged onto** this project's, never allowed to r
 
 ### 03 Public layout shell
 
-
-
-The chrome every marketing page sits inside: disclaimer banner, top navigation, mobile sheet nav,
-and footer, wrapped in the `(marketing)` route group layout. Every link target the shell points at
-is stubbed here so nothing 404s, and each stub is replaced wholesale by the feature that owns it.
+Build the shared frame for public pages: the disclaimer banner, header, mobile navigation sheet
+and footer. Compose them in the `(marketing)` route-group layout. Add a placeholder page for every
+link destination so the navigation works immediately; the feature responsible for each page will
+replace that placeholder.
 
 **UI:**
 
@@ -93,7 +91,7 @@ is stubbed here so nothing 404s, and each stub is replaced wholesale by the feat
 - `SiteHeader` — 64px tall on `bg-canvas`: text wordmark in `--color-brand` (no logo asset; the branding deviation in `library-docs.md` forbids reproducing anyone's mark), the four nav links (Home, About, Pricing, Support) hidden below `md`, and a right-side cluster carrying the theme toggle and a "Sign in with Google" CTA. The CTA is `bg-brand text-on-brand` and `rounded-full` — DESIGN.md reserves the pill radius for the top-of-page sign-up action and nothing else.
 - `MobileNav` — client component, `Sheet`-backed, hamburger trigger visible only below `md`. Full-screen sheet with the same four links and the sign-in CTA anchored at the bottom, per DESIGN.md → Collapsing Strategy.
 - `DisclaimerBanner` — the simulator disclaimer strip, **dismissible and remembered**. A blocking inline `<script>` in the root layout reads the `localStorage` key and stamps `data-disclaimer="dismissed"` on `<html>` before first paint; a `globals.css` rule hides the strip off that attribute. Same technique `next-themes` already runs here, so a returning visitor never sees it flash. Only the close button is a client island — the layout stays a Server Component.
-- `SiteFooter` — `bg-surface` with a top hairline, columns 1-up on mobile and multi-column at `md`, project links carrying `rel="noreferrer"`, and the "not affiliated with Zerodha" disclaimer linking to `/legal`. **Not** DESIGN.md's literal always-light `#fafafa` footer: `--color-surface` already *is* `#fafafa` in the light theme, so the source value is reached through the token instead of hardcoded, and in dark it reads as the elevation step the flat-colour-block philosophy calls for. An always-light token pair would exist only to break the theme contract.
+- `SiteFooter` — `bg-surface` with a top hairline, columns 1-up on mobile and multi-column at `md`, project links carrying `rel="noreferrer"`, and the "not affiliated with Zerodha" disclaimer linking to `/legal`. **Not** DESIGN.md's literal always-light `#fafafa` footer: `--color-surface` already _is_ `#fafafa` in the light theme, so the source value is reached through the token instead of hardcoded, and in dark it reads as the elevation step the flat-colour-block philosophy calls for. An always-light token pair would exist only to break the theme contract.
 - `ThemeToggle` promoted out of `app/dev/styleguide/` to `src/components/ThemeToggle.tsx` — app-level chrome, so beside `theme-provider.tsx`, not in `ui/`. DESIGN.md's `top-nav-dark` lists the toggle in the right-side cluster, and the Phase 1 checkpoint walks every public route in both themes.
 
 **Logic:**
@@ -115,9 +113,12 @@ is stubbed here so nothing 404s, and each stub is replaced wholesale by the feat
 
 ### 04 Home page
 
+Build the public landing page inside F03's shared layout. Each horizontal section is a static
+Server Component, so the content is rendered without a browser-side data fetch.
 
-
-The public landing page. Every band is a static Server Component inside the F03 shell.
+The provider copy below records the original Phase 1 requirements. The permanent-simulator
+decision in 6.00.05 superseded promises of real NSE quotes on Home and About; current public copy
+must follow `project-overview.md` and `constraints/market-data.md`.
 
 **UI:**
 
@@ -151,18 +152,17 @@ The public landing page. Every band is a static Server Component inside the F03 
 
 ### 05 About page
 
-
-
-Why the project exists, how it was built, and an honest inventory of what is real and what is faked.
+Explain why the project exists and how it works. Give readers a clear account of which parts use
+real market rules or data and which parts the simulator supplies.
 
 **UI:**
 
 - What the project is and why it exists, drawn from `project-overview.md` → The Problem It Solves.
-- **Architecture summary in prose plus an ordered walk of the two paths that matter** — how a quote reaches the screen, and what happens when an order is placed — calling out the invariants worth seeing: money math in Postgres, fills only inside `execute_order`, RLS as the security boundary. No diagram: prose is responsive and accessible for free, it is the part a technical reader actually reads, and a drawn diagram can wait for F40 when the architecture has stopped moving.
-- **Stack table** rendered from `src/lib/stack.ts` as a plain semantic `<table>`, **not** the `components/ui/table.tsx` primitive: that primitive is a Client Component, and importing it would put a hydrated client boundary on a static marketing page for row-hover states this table does not want. It sits in an `overflow-x-auto` container carrying `role="region"`, an `aria-label` and `tabIndex={0}` — a scrollable region that keyboard users cannot reach is unusable at 375px, where the table is 672px inside a 341px box. Lighthouse does not audit that; axe does.
-- **Rows for packages not yet installed render as "planned"**, neither omitted nor given an invented version. A third of `architecture.md`'s stack lands in Phases 2–5; showing fake versions would be the same overclaim this project keeps refusing, and hiding the rows would misrepresent the design.
+- Explain the architecture in plain language, then walk through two paths in order: a quote reaching the screen and a user placing an order. Name the rules each path depends on: Postgres calculates money, only `execute_order` fills orders, and row-level security (RLS) controls access to user data. Use prose here; it adapts to small screens and assistive technology. F40 can add a diagram once the architecture is settled.
+- Render the stack from `src/lib/stack.ts` in a semantic `<table>`. Do not use `components/ui/table.tsx`: that Client Component would add hydration to a static page for hover behaviour it does not need. Wrap the table in `overflow-x-auto` with `role="region"`, an `aria-label` and `tabIndex={0}`. At 375px the 672px table sits in a 341px box, so keyboard users need to focus and scroll the region. axe checks that access; Lighthouse does not.
+- Show packages that have not been installed as "planned", with no invented version. About a third of the documented stack arrives in Phases 2–5. Keeping those rows lets readers see the intended design and what actually exists.
 - Links to the repository, through a shared `ExternalLink`.
-- **Real / Simulated inventory** — real: NSE prices, charge formulas, order mechanics, market hours; simulated: the money, the fills, the counterparty, settlement. This page carries the *inventory*; `/legal` carries the *consequences*, and About links to it. F08 needs to stand alone as a notice, and Home stays scoped to price provenance only, so none of the three duplicates another.
+- **Real / Simulated inventory** — real: NSE prices, charge formulas, order mechanics, market hours; simulated: the money, the fills, the counterparty, settlement. This page carries the _inventory_; `/legal` carries the _consequences_, and About links to it. F08 needs to stand alone as a notice, and Home stays scoped to price provenance only, so none of the three duplicates another.
 
 **Logic:**
 
@@ -189,11 +189,9 @@ Why the project exists, how it was built, and an honest inventory of what is rea
 
 ### 06 Pricing page
 
-
-
-The charge structure the order engine will actually apply — written before the engine so the engine
-matches the page. **Rates confirmed against Zerodha's published charge list on 2026-08-21**, which
-corrected three things `trading-contract.md` §3 had wrong; see Logic below.
+Explain the charges the order engine must apply. Publishing this before building the engine gives
+both a common reference. **The rates were checked against Zerodha's published charge list on
+2026-08-21.** That check corrected three errors in `trading-contract.md` §3, listed below.
 
 **UI:**
 
@@ -211,7 +209,7 @@ corrected three things `trading-contract.md` §3 had wrong; see Logic below.
 - **GST is computed on unrounded sub-components and rounded once**, resolving an ambiguity §2 left open. Rounding once where the figure becomes money loses the least and keeps §2's "computed at full precision, then rounded" literally true for GST as for every other component. §2 gains a sentence saying so.
 - Rates live in `src/lib/constants.ts` as decimal rates per `code-standards.md` (`0.0003`, not `0.03`), each carrying a source URL and the date confirmed.
 - **`src/lib/trading/charges.ts` is built here**, not inlined on the page. `architecture.md` already reserves it for pure charge functions; building it now means the page renders from the real estimator, and F22 adds the Postgres equivalent plus the property test proving the two agree.
-- **§13's sweep is extended to cover charge terms.** Its grep matches margin and P&L identifiers only, so it structurally cannot detect the drift a §3 *rate* edit causes — the exact kind of edit this feature makes.
+- **§13's sweep is extended to cover charge terms.** Its grep matches margin and P&L identifiers only, so it structurally cannot detect the drift a §3 _rate_ edit causes — the exact kind of edit this feature makes.
 
 **Verify:**
 
@@ -227,23 +225,21 @@ corrected three things `trading-contract.md` §3 had wrong; see Logic below.
 
 ### 07 Support page and contact form
 
-
-
-**Split into two slices.** This feature was placed in Phase 1 before anyone noticed the contact form
-needs a database layer: `@supabase/ssr`, `src/lib/supabase/server.ts` (F12 owns it),
-`src/types/database.ts` (F10 generates it), `react-hook-form`, and F09's harness for its RLS check.
-The help content needs none of that, so it ships first. The checkbox in `progress-tracker.md` is
-ticked only when **both** slices are done.
+Build this feature in two slices. The help content can ship in Phase 1, but the contact form
+needs database access and F09's RLS test harness. Its original dependency list also named
+`@supabase/ssr`, `src/lib/supabase/server.ts` (planned for F12), `src/types/database.ts` (F10), and
+`react-hook-form`; Slice B records how those dependencies were resolved. Tick the feature in
+`progress-tracker.md` only after **both** slices are complete.
 
 ---
 
-#### Slice A — help content *(Phase 1, no dependencies)*
+#### Slice A — help content _(Phase 1, no dependencies)_
 
 **UI:**
 
 - Four category cards — Account, Orders, Funds, Technical — each holding expandable FAQ entries.
-- **Disclosure is native `<details>` / `<summary>`.** Zero JavaScript, works before hydration and with JS disabled, and keyboard operation, focus handling and screen-reader semantics come from the browser rather than being hand-written. `/support` stays static like every other public page, and F38 has nothing to audit here. Styling the marker is the only cost. `<summary>` gets an explicit `focus-visible` ring, since browser defaults vary.
-- **No contact form in this slice.** Anything the FAQ does not answer routes to the repository's issue tracker through `ExternalLink`. A dead "coming soon" form is a worse experience than no form, and this way Slice B *adds* the form rather than replacing a placeholder.
+- Use native `<details>` / `<summary>` elements for expandable answers. They work before hydration and with JavaScript disabled; the browser supplies keyboard and screen-reader behaviour. `/support` stays static, with no custom disclosure behaviour for F38 to audit. Style the marker and give `<summary>` an explicit `focus-visible` ring because browser defaults differ.
+- Leave the contact form for Slice B. For questions the FAQ does not answer, link to the repository's issue tracker through `ExternalLink`. Do not show a non-working form.
 - Answers are **grounded in the context docs, not invented** — order behaviour from `trading-contract.md`, price provenance from `architecture.md`, the free-hosting sleep from `CLAUDE.md`. Anything already stated on `/pricing` or `/legal` is **linked, not restated**, the same rule that keeps Home, About and Legal from duplicating one another.
 
 **Verify:**
@@ -259,15 +255,15 @@ ticked only when **both** slices are done.
 
 ---
 
-#### Slice B — contact form *(Phase 2, after F09)*
+#### Slice B — contact form _(Phase 2, after F09)_
 
-**Unblocked:** F09 landed the tier-2 harness. This slice also lands
-`src/lib/supabase/server.ts` and `src/types/database.ts` — not throwaway, F12 extends them.
+F09 supplied the tier-2 harness this slice needs. Add `src/lib/supabase/server.ts` and
+`src/types/database.ts` here; F12 will extend these same files.
 
 **UI:**
 
 - Contact form: name, email, category, message. Success and error states, disabled while submitting.
-- **React 19 form action + `useActionState`, not react-hook-form.** The form submits and validates without JavaScript, matching the page it sits on where Slice A ships zero JS, and `useActionState` supplies the pending state the spec asks for with no new dependency. `code-standards.md` is corrected in the same change, since it names react-hook-form for this form; F25's order ticket is where react-hook-form actually earns its place — a dialog with live margin calculation.
+- Use a React 19 form action with `useActionState`. Submission and validation must work without JavaScript, as the FAQ does, and `useActionState` provides the pending state without another dependency. Update `code-standards.md` in the same change: it previously assigned react-hook-form to this form. Keep that library for F25's order ticket, whose live margin estimates need it.
 - A **honeypot** field, hidden from sight and from assistive technology, which the action rejects when filled.
 
 **Logic:**
@@ -291,14 +287,15 @@ ticked only when **both** slices are done.
 
 ### 08 Legal, error, and not-found pages
 
-
+Explain the simulator's limits on `/legal`. Add helpful fallbacks for a missing URL and a page
+that fails to render, with separate handling for each case.
 
 **UI:**
 
 - `/legal` with the full disclaimer: unaffiliated, no real trading, no financial advice, data provenance.
 - A "simulation simplifications" section naming the places this diverges from a real broker: intraday short losses are capped at collateral rather than triggering a margin call, prices are delayed rather than real-time, there is no counterparty order book, fills are all-or-nothing because there is nobody on the other side, and **the DP charge is applied once per sell order where a real broker charges once per scrip per day** (F06, `trading-contract.md` §3).
-- **Branded `not-found.tsx`, carrying the full public chrome.** A mistyped URL is an ordinary navigation outcome and the useful thing to offer is the nav. It cannot inherit that chrome from the `(marketing)` layout — an unmatched URL never enters the route group — so the shell is extracted to `components/marketing/PublicShell.tsx` and shared by both.
-- **Root `error.tsx` with a retry action, and deliberately no chrome.** An error means something in this subtree already failed, so the less machinery the fallback depends on, the better its odds of rendering; it also keeps the client bundle small rather than dragging the header across the boundary. It renders `error.digest`, never `error.message` — `code-standards.md` forbids raw errors in UI strings, and in production Next.js replaces the message with the digest anyway.
+- Give `not-found.tsx` the full public layout so visitors can navigate away from a mistyped URL. Unmatched URLs never enter the `(marketing)` route group, so extract `components/marketing/PublicShell.tsx` and share it between the group layout and the 404 page.
+- Add a root `error.tsx` with a retry action and a minimal layout. Keeping the fallback independent of the header reduces both its dependencies and its client bundle. Display `error.digest`, never `error.message`: `code-standards.md` forbids raw error messages in the UI, and production Next.js replaces the message with a digest anyway.
 - `global-error.tsx` is **not** added: errors thrown by the root layout itself go uncaught. That is beyond what this feature specifies, and it would mean duplicating the fonts and theme provider.
 
 **Verify:**
@@ -313,8 +310,7 @@ ticked only when **both** slices are done.
 
 ### Phase checkpoint
 
-Public site complete and deployable. Run lint, typecheck and tests; walk every public route in both themes at desktop and mobile widths.
+Before closing Phase 1, confirm the public site is complete and deployable. Run lint, typecheck
+and tests, then inspect every public route in both themes at desktop and mobile widths.
 
 ---
-
-

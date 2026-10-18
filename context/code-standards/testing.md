@@ -1,45 +1,45 @@
 # Code Standards — Testing
 
-> **Reference half of `context/code-standards.md`.** The always-binding rules live there.
-> **`trading-contract.md` outranks every money rule stated here.**
+> Read this part of `context/code-standards.md` when writing or debugging tests. The core
+> standards still apply. `trading-contract.md` takes precedence on every money rule.
+> Read `constraints/testing.md` too for known coverage gaps and test-running traps.
 
 ## Testing
 
-Four tiers, because no single runner can prove what this project claims. **Match the claim to the tier
-that can actually falsify it** — a test in the wrong tier passes whether or not the bug exists.
+Choose the tier that can expose the bug you are trying to prevent. The project has four because
+one runner cannot check pure logic, database access rules, competing transactions and agreement
+between two languages. A green test in the wrong tier can leave the claim entirely untested.
 
-| Tier | Runner | Proves | Command |
-| ---- | ------ | ------ | ------- |
-| 1 — logic | Vitest, no database | Charge estimates, `isTradingSession`, provider chain and circuit breaker, Zod parsers, tick interpolation | `pnpm test` |
-| 2 — database | pgTAP via `scripts/run-pgtap.mts` | RLS, grants, CHECK constraints, function return values, reconciliation identities | `pnpm test:db` |
-| 3 — concurrency | Vitest driving two `pg` connections | Row-lock contention, double-fill, cancel-while-filling, margin races | `pnpm test:race` |
-| 4 — parity | Vitest with one read-only `pg` connection | That a TypeScript calculator and its Postgres counterpart are the same calculator | `pnpm test:parity` |
+| Tier            | Runner                                    | Proves                                                                                                    | Command            |
+| --------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------ |
+| 1 — logic       | Vitest, no database                       | Charge estimates, `isTradingSession`, provider chain and circuit breaker, Zod parsers, tick interpolation | `pnpm test`        |
+| 2 — database    | pgTAP via `scripts/run-pgtap.mts`         | RLS, grants, CHECK constraints, function return values, reconciliation identities                         | `pnpm test:db`     |
+| 3 — concurrency | Vitest driving two `pg` connections       | Row-lock contention, double-fill, cancel-while-filling, margin races                                      | `pnpm test:race`   |
+| 4 — parity      | Vitest with one read-only `pg` connection | Agreement between a TypeScript calculator and its Postgres counterpart                                    | `pnpm test:parity` |
 
-**Why four.** pgTAP runs inside a single session and a single transaction, so it structurally cannot
-express two transactions racing for a lock — the exact scenario the status guard in `execute_order`
-exists for. Vitest alone cannot reach RLS or a CHECK constraint. Tier 3 exists solely for claims the
-other two cannot reach.
+pgTAP runs in one session and one transaction. It cannot create the competing transactions needed
+to test `execute_order`'s status guard. Pure Vitest tests cannot reach RLS or CHECK constraints.
+Tier 3 handles the races neither of those tiers can express.
 
-**Tier 4 exists because a claim about *two* languages needs both running at once.** `trading-contract.md`
-§1 lets TypeScript show a labelled estimate and forbids it producing a stored value — which is only
-honest if the estimate the order ticket shows equals the amount actually charged. Proving that needs
-`estimateCharges` and `calculate_charges` in one process: tier 1 has no database, tier 2 cannot call
-TypeScript, and tier 3 is opt-in because it commits. **Tier 4 is read-only** — the functions it calls
-touch no table — so it needs no permission gate and runs inside a plain `pnpm test:all`. It does need
-`TEST_DATABASE_URL`, exactly as tier 2 does, and **fails rather than skips without it**: a skipped
-tier 3 is a deferred risk, but a skipped tier 4 means the only check comparing the two calculators
-silently did not run (F22).
+Tier 4 compares both implementations in one process. `trading-contract.md` §1 allows a labelled
+TypeScript estimate that is never stored, but reserves stored money calculations for Postgres. The order ticket's
+estimate must therefore agree with the charge actually calculated. Running `estimateCharges`
+and `calculate_charges` together checks this: tier 1 lacks a database, tier 2 cannot call
+TypeScript, and tier 3 can be skipped because its commits require explicit opt-in.
+
+Tier 4 is read-only; its functions touch no tables. It runs as part of `pnpm test:all` without
+`ALLOW_RACE_TESTS`. It requires `TEST_DATABASE_URL`, like tier 2, and fails if it is missing.
+Silently skipping the only comparison between calculators would make a green run misleading.
+A skipped tier 3 is instead an explicit deferred risk. (F22)
 
 ### Environment
 
-There is **no Docker on this machine**, so `supabase start` and `supabase test db --local` are
-unavailable. Both database tiers therefore run against the **hosted project**, addressed by
-`TEST_DATABASE_URL`.
+This machine has no Docker, so `supabase start` and `supabase test db --local` are unavailable.
+Database tests use the hosted project through `TEST_DATABASE_URL`.
 
-**There is exactly one Supabase project, and it is the real one.** An earlier version of this
-document required a second, throwaway project for tests. That was reversed deliberately: one project
-is simpler to operate and cannot silently pause while the other stays warm. The cost is that tier 3
-writes into the real database, which is managed rather than avoided — see the tier 3 rules below.
+There is one Supabase project, and it is the real one. A separate throwaway test project was
+removed deliberately: maintaining one is simpler, and neither project can silently pause while
+the other stays active. Tier 3 consequently writes to the real database under the guards below.
 
 ```bash
 # Apply the migration history
@@ -49,24 +49,29 @@ pnpm supabase db push
 pnpm test:db
 ```
 
-**`supabase test db` is unusable here, and `--db-url` does not save it.** It connects to the remote
-database and *then* shells out to `pg_prove` in a container, failing with `LegacyDockerRunError`.
-Tier 2 runs through `scripts/run-pgtap.mts` instead: pgTAP's functions return their TAP output as
-text rows, so executing a suite through `pg` and reading the rows *is* the TAP stream. The runner
-fails on a failed assertion, on a plan mismatch, and on a SQL error — all three observed failing
-before it was trusted (F09).
+`supabase test db` cannot run here even with `--db-url`. It connects remotely, then tries to run
+`pg_prove` inside Docker and fails with `LegacyDockerRunError`. Use `scripts/run-pgtap.mts` instead.
+pgTAP returns TAP output as text rows, which this runner reads over `pg`. Before it was trusted,
+the runner was observed failing for a failed assertion, a plan mismatch and a SQL error. (F09)
 
-- **Tier 3 commits into the real database.** It cannot do otherwise: proving two connections cannot both fill the same order requires the first one to actually commit. Three rules make that safe, and all three are mandatory:
-  1. **`pnpm test:race` refuses to run unless `ALLOW_RACE_TESTS` is set.** A bare `pnpm test:all` must never write to the database by accident, and neither must CI.
-  2. Every row a race test creates is seeded under a **recognisable prefix**, so anything it leaves behind is identifiable at a glance.
-  3. Cleanup runs in `afterEach` **whether the test passed or failed**. A crashed process can still strand rows; that is the residual risk of a single project, and it is cleared by hand or by `reset_account`.
-- Free projects **pause after a week of inactivity**. A run failing to connect usually means the project is paused, not that the code broke.
-- `TEST_DATABASE_URL` is a secret and lives only in `.env.test.local`, which is gitignored.
+Tier 3 must commit: one transaction has to finish before the other can observe that the order
+was already filled. Follow all three safeguards:
+
+1. `pnpm test:race` refuses to run without `ALLOW_RACE_TESTS`. A plain `pnpm test:all` or CI run must never write to the database by accident.
+2. Seed every race-test row with a recognisable prefix so leftovers are easy to identify.
+3. Clean up in `afterEach` on both success and failure. A crashed process can still leave rows behind; clear those by hand or through `reset_account`. This is the accepted residual risk of using one project.
+
+Free projects pause after a week of inactivity. Check whether the project is paused when a test
+cannot connect before treating that failure as a code regression.
+
+Keep the secret `TEST_DATABASE_URL` only in the gitignored `.env.test.local`.
 
 ### Tier 2 — pgTAP
 
-One file per concern in `supabase/tests/`, numbered so they run in order. Every file wraps itself in
-`begin; … rollback;` so runs leave nothing behind.
+Put one concern in each numbered file under `supabase/tests/`; numbering controls execution order.
+Wrap every suite in `begin; … rollback;` so it leaves no changes behind. The example below shows
+role impersonation and the distinction between row filtering and permission denial. Apply the
+assertion rules below it when writing a suite for the actual grants.
 
 ```sql
 -- supabase/tests/01-rls.sql
@@ -86,12 +91,14 @@ select is_empty(
   'user A reads none of user B''s funds'
 );
 
-select is_empty(
+select throws_ok(
   $$update public.funds set available_cash = 999999 returning user_id$$,
+  '42501',
+  null,
   'user A cannot inflate any funds row, including their own'
 );
 
--- The grant policy, tested directly: internal functions are not callable by a user.
+-- The execute grant, tested directly: internal functions are not callable by a user.
 select throws_ok(
   $$select public.execute_order('00000000-0000-0000-0000-000000000000'::uuid)$$,
   '42501',
@@ -103,11 +110,15 @@ select * from finish();
 rollback;
 ```
 
-- Impersonate with `set local role authenticated;` followed by `set local request.jwt.claim.sub = '<uuid>';`. Use `set local role anon;` for the signed-out case.
-- Assert denial with `is_empty()` when a policy filters rows away, and `throws_ok(..., '42501', ...)` when a missing grant stops the request before any policy runs. They are different failures and both must be covered.
-- Every table with a `user_id` gets a read-denial and a write-denial case. Every internal function gets a not-callable case.
+- To impersonate a user, run `set local role authenticated;`, then `set local request.jwt.claim.sub = '<uuid>';`. Use `set local role anon;` for the signed-out case.
+- Use `is_empty()` when RLS filters rows away. Use `throws_ok(..., '42501', ...)` when a missing grant refuses the statement before policies run. Test both forms of denial where applicable; they are different protections.
+- For every table with `user_id`, test denied reads and writes. For every internal function, test that a client cannot call it.
 
 ### Tier 3 — two-connection races
+
+The example stages two transactions on the same order lock. The first fills and commits; the
+second must then see the updated status and do nothing. Real suites also need the fixture
+prefix and `afterEach` cleanup required above.
 
 ```ts
 // tests/concurrency/execute-order.race.test.ts
@@ -124,7 +135,8 @@ test('two matcher runs cannot fill the same order twice', async () => {
   await a.query('begin')
   await b.query('begin')
 
-  // A takes the order row lock and fills.
+  // These privileged test connections can call the internal helper.
+  // Browser roles cannot. A takes the order row lock and fills.
   await a.query('select public.execute_order($1)', [orderId])
 
   // B blocks on that same lock — do not await yet.
@@ -144,20 +156,19 @@ test('two matcher runs cannot fill the same order twice', async () => {
 })
 ```
 
-- Use `pg` directly. The Supabase JS client speaks PostgREST — one statement per request, no interactive transactions — so it cannot hold a lock open across statements and cannot express this test at all.
-- **Never `await` the second session's call before committing the first.** Awaiting it serialises the two and the test passes with the bug present.
-- Tier 3 **commits**, so every test seeds under a recognisable prefix and cleans up in `afterEach`, whether it passed or failed.
-- Keep tier 3 small. It is slow and order-dependent; only genuine races belong here.
+- Use `pg` directly. Supabase JS sends one PostgREST statement per request and cannot keep an interactive transaction or row lock open across statements.
+- Start the second session's call without `await`, then commit the first. Awaiting the second before that commit prevents the intended interleaving; a serial test can pass even with the guard missing.
+- Every test commits, so seed identifiable rows and clean them up in `afterEach` whether assertions pass or fail.
+- Reserve tier 3 for actual races. It is slow and order-dependent; other claims belong in cheaper tiers.
 
 ### The falsifiability rule
 
-For every concurrency guard and every constraint, **run the suite once against a build with the guard
-removed and confirm the test fails.** A test that passes in both states proves nothing. Record the
-result in the build journal entry for that feature.
+For every concurrency guard and constraint, remove the protection temporarily and run its suite.
+Confirm that the test fails, then restore the protection. Record the result in that feature's
+build journal entry. Passing with and without the guard means the test did not prove the claim.
 
-This is not hypothetical: an earlier draft of this project specified "run the matcher twice and expect
-one fill" as a sequential re-run, which passes whether or not `execute_order` re-checks status, because
-the second pass never selects the order.
+An earlier test plan said to run the matcher twice in sequence and expect one fill. That test
+passes even if `execute_order` does not recheck status, because the second matcher no longer
+selects the completed order. It never creates the race the guard must stop.
 
 ---
-

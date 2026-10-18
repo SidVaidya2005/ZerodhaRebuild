@@ -1,23 +1,24 @@
-> **One phase of `context/build-plan.md`.** That index carries the Core Principle and the phase list.
-> **Read only the phase you are building.** A finished phase is history — its still-binding decisions
-> live in `constraints.md`, its narrative in `build-journal.md`, and re-reading it here costs tokens for nothing.
+> Part of `context/build-plan.md`; see that index for the build principle and phase order.
+> Read the feature needed for the current task. `progress-tracker.md` holds current status.
+> These specifications retain implementation-time decisions and dated verification results. Check
+> current rules in the authoritative context files before reusing an older plan. Ongoing constraints
+> live in `constraints.md`; the account of past work lives in `build-journal.md`.
 
 ## Phase 3 — Terminal Shell & Live Prices
 
 ### 17 Terminal shell layout
 
-The chrome every terminal page sits inside, and placeholder pages for all eight guarded routes so
-navigation never 404s. A layout feature: no prices, no watchlist contents, no dashboard widgets.
+Build the shared frame around every terminal page and placeholders for all eight protected
+routes. Navigation must resolve immediately. Prices, watchlist rows and dashboard widgets belong
+to later features.
 
 **UI:**
 
 - Top nav: logo, index-strip slot, nav links, funds summary, avatar menu.
-- **The index strip ships as a slot with no values.** NIFTY 50, SENSEX and BANK NIFTY exist nowhere
-  in the data — `instruments` holds 200 NSE equities, so there is no row, no quote and no simulator
-  anchor for any of them, and SENSEX is BSE against an NSE-only scope. Three invented numbers in the
-  most prominent chrome on the page is the worst place in the app to fabricate data. The strip
-  renders its labels and an explicit awaiting-source state; **index data moves to F21**, where
-  `project-overview.md` already puts an index strip.
+- Leave the index-strip slot unpriced. `instruments` contains 200 NSE equities, with no row, quote
+  or simulator seed for NIFTY 50, SENSEX or BANK NIFTY. SENSEX is also a BSE index, outside this
+  NSE-only scope. Render the labels with an explicit awaiting-source state; never invent values.
+  **F21 owns the index-data decision**, matching the index strip in `project-overview.md`.
 - Left watchlist sidebar container, collapsing to a shadcn `Sheet` under 768px per `DESIGN.md`. Its
   contents are F18's; F17 ships the container and an empty state.
 - Content region at the system's dense type scale (`--text-body`, `--text-number` in tables).
@@ -31,12 +32,12 @@ navigation never 404s. A layout feature: no prices, no watchlist contents, no da
 
 - `(terminal)` route-group layout: `getUser()` and redirect on absence, then load profile, funds and
   the holiday calendar once and compose the shell.
-- **The layout checks the session; pages trust it.** `dashboard/page.tsx` re-checked it itself on the
-  argument that `src/proxy.ts` is only a convenience; with a layout that buys nothing, because every
-  page beneath reads through RLS-scoped queries that return nothing without a session. One
-  `getUser()` per navigation, and no future page can forget.
+- Check the session in the layout, once per navigation. Remove `dashboard/page.tsx`'s duplicate
+  check: each page already reads through RLS, which returns no user data without a session. The
+  layout gives every page the same redirect behaviour, including pages added later; `src/proxy.ts`
+  remains a convenience rather than the security boundary.
 - `msUntilNextRecompute(status, now)` in `src/lib/terminal/pill.ts` — `min(30s, nextTransition - now)`
-  so the pill flips *on* the boundary rather than up to 30 seconds late. Pure, so tier 1 can drive it.
+  so the pill flips _on_ the boundary rather than up to 30 seconds late. Pure, so tier 1 can drive it.
 - Placeholder pages for `/orders`, `/holdings`, `/positions`, `/funds`, `/reports`, `/settings` and
   `/stocks/[symbol]`, plus `/dashboard` rewritten as one — a shared `TerminalPlaceholder` keeps them
   thin, as F03 did for the public routes.
@@ -60,9 +61,10 @@ navigation never 404s. A layout feature: no prices, no watchlist contents, no da
 
 ### 18 Watchlist sidebar
 
-The real contents of `WatchlistPanel` — the one component F17 left both the desktop rail and the
-mobile sheet rendering. One list per user: `watchlist_items` is flat, scoped by `user_id`, with no
-`watchlists` table. Prices are server-rendered and hold still until reload; **F19 owns liveness.**
+Fill `WatchlistPanel`, which F17 already renders in both the desktop rail and mobile sheet. Each
+user has one list: rows live directly in `watchlist_items`, scoped by `user_id`; there is no
+`watchlists` table. Prices are rendered on the server and stay unchanged until reload. **F19
+adds automatic price updates.**
 
 **UI:**
 
@@ -84,20 +86,20 @@ mobile sheet rendering. One list per user: `watchlist_items` is flat, scoped by 
 - Hover reveals remove and chart actions. **B and S are deliberately not built here**: order entry is
   F25/F26 and has no destination yet, so shipping them would mean two dead controls — the same call
   F17 made for the index strip. The chart action links to `/stocks/[symbol]`, which F17 stubbed.
-- **Reorder ships as move-up / move-down, not drag.** Drag alone is unreachable by keyboard and the
-  project has no drag-and-drop dependency; buttons are accessible by construction and write the same
-  `sort_order` drag would. Drag becomes a later enhancement over the same Server Action, and F38
-  inherits a passing surface rather than a filed gap.
+- Provide move-up and move-down buttons for reordering. They work with a keyboard and write
+  `sort_order` through the same Server Action a future drag interaction could use. Drag alone
+  would exclude keyboard users, and the project has no drag-and-drop dependency. Do not leave
+  that accessibility work for F38.
 - Empty state when the watchlist is cleared.
 
 **Logic:**
 
 - `addToWatchlist`, `removeFromWatchlist`, `reorderWatchlist` Server Actions in
   `src/server/actions/watchlist.ts`, each Zod-parsed and returning `ActionResult<T>`.
-- **Each action calls an RPC rather than writing through PostgREST.** `sort_order` assignment and the
-  reorder swap are set-based SQL that PostgREST cannot express, and doing them as read-then-write
-  would race. The functions are invoker-rights and scoped to `(select auth.uid())`, so RLS remains
-  the boundary.
+- Have each action call a database function through RPC. Assigning `sort_order` and swapping rows
+  need set-based SQL that PostgREST cannot express; separate reads and writes could race with
+  another request. These functions use the caller's rights and `(select auth.uid())`, keeping
+  RLS as the security boundary.
 - **Existing rows must be renumbered.** The F16 backfill inserted 10 symbols at the column default
   `sort_order = 0`, so ordering currently falls through to the symbol tiebreak and a naive swap is a
   no-op. The migration renumbers densely per user, and `move_watchlist_item` renumbers defensively
@@ -128,8 +130,8 @@ mobile sheet rendering. One list per user: `watchlist_items` is flat, scoped by 
 
 ### 19 Realtime quote store and tick interpolation
 
-The feature that makes the terminal feel alive. F18's rows are deliberately static; this is what
-moves them, with no reload and no polling.
+Update F18's static rows as quotes arrive through Supabase Realtime. Prices must move without
+page reloads or polling.
 
 **UI:**
 
@@ -140,7 +142,7 @@ moves them, with no reload and no polling.
 - Values move smoothly between server refreshes rather than jumping once a minute.
 - **The day change is recomputed on the client from the live price and `prevClose`**, so a ticking
   price never sits beside a frozen change. Display-only and never persisted — `CLAUDE.md`'s money
-  rule forbids computing a figure in TypeScript *and storing it*, and `library-docs.md`'s `LiveQuote`
+  rule forbids computing a figure in TypeScript _and storing it_, and `library-docs.md`'s `LiveQuote`
   already carries `prevClose` for exactly this.
 
 **Logic:**
@@ -152,18 +154,18 @@ moves them, with no reload and no polling.
   `symbol=in.(…)` **server-side** and rebuilt when the visible symbol set changes. Subscribing
   broadly and filtering in the callback would have every row delivered to and authorised for every
   subscriber, defeating the demand-driven model the quote pipeline is justified by.
-- One `requestAnimationFrame` driver, mounted once, **easing each price from its previous anchor to
-  its new one over ~800ms**. The loop moves prices *between* server anchors and invents nothing:
-  `architecture.md` → Interpolated values is authoritative here, and an earlier draft of this bullet
-  described bounded jitter around the anchor, which would have put figures on screen that no provider
-  reported and the market never traded at.
+- Mount one `requestAnimationFrame` driver. Over about 800ms it moves each displayed price from
+  its previous anchor to the new one. An anchor is the price supplied by the server; interpolation
+  only draws the transition between two anchors. Follow `architecture.md` → Interpolated values.
+  The earlier proposal for random jitter was rejected because it would invent prices beyond
+  those reported anchors.
 - **The bound is an interval, not a band.** The displayed value always lies on the closed segment
   between the previous and current anchor. That is strictly stronger than "within X% of the anchor"
   and is directly testable without a DOM.
-- **Rows read `store ?? prop`, and the store is seeded from the server-rendered props in an effect.**
-  Server and first client render both use the prop, so the HTML matches exactly — the lesson F17's
-  `serverNow` pill taught. A symbol with no `quotes` row keeps its em dash rather than flashing into
-  existence.
+- Rows read `store ?? prop`. Seed the store from server-rendered props in an effect, so the
+  server and first client render use identical values and hydration matches, as F17's
+  `serverNow` pill requires. Keep an em dash for a symbol with no `quotes` row; a missing price
+  must not briefly appear as a number.
 - Channel cleanup on unmount. An unremoved channel leaks across navigations and hits the free-tier
   concurrent connection cap.
 
@@ -190,9 +192,8 @@ moves them, with no reload and no polling.
 
 ### 20 Data source badge and provenance
 
-**The market-status half of the original title was built in F17** — the pill reads PRE-OPEN / OPEN /
-CLOSED and recomputes on a timer that lands on the session boundary. What remains, and what this
-feature is, is the data-source half.
+F17 already built the market-status pill: PRE-OPEN / OPEN / CLOSED, updated at the session
+boundary. This feature adds the data-source badge and the explanation attached to each price.
 
 **UI:**
 
@@ -200,9 +201,9 @@ feature is, is the data-source half.
   on screen — beside the market-status pill, explaining on hover what it means and why.
 - Per-price provenance anywhere a price appears: provider, provider timestamp, fetch time, whether
   the figure is interpolated, and the true anchor when it is.
-  - **Announced, not merely hoverable.** The same facts render as `sr-only` text tied to the price by
-    `aria-describedby`, because hover does not exist on touch and never fires for a screen reader.
-    "No price without accessible provenance" has to hold in both.
+  - Make the same facts available as `sr-only` text connected to the price by `aria-describedby`.
+    A hover-only explanation is unavailable on touch and to screen readers. Every price must
+    expose accessible provenance through both paths.
   - A reusable `<PriceWithProvenance>`, not markup inlined into the watchlist row — F21, F30 and F33
     each add price surfaces and must not each reinvent the disclosure.
 - Stale prices visually muted once `deriveSource` returns `STALE`. **Only STALE.** Every price in
@@ -214,10 +215,10 @@ feature is, is the data-source half.
 - `deriveSource()` recomputed on render, never read from a stored column. `quotes` has no `source`
   column by design: freshness is a function of the current time, so a row written as LIVE is stale
   minutes later with no write to invalidate it.
-- **One ticking clock, provided from the layout**, so the badge and every price read the same instant
-  and a row can never render DELAYED under a badge saying STALE. A 30s heartbeat is ample against a
-  15-minute delayed window. **F17's pill keeps its own timer** — it deliberately lands *on* the
-  session boundary rather than up to 30s late, which a coarse freshness heartbeat would undo.
+- Provide one shared clock from the layout for the badge and every price. They must classify
+  freshness at the same instant; otherwise a row could say DELAYED while its badge says STALE.
+  Update this clock every 30s for the 15-minute delayed window. **Keep F17's separate timer:**
+  the market-status pill must change at the exact session boundary, without a 30s delay.
 - **Only symbols currently rendering a price feed the badge.** `worstSource([])` returns STALE by
   design, so counting the symbols with no quote row would pin the badge to STALE on account of absent
   data and say nothing about the prices actually visible. A row showing an em dash makes no claim and
@@ -247,10 +248,10 @@ feature is, is the data-source half.
 
 ### 21 Dashboard home
 
-The portfolio read, and the first page in the project whose whole job is money. **Nothing writes
-`holdings`, `orders` or `trades` until F24**, so every real user hits the empty state today and the
-populated path is verified against rows planted by SQL. That is expected rather than a gap: the
-aggregation has to exist and be proven correct before the engine that fills it arrives.
+Build the portfolio dashboard and verify its money totals. At this point in the build, **nothing
+writes `holdings`, `orders` or `trades` until F24**, so real users see the empty state. Use
+temporary SQL fixtures to verify the populated page. Prove the aggregation before connecting
+the engine that will populate it.
 
 **UI:**
 
@@ -267,14 +268,13 @@ aggregation has to exist and be proven correct before the engine that fills it a
   contribute a market value, and treating that as zero understates the portfolio silently. The
   summary carries an unpriced count and the tiles say so.
 - Top-10 holdings donut with an "Others" bucket, ranked by market value.
-- **The index strip becomes a derived composite, not a named index.** NIFTY 50 and BANK NIFTY have no
-  row, quote or simulator anchor anywhere — F17 shipped the slot empty for exactly that reason, and
-  Yahoo (`^NSEI`) is deferred to the end of the project. The strip renders an equal-weighted mean of
-  per-symbol day change % across every priced symbol, with advances/declines/unchanged and its
-  **constituent count on screen**, so "10 of 200 priced" can never be read as the Nifty 200. A
-  breadth statistic, labelled as one.
+- Replace the empty index slot with a labelled market-breadth statistic. NIFTY 50 and BANK NIFTY
+  still have no rows, quotes or simulator anchors; Yahoo (`^NSEI`) was deferred in the original
+  plan. Compute the equal-weighted mean of day-change percentages across every priced symbol,
+  plus advances, declines and unchanged counts. **Show the constituent count beside the value.**
+  "10 of 200 priced" must never look like the official Nifty 200 index.
 - Recent-orders list.
-- A distinct empty state for a user who has **never traded** — no `holdings` rows *and* no `orders`
+- A distinct empty state for a user who has **never traded** — no `holdings` rows _and_ no `orders`
   rows — pointing at the watchlist. A user who traded and closed out sees zeroes and their order
   history instead, because that account has a history and the empty state would deny it.
 
@@ -291,11 +291,10 @@ aggregation has to exist and be proven correct before the engine that fills it a
 - **Held symbols join the terminal channel.** `QuoteChannel` filters server-side on the watchlist, so
   a holding that is not watched would never tick. The layout unions held symbols into both the filter
   and the seed — F30 and F31 need the same union.
-- **The composite does not recompute on the client.** It averages over every priced symbol in the
-  universe, but a user's store holds only their own watchlist; a client recompute would silently
-  change the constituent set and report a different number under the same label. It is a server
-  figure, restated on navigation, and its provenance is derived **pessimistically** — the worst
-  provider paired with the oldest timestamp — so it can never overclaim.
+- Keep the composite calculation on the server and refresh it on navigation. It covers every
+  priced symbol, while a user's client store contains only their watchlist. Recalculating from
+  that store would change the constituent set without changing the label. Derive aggregate
+  provenance conservatively: use the worst provider classification and the oldest timestamp.
 - Holdings only. MIS positions stay on `/positions` (F31), which is Kite's own split.
 - Recharts 3.10.1, per the stack table and the worked donut in `library-docs.md` § Recharts: `shape`
   for per-slice colour, the `--color-chart-*` ramp, never `--color-up`/`--color-down`.
@@ -309,7 +308,7 @@ aggregation has to exist and be proven correct before the engine that fills it a
   confirmed by reading that no tile is passed `ltp`.
 - **A tile moves on a tick with no reload** — a SQL `update` to a planted holding's `quotes` row
   changes the portfolio-value tile within two seconds. This proves the channel union works for a
-  symbol that is deliberately *not* on the watchlist, which is the part that can silently fail.
+  symbol that is deliberately _not_ on the watchlist, which is the part that can silently fail.
 - **The donut shows the correct ten by market value** — tier 1 on the bucketing helper: eleven
   holdings yield ten named slices plus an `Others` equal to the eleventh, ranked by market value
   rather than quantity.
@@ -332,8 +331,8 @@ aggregation has to exist and be proven correct before the engine that fills it a
 
 ### Phase checkpoint
 
-The terminal looks and feels like a real trading front end with live prices. Confirm ticking works unattended for a full market session and no Realtime channels leak.
+Before closing Phase 3, confirm the terminal receives automatic quote updates throughout a full
+market session without supervision. Check that navigation leaves no leaked Realtime channels.
+These updates use the configured provider; simulated prices must retain their source labels.
 
 ---
-
-

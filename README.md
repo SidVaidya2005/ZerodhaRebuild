@@ -2,10 +2,11 @@
 
 # ZerodhaRebuild
 
-**Paper-trade NSE stocks on a broker-grade engine. ₹0 at risk.**
+Practise trading NSE stocks with ₹1,00,000 of simulated cash.
 
-A full-stack paper-trading platform modelled on Zerodha's Kite terminal, with real margin,
-charges, order matching and an auditable ledger.
+A paper-trading platform modelled on Zerodha's Kite terminal. It simulates order execution,
+trading charges, and margin: the cash set aside to cover an order or an open short position.
+Every cash movement is recorded in a ledger so the account balance can be checked.
 
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -38,57 +39,56 @@ charges, order matching and an auditable ledger.
 
 ## Highlights
 
-- **Atomic order execution.** Every fill runs in a single Postgres transaction inside one function,
-  `execute_order`, so money can never leave an account without the shares arriving.
-- **All money math in the database.** Balances, average prices, charges and P&L are `numeric`
-  arithmetic in Postgres. TypeScript only formats them.
-- **Row Level Security as the security boundary.** Client roles can only `select` the money tables;
-  every write goes through a `security definer` function.
-- **Concurrency-safe by design.** One global lock order, pinned by a test that reads it back out of
-  the live function definitions.
-- **Four test tiers**, including real two-connection race tests and a parity check that keeps the
-  TypeScript charge estimate and the Postgres calculator exactly equal.
-- **Honest data provenance.** Every price carries its source, and the UI never labels simulated data
-  as live.
+- Each order fill runs inside one Postgres function, `execute_order`. The cash, trade, portfolio,
+  and ledger changes either succeed together or are all rolled back. This is an atomic transaction.
+- Postgres calculates stored balances, average prices, charges, and profit or loss (P&L) using exact
+  decimal arithmetic. TypeScript displays the results and provides clearly labelled charge estimates.
+- Row Level Security (RLS) keeps each user's account data private in the database. Client roles can
+  read their money tables; approved database functions perform the writes.
+- Order execution follows a tested locking protocol: `orders` → `funds` → `holdings`/`positions`.
+  Internal helpers rely on the caller already holding the required locks; tests check those rules.
+- Four test tiers cover logic, database rules, concurrent requests, and agreement between the
+  TypeScript charge estimator and Postgres calculator.
+- Every displayed price exposes its source. Simulated prices are always labelled as simulated.
 
 ---
 
 ## Screenshots
 
-| | |
-| --- | --- |
-| **Stock detail**: candlesticks, OHLC and a buy/sell ticket<br>![Stock detail](docs/screenshots/stock-detail.png) | **Order ticket**: position-aware margin, shown before you commit<br>![Order ticket](docs/screenshots/order-ticket.png) |
-| **Funds**: every rupee that moved, as a ledger<br>![Funds](docs/screenshots/funds.png) | **Pricing**: the charge model the engine applies<br>![Pricing](docs/screenshots/pricing.png) |
-| **Holdings**: live P&L and day change on delivery positions<br>![Holdings](docs/screenshots/holdings.png) | **Landing page**: the public marketing site<br>![Landing page](docs/screenshots/home.png) |
+|                                                                                                                                         |                                                                                                                         |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Stock detail**: candlesticks, open/high/low/close prices, and a buy/sell ticket<br>![Stock detail](docs/screenshots/stock-detail.png) | **Order ticket**: required margin, based on the existing position<br>![Order ticket](docs/screenshots/order-ticket.png) |
+| **Funds**: every rupee that moved, as a ledger<br>![Funds](docs/screenshots/funds.png)                                                  | **Pricing**: the charge model the engine applies<br>![Pricing](docs/screenshots/pricing.png)                            |
+| **Holdings**: P&L and day change from simulated prices<br>![Holdings](docs/screenshots/holdings.png)                                    | **Landing page**: the public marketing site<br>![Landing page](docs/screenshots/home.png)                               |
 
 ---
 
 ## Features
 
-| Area | What you get |
-| --- | --- |
-| **Orders** | Market and limit orders, in CNC (delivery) and MIS (intraday). Limit orders rest and fill automatically. Open orders can be modified or cancelled. |
-| **Risk** | Margin is blocked on placement and released on fill, cancel or rejection. MIS short selling with collateral. Intraday positions are squared off at 15:20 IST. |
-| **Charges** | Brokerage, STT, exchange transaction charges, SEBI fee, stamp duty, GST and DP charges, as a real trade incurs them. |
-| **Portfolio** | Holdings, Positions, Funds with a complete ledger, Reports, and realised and unrealised P&L. |
-| **Terminal** | A searchable, reorderable watchlist with ticking prices, stock detail pages with candlestick charts, and one-click account reset to ₹1,00,000. |
-| **Quality** | Light and dark themes, responsive down to a 375px phone, and accessibility-audited with Lighthouse. |
+| Area          | What you get                                                                                                                                                                                                                         |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Orders**    | Market orders fill at the observed price; limit orders wait for a qualifying price. CNC is delivery trading; MIS is intraday trading. Open limit orders can be modified or cancelled.                                                |
+| **Risk**      | Orders reserve cash where required. Cancellation or rejection releases it. A fill opening a short transfers the required collateral to the position until it is covered. Remaining MIS positions close automatically from 15:20 IST. |
+| **Charges**   | A documented model for brokerage, Securities Transaction Tax (STT), exchange and SEBI fees, stamp duty, Goods and Services Tax (GST), and depository participant (DP) charges.                                                       |
+| **Portfolio** | Holdings, Positions, Funds, and Reports. View completed-trade P&L, changes in open positions, and a ledger of every cash movement.                                                                                                   |
+| **Terminal**  | Search and reorder the watchlist, inspect candlestick charts, and reset the trading account to ₹1,00,000.                                                                                                                            |
+| **Quality**   | Light and dark themes, layouts down to 375px, public-page Lighthouse audits, and signed-in terminal checks with axe.                                                                                                                 |
 
-Full scope: [`context/project-overview.md`](context/project-overview.md).
+Full scope and a short glossary: [`context/project-overview.md`](context/project-overview.md).
 
 ---
 
 ## Tech stack
 
-| Layer | Technology |
-| --- | --- |
-| **Frontend** | Next.js 16 (App Router, Server Components) · React 19 · TypeScript (strict) · Tailwind CSS v4 · shadcn/ui on Radix |
-| **Client state and charts** | Zustand · Lightweight Charts · Recharts |
-| **Backend and data** | Supabase Postgres · plpgsql functions · Row Level Security · Zod-validated Server Actions |
-| **Auth** | Supabase Auth with Google OAuth |
-| **Realtime and jobs** | Supabase Realtime · Edge Functions (Deno) · `pg_cron` |
-| **Testing** | Vitest · pgTAP · node-postgres |
-| **Hosting** | Render · hosted Supabase |
+| Layer                       | Technology                                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Frontend**                | Next.js 16 (App Router, Server Components) · React 19 · TypeScript (strict) · Tailwind CSS v4 · shadcn/ui on Radix |
+| **Client state and charts** | Zustand · Lightweight Charts · Recharts                                                                            |
+| **Backend and data**        | Supabase Postgres · plpgsql functions · Row Level Security · Zod-validated Server Actions                          |
+| **Auth**                    | Supabase Auth with Google OAuth                                                                                    |
+| **Realtime and jobs**       | Supabase Realtime · Edge Functions (Deno) · `pg_cron`                                                              |
+| **Testing**                 | Vitest · pgTAP · node-postgres                                                                                     |
+| **Hosting**                 | Render · hosted Supabase                                                                                           |
 
 Pinned versions live in [`package.json`](package.json). Full stack rationale:
 [`context/architecture.md`](context/architecture.md#stack).
@@ -97,22 +97,22 @@ Pinned versions live in [`package.json`](package.json). Full stack rationale:
 
 ## How it works
 
-1. **Sign in with Google.** A database trigger creates your profile, credits ₹1,00,000, writes the
-   matching ledger row and seeds a starter watchlist.
-2. **Prices move.** A `pg_cron` job calls an Edge Function every minute during NSE hours. It walks
-   each stock forward from its real closing price and streams updates to the browser over Realtime,
-   where they are interpolated so prices tick smoothly.
-3. **Place an order.** A Server Action validates it and blocks margin. Market orders fill
-   immediately; limit orders fill when the price crosses.
-4. **The fill is one transaction.** Cash, charges, the trade, the holding or position, and the ledger
-   rows all commit together or not at all.
-5. **Intraday clears itself.** At 15:20 IST every open MIS position is closed and its P&L recorded.
+1. Sign in with Google. On first sign-in, a database trigger creates the account, credits ₹1,00,000,
+   records the credit in the ledger, and adds a starter watchlist.
+2. A scheduled job calls the `market-tick` Edge Function every minute during NSE hours. The simulator
+   generates prices from recorded NSE closing prices, then Supabase Realtime sends updates to browsers.
+   The watchlist animates intermediate prices for smoother movement; trading uses the server price.
+3. Submit an order. A Server Action validates the input and calls the database to reserve margin
+   where required. Market orders attempt an immediate fill during a session. Limit orders wait until
+   an observed price reaches or improves on the limit.
+4. Postgres processes the fill in one transaction, including charges and ledger entries.
+5. The first market tick at or after 15:20 IST closes remaining MIS positions and records their P&L.
 
 > [!IMPORTANT]
-> **Prices are simulated.** The ~200 instruments are real Nifty 200 constituents, but their prices
-> are generated from real NSE closing prices, because no free data source offered usable NSE
-> quotes. Each quote stores its provider and timestamp, and its badge is derived at render time, so
-> the app can never claim to be live. Details:
+> **Prices are simulated.** The roughly 200 instruments are real Nifty 200 constituents, but this
+> build has no external quote provider. Prices are generated from recorded NSE closing prices.
+> Each quote stores its provider and timestamp; the UI uses those fields to determine its source label.
+> Details:
 > [`context/architecture.md` → Quote Provenance](context/architecture.md#quote-provenance).
 
 ---
@@ -157,44 +157,47 @@ flowchart TB
     RT -->|"live row changes"| CC
 ```
 
-**Why scheduled work lives in the database:** Render's free tier sleeps after 15 minutes idle, and the
-market should keep moving when nobody is visiting.
+Render's free web service sleeps after 15 minutes without traffic. Scheduling the job in Supabase
+lets prices refresh, limit orders match, and intraday positions close while the web service sleeps.
 
-| Go deeper | Document |
-| --- | --- |
-| System boundaries, auth and the invariants | [`context/architecture.md`](context/architecture.md#invariants) |
-| Tables, views and folder structure | [`context/architecture/data-model.md`](context/architecture/data-model.md) |
-| Charges, margin, ledger and P&L rules | [`context/trading-contract.md`](context/trading-contract.md) |
-| Server Action and Postgres function patterns | [`context/architecture/patterns.md`](context/architecture/patterns.md) |
-| Code standards | [`context/code-standards.md`](context/code-standards.md) |
+| Go deeper                                    | Document                                                                   |
+| -------------------------------------------- | -------------------------------------------------------------------------- |
+| System boundaries, auth and the invariants   | [`context/architecture.md`](context/architecture.md#invariants)            |
+| Tables, views and folder structure           | [`context/architecture/data-model.md`](context/architecture/data-model.md) |
+| Charges, margin, ledger and P&L rules        | [`context/trading-contract.md`](context/trading-contract.md)               |
+| Server Action and Postgres function patterns | [`context/architecture/patterns.md`](context/architecture/patterns.md)     |
+| Code standards                               | [`context/code-standards.md`](context/code-standards.md)                   |
 
 ---
 
 ## Testing
 
-| Tier | Tool | What it proves | Command |
-| --- | --- | --- | --- |
-| **1. Logic** | Vitest | Charge estimator, market hours, parsers, provider chain | `pnpm test` |
-| **2. Database** | pgTAP | RLS, grants, CHECK constraints, function correctness, lock order | `pnpm test:db` |
-| **3. Concurrency** | node-postgres | Row-lock races across two live connections | `pnpm test:race` |
-| **4. Parity** | node-postgres | The TypeScript charge estimate equals the Postgres calculation exactly | `pnpm test:parity` |
+| Tier               | Tool          | What it proves                                                         | Command            |
+| ------------------ | ------------- | ---------------------------------------------------------------------- | ------------------ |
+| **1. Logic**       | Vitest        | Charge estimator, market hours, parsers, provider chain                | `pnpm test`        |
+| **2. Database**    | pgTAP         | RLS, grants, CHECK constraints, function correctness, lock order       | `pnpm test:db`     |
+| **3. Concurrency** | node-postgres | Row-lock races across two live connections                             | `pnpm test:race`   |
+| **4. Parity**      | node-postgres | The TypeScript charge estimate equals the Postgres calculation exactly | `pnpm test:parity` |
 
-Details: [`context/code-standards/testing.md`](context/code-standards/testing.md).
+Tier 3 commits data to the project's one hosted database and requires `ALLOW_RACE_TESTS`. Tiers 2–4
+require `TEST_DATABASE_URL`; the parity suite is read-only. Read
+[`context/code-standards/testing.md`](context/code-standards/testing.md) before running database tests.
 
 ---
 
 ## Challenges and lessons
 
-- **No free NSE data.** Twelve Data's free plan carries no NSE symbols, and probing Yahoo got the
-  development IP blocked. Rather than ship a fragile scraper, I made the simulator the entire quote
-  chain and built provenance so the UI stays honest about it.
-- **Race conditions in money code.** Fills, cancels, limit matching and square-off all contend for the
-  same rows. The answer was a single lock order (`orders` → `funds` → `holdings`/`positions`) enforced in every function,
-  plus a test that fails if any function drifts from it.
-- **Testing a remote database without Docker.** `supabase test db` needs Docker even against a hosted
-  database, so I wrote a small runner that executes the pgTAP suites directly.
-- **A blank page that was really HTTP 431.** Leftover auth cookies from other local projects pushed
-  request headers past Node's 16 KB limit, so requests died before reaching Next.js, with no log line.
+- Provider checks during development found no usable free NSE source: Twelve Data's free plan did
+  not include NSE symbols, and Yahoo blocked the development IP. The project therefore uses the
+  simulator for all quotes and makes that source visible beside prices.
+- Fills, cancellation, limit matching, and square-off can touch the same account simultaneously.
+  Execution paths use `orders` → `funds` → `holdings`/`positions`, with explicit preconditions for
+  internal helpers. A database test catches changes to that protocol. The phase plans retain the
+  unresolved cross-user sweep follow-ups.
+- `supabase test db` required Docker even for the hosted database. A small custom runner executes
+  the pgTAP suites directly instead.
+- Leftover local auth cookies caused blank pages by exceeding Node's 16 KB request-header limit.
+  These HTTP 431 requests failed before Next.js could log them.
 
 Design notes and past decisions: [`context/constraints.md`](context/constraints.md).
 
@@ -230,14 +233,20 @@ bracket orders, mutual funds and IPOs, KYC, and CNC short selling. The full list
 
 - DP charges apply per sell order rather than per scrip per day.
 - Fills are all-or-nothing; there are no partial fills.
-- A short's loss is capped at its collateral instead of triggering a margin call.
+- A short cover always closes. Its cash debit is capped by collateral plus available cash; any
+  uncovered amount is recorded as a simulation adjustment. Reports retain the full loss.
 - Day's P&L measures every holding against the previous close, including shares bought today.
 
 The rules behind each one are in [`context/trading-contract.md`](context/trading-contract.md).
+Account reset clears the trading history and restores the opening balance; it keeps profile and
+watchlist preferences.
 
 ---
 
 ## Roadmap
+
+These are possible future extensions, outside the current build scope. Their presence here does
+not change the simulator-only data decision or authorise feature work.
 
 - [ ] Plug in a real delayed NSE data provider; the provenance model already supports it
 - [ ] Stop-loss and GTT orders

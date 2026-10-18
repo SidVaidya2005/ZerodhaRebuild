@@ -1,32 +1,35 @@
 # Library Docs
 
-> **Role:** Project-specific usage patterns for each third-party library.
-> **Read the relevant section** before using a library.
-> **Relates to:** covers the integrations in `architecture.md`; defers to MCP servers and skills first.
+> Role: How ZerodhaRebuild uses each external library.
+> Read the relevant section before using a library.
+> Relates to: the stack in `architecture.md`; the library authority order in `CLAUDE.md` applies.
 
-Project-specific usage patterns for every third party library in this project.
-This file only covers how we use each library in **this** specific project —
-rules, patterns, and constraints specific to ZerodhaRebuild.
-
-Read the relevant section before implementing any feature that touches these libraries.
+This file explains the setup, examples and rules specific to ZerodhaRebuild. It is not a general
+library manual. Code blocks illustrate a pattern; use the full implementations linked below where
+noted. Versions and verification dates record what was checked during the build.
 
 ---
 
-The library authority order — and the rule against writing an API shape from memory
-— is stated in the project's agent file (`CLAUDE.md`/`AGENTS.md`),
-which is already loaded. This file is the project-rules step in that order.
+Follow the library authority order in `CLAUDE.md`/`AGENTS.md`: Context7 first, then applicable
+skills, then this file, then official documentation through web search. Do not invent an API
+shape (the functions, arguments and return values a library expects) from memory.
 
 ---
 
 ## @supabase/ssr + @supabase/supabase-js
 
-**Check first:** Context7 `/supabase/supabase`, then https://supabase.com/docs/guides/auth/server-side/nextjs
+Check first: Context7 `/supabase/supabase`, then https://supabase.com/docs/guides/auth/server-side/nextjs
 
 Versions: `@supabase/ssr` 0.12.4, `@supabase/supabase-js` 2.112.3.
 
+Supabase provides the database, sign-in and change subscriptions. SSR means server-side rendering:
+the server prepares the page before sending it to the browser.
+
 ### Setup
 
-Three clients, three call sites. They are not interchangeable.
+There are four Supabase clients: browser, Server Component / Server Action, proxy and admin.
+Each runs in a different place; do not substitute one for another. The admin client bypasses
+row-level security (RLS), the database policies that restrict users to their own rows.
 
 ```ts
 // src/lib/supabase/client.ts — browser only
@@ -56,15 +59,16 @@ export function createAdminClient() {
 }
 ```
 
-The RSC/Server-Action client and the proxy client are the golden patterns in
-`architecture/patterns.md` → Key Patterns. Copy them verbatim; do not re-derive the cookie handling.
+The React Server Component (RSC) / Server Action client and proxy client are in
+`architecture/patterns.md` → Key Patterns. Copy those implementations exactly; the cookie
+handling keeps the signed-in session in sync between the browser and server.
 
 ### Google OAuth sign-in
 
-**Sign-in is started server-side** (F12), not from the browser client. A plain `<form>` posts to a
-Server Action, so it works with JavaScript disabled — the standard F07B set for the support form —
-and the PKCE code verifier is written by the same server client that reads it back in the callback.
-On the server `signInWithOAuth` performs no redirect of its own; it returns the URL to send the user to.
+Sign-in starts on the server (F12). A plain `<form>` posts to a Server Action, so it works with
+JavaScript disabled, as the F07B support form does. The same server client writes and later reads
+the PKCE code verifier, a temporary value that ties the OAuth callback to the sign-in request.
+On the server, `signInWithOAuth` returns a URL; the action must redirect the user to it.
 
 ```ts
 // src/server/actions/auth.ts
@@ -125,18 +129,18 @@ export async function GET(request: NextRequest) {
 }
 ```
 
-**Rules for this flow:**
+Rules for this flow:
 
-- The browser client (`lib/supabase/client.ts`) is **not** how sign-in starts. It exists for the
-  Realtime surfaces from F19 onwards.
-- `redirect()` throws `NEXT_REDIRECT` by design. Call it outside every `try`, or the redirect is
-  swallowed and the user sits on a page that silently did nothing.
+- The browser client (`lib/supabase/client.ts`) supports Realtime updates from F19 onwards. Start sign-in with the Server Action above.
+- `redirect()` throws `NEXT_REDIRECT` to tell Next.js to navigate. Call it outside every `try`; catching that exception prevents the redirect.
 - `redirectTo` is built from `NEXT_PUBLIC_SITE_URL`, not from the incoming request, because Supabase
   matches it against a configured allow-list.
-- Any `next` parameter is re-validated by `safeNext()` at **both** ends — the login page and the
-  callback. It rejects absolute URLs, `//host` and `/\host`.
+- Validate `next` with `safeNext()` on both the login page and callback. It rejects absolute URLs, `//host` and `/\host`, preventing a sign-in link from redirecting to another site.
 
 ### Calling a database function
+
+An RPC (remote procedure call) runs a named database function. Here the server asks Postgres to
+place an order; the database owns the money calculations and writes.
 
 ```ts
 const { data, error } = await supabase.rpc('place_order', {
@@ -150,6 +154,9 @@ const { data, error } = await supabase.rpc('place_order', {
 ```
 
 ### Realtime — Postgres Changes
+
+A Realtime channel sends database changes to the browser, so a quote can update without reloading
+the page. Filter delivery to the symbols currently visible.
 
 ```ts
 const channel = supabase
@@ -168,25 +175,28 @@ return () => {
 }
 ```
 
-**Rules:**
+Rules:
 
-- Use the **publishable key** env var name (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). Supabase's current docs and key rotation use publishable/secret naming, not `ANON_KEY`.
-- In `src/proxy.ts`, never place any code between `createServerClient(...)` and `supabase.auth.getUser()`, and always return the `supabaseResponse` object unmodified. Breaking either rule logs users out at random.
-- Trust `supabase.auth.getUser()` on the server; never trust `getSession()` for authorisation, because the session comes from a cookie the client can write.
+- Use the publishable-key environment variable (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). The docs and key rotation checked for this build use publishable/secret naming rather than `ANON_KEY`.
+- In `src/proxy.ts`, keep `createServerClient(...)` immediately before `supabase.auth.getUser()` and return `supabaseResponse` unchanged. Other code between them, or a replacement response, can lose refreshed cookies and unexpectedly sign users out.
+- Use `supabase.auth.getUser()` to verify identity on the server. Do not use `getSession()` to decide what a user may access: it reads a cookie the client can write.
 - `createAdminClient()` may be imported only by `supabase/functions/**` equivalents and server-only modules. The `import 'server-only'` line makes a client import a build error — never remove it.
-- Realtime requires the table be added to the `supabase_realtime` publication in a migration; adding the subscription in TypeScript alone silently receives nothing.
+- Add each Realtime table to the `supabase_realtime` publication in a migration. A publication tells Postgres which tables may send changes; a TypeScript subscription alone receives nothing.
 - Subscribe to `quotes` and `orders` only. Never open a Realtime channel on `funds`, `trades`, `holdings`, or `positions` — those refresh through Server Action revalidation.
-- **Always filter server-side.** Subscribing to a whole table and filtering in the callback still has every row delivered to and authorized for every subscriber, which defeats the demand-driven model the quote pipeline is justified by. Rebuild the channel when the visible symbol set changes.
-- Postgres Changes authorizes per event per subscriber and does not scale indefinitely. It is the right choice at this project's size; if the symbol set or user count grows, move to Realtime Broadcast rather than widening the filter.
-- Always `supabase.removeChannel(channel)` in the effect cleanup; unremoved channels leak across navigations and hit the free-tier concurrent connection cap.
-- **Re-checked against Context7 at the Phase 4 checkpoint (2026-09-09): the raw `symbol=in.(…)` filter string above is still current and documented.** Supabase has since *added* a builder form, `postgresChangesFilter().in('symbol', [...])`, alongside it — an addition, not a replacement, so the code needs no change. The supported operator set is wider than this file implies: `eq, neq, lt, lte, gt, gte, in, like, ilike, is, match, imatch, isdistinct`, any of them negatable with `not.`, and commas combining conditions as AND.
+- Filter subscriptions on the server so each subscriber receives only the symbols on screen. Filtering inside the callback still delivers every row and checks each subscriber's access to it. Rebuild the channel whenever the visible symbol set changes.
+- Postgres Changes checks access for every event and subscriber. It suits this project's size. If symbol or user counts grow, move to Realtime Broadcast rather than making the filter broader.
+- Call `supabase.removeChannel(channel)` when the React effect cleans up. Otherwise channels remain open after navigation and can exhaust the free-tier connection limit.
+- Context7 verification at the Phase 4 checkpoint (2026-09-09) confirmed that the raw `symbol=in.(…)` filter string above remained documented. Supabase also provided `postgresChangesFilter().in('symbol', [...])`; this was an alternative, not a replacement. Supported operators were `eq, neq, lt, lte, gt, gte, in, like, ilike, is, match, imatch, isdistinct`. Prefix any with `not.` to negate it; commas combine conditions as AND.
 - Regenerate `src/types/database.ts` with `pnpm supabase gen types typescript --linked > src/types/database.ts` after every migration.
 
 ---
 
 ## Supabase Cron (`pg_cron` + `pg_net`)
 
-**Check first:** Context7 `/supabase/supabase`, then https://supabase.com/docs/guides/cron
+Check first: Context7 `/supabase/supabase`, then https://supabase.com/docs/guides/cron
+
+`pg_cron` runs database work on a schedule. `pg_net` sends the HTTP request to the Edge Function,
+the hosted server function that performs each market tick.
 
 ### Setup
 
@@ -196,6 +206,12 @@ create extension if not exists pg_net;
 ```
 
 ### Scheduling the market tick
+
+The block below is the earlier scheduling example, not the complete deployed authentication
+setup. It shows the UTC schedule and Vault lookup pattern. Before using it, apply the mandatory
+two-header contract below: Vault secrets `service_role_key` and `scheduler_secret` provide
+`Authorization` and `x-scheduler-secret`. The older `scheduler_credential` name in this snippet
+is retained as reference, not the current deployment instruction.
 
 ```sql
 -- Every minute of UTC hours 03–10 on weekdays ≈ 08:30–16:29 IST.
@@ -225,32 +241,32 @@ select cron.schedule(
 );
 ```
 
-**Rules:**
+Rules:
 
-- One minute is the finest interval `pg_cron` supports; sub-minute liveliness comes from client-side interpolation, never from a faster schedule.
-- Keep total concurrent jobs under 8 and every run under 10 seconds — this project should need exactly one scheduled job.
-- Store the project URL and the scheduler credential in Vault (`vault.decrypted_secrets`); never paste a key literal into a migration, because migrations are committed.
+- One minute is the recorded minimum interval for `pg_cron` in this project. Between ticks, the browser interpolates prices (adds small visual movements); do not use a faster schedule to create that effect.
+- Keep concurrent jobs below 8 and each run below 10 seconds. This project should have exactly one scheduled job.
+- Store the project URL and scheduler credentials in Vault (`vault.decrypted_secrets`), Supabase's secret store. Never put a key value in a migration: migrations are committed to the repository.
 
-**Scheduler authentication contract.** `market-tick` writes quotes, fills orders and squares off
-positions. It must not be callable by anyone who merely knows the URL.
+Scheduler authentication: `market-tick` writes quotes, fills orders and squares off positions
+(closes intraday trades automatically). Knowing its URL must not grant permission to run it.
 
-- **JWT verification stays enabled** for this function. Do not add `verify_jwt = false` to `config.toml` for it. "Only cron calls it" is not an access control — the URL is guessable and the function is unauthenticated the moment verification is off.
+- Keep JSON Web Token (JWT) verification enabled. Do not set `verify_jwt = false` in `config.toml` for this function. The URL is guessable; assuming that only cron will call it provides no access control.
 - `pg_cron` sends `Authorization: Bearer <credential>` read from Vault, so the platform gateway rejects unauthenticated callers before any of our code runs.
-- **Answered by measurement in F16, and the answer is worse than expected.** Invoking the deployed function four ways on this project:
+- F16 measured the deployed function's gateway responses. The recorded results were:
 
-  | Request | Result |
-  | ------- | ------ |
-  | No `Authorization` header | `401 UNAUTHORIZED_NO_AUTH_HEADER` — the platform's error shape, so it never reached our code |
-  | `Bearer sb_secret_…` (service role) | **200** |
-  | `Bearer sb_publishable_…` | **200** |
+  | Request                             | Result                                                                                       |
+  | ----------------------------------- | -------------------------------------------------------------------------------------------- |
+  | No `Authorization` header           | `401 UNAUTHORIZED_NO_AUTH_HEADER` — the platform's error shape, so it never reached our code |
+  | `Bearer sb_secret_…` (service role) | 200                                                                                          |
+  | `Bearer sb_publishable_…`           | 200                                                                                          |
 
-  So the newer non-JWT `sb_secret_…` keys **do** satisfy the gateway — but so does the **publishable key, which ships in the browser bundle**. `verify_jwt` proves only that the caller knows *some* project key. It is not, on its own, access control for a function that writes quotes, fills orders and squares off positions.
+  The gateway accepted both the newer non-JWT `sb_secret_…` key and the `sb_publishable_…` key shipped in browser JavaScript. On this project, `verify_jwt` therefore established only that the caller knew a project key. It did not restrict writes, order fills or square-offs to the scheduler.
 
-- **Therefore both layers are mandatory, and the shared secret is the real one.** JWT verification stays enabled — it is what rejects a caller with no header at all — *and* the handler compares an `x-scheduler-secret` header against a Vault-held value before touching the database, with a constant-time comparison. A missing secret makes the function refuse rather than fall open; otherwise a misconfiguration silently downgrades it to "whoever reads the JavaScript may run the tick".
+- Both checks are mandatory. Keep JWT verification to reject requests without a bearer credential. Before any database work, the handler must also compare `x-scheduler-secret` with the Vault value using a constant-time comparison, whose duration does not reveal which characters match. If the configured secret is missing, refuse the request. This second check prevents anyone with the public browser key from running the tick.
 - `pg_cron` sends both: `Authorization: Bearer` from a Vault secret named `service_role_key`, and `x-scheduler-secret` from one named `scheduler_secret`. Neither literal appears in a migration, because migrations are committed.
 - A 401 in `cron.job_run_details` means the credential is wrong, not that the function is broken. Check there first.
-- `pg_cron` schedules in the database's timezone (UTC). Write the expression in UTC and put the IST equivalent in a comment beside it, as above — and **check the arithmetic**: an hours field like `3-10` covers every minute of hours 3 through 10 inclusive (03:00–10:59 UTC), not 03:00–10:00.
-- **The cron window is never the market-hours check.** It exists to stop the job burning quota overnight. Whether the market is actually open is decided by `isTradingSession()` inside the function, against an IST clock and an NSE holiday calendar, before any quote write, limit match, or square-off. A cron expression cannot encode trading holidays, so trusting one guarantees the job trades on Republic Day.
+- Write `pg_cron` schedules in the database timezone, UTC, and comment the IST equivalent. Check the conversion: `3-10` includes every minute from 03:00 through 10:59 UTC, not just through 10:00.
+- The cron window saves quota overnight; it does not establish that the market is open. Before any quote write, limit match or square-off, `isTradingSession()` must check the IST clock and NSE holiday calendar. The cron expression cannot encode trading holidays and would otherwise allow work on Republic Day.
 - Keep the holiday list in a `market_holidays` table rather than a hardcoded array — NSE publishes it annually and it changes every year.
 - Check `cron.job_run_details` when a job appears not to fire; `pg_net` failures are recorded there, not in the Edge Function logs.
 - Unschedule with `cron.unschedule('market-tick')` inside a migration — never leave a stale job pointing at a deleted function.
@@ -259,15 +275,15 @@ positions. It must not be callable by anyone who merely knows the URL.
 
 ## Next.js 16
 
-**Check first:** Context7 `/vercel/next.js`, then https://nextjs.org/docs
+Check first: Context7 `/vercel/next.js`, then https://nextjs.org/docs
 
 Version 16.3.1.
 
 ### Error and loading boundaries
 
-**Checked against Context7, 2026-09-12 (F36).**
+Checked against Context7, 2026-09-12 (F36).
 
-`error.tsx` receives **three** props, not two — `error`, `reset` **and** `retry`:
+`error.tsx` receives three props: `error`, `reset` and `retry`. A boundary is the component that displays a fallback when a child fails:
 
 ```tsx
 'use client' // error boundaries must be Client Components
@@ -283,11 +299,11 @@ export default function ErrorPage({
 }
 ```
 
-- **`reset()` only resets the boundary**; **`retry()` calls `router.refresh()` first, then resets.** For a segment whose *server-side* data read threw, `reset` re-renders the same failed payload — a retry button that visibly does nothing. Use `retry` wherever the failure came from the server, which in this project is everywhere.
-- A boundary catches errors in its **children**, never in its own segment's `layout.tsx`. A layout that throws is caught by the boundary *above* it — so `(terminal)/layout.tsx` throwing surfaces at `src/app/error.tsx`, with no terminal chrome.
-- `global-error.tsx` replaces the **root layout**, so it must declare its own `<html>` and `<body>` and import `globals.css` itself. It cannot reach `next/font` variables or any provider the root layout renders.
+- `reset()` only resets the boundary. `retry()` calls `router.refresh()` first, then resets. After a server data read fails, `reset` reuses the failed payload, so its button appears to do nothing. Use `retry` for this project's server read failures.
+- A boundary catches errors from children, not its own segment's `layout.tsx`. A failure in `(terminal)/layout.tsx` reaches the boundary above it, `src/app/error.tsx`, without the terminal header or sidebar.
+- `global-error.tsx` replaces the root layout, so it must declare its own `<html>` and `<body>` and import `globals.css` itself. It cannot reach `next/font` variables or any provider the root layout renders.
 - `loading.tsx` wraps the segment in a `<Suspense>` boundary automatically; each nested segment gets its own, so siblings stream independently.
-- During **static generation** an error caught by `error.tsx` is re-thrown by `handleISRError` and fails the build. It renders normally on a request or an ISR revalidation. Terminal routes are all dynamic, so this does not bite here — but it is why a boundary cannot be relied on to paper over a prerender failure.
+- During static generation (rendering pages at build time), `handleISRError` rethrows an error caught by `error.tsx`, causing the build to fail. The fallback renders normally during a request or ISR revalidation (refreshing a cached page). Terminal routes render dynamically, but a boundary still cannot hide a build-time rendering failure.
 
 ### Proxy (formerly middleware)
 
@@ -296,25 +312,32 @@ export default function ErrorPage({
 npx @next/codemod@canary middleware-to-proxy .
 ```
 
-The file is `src/proxy.ts`, the export is `proxy`, and the full implementation is the golden pattern in
-`architecture/patterns.md` → Key Patterns.
+Use `src/proxy.ts` with an export named `proxy`. This code runs before the request reaches a page.
+The full implementation is in `architecture/patterns.md` → Key Patterns.
 
-**Rules:**
+Rules:
 
 - `middleware.ts` is deprecated in Next.js 16 — this project uses `proxy.ts` only, with a named `proxy` export.
-- The proxy runs on the **Node.js runtime and that is not configurable**; the edge runtime is unavailable there. Do not add a `runtime` export to it.
+- The proxy runs on Node.js. This is not configurable, and the edge runtime is unavailable there. Do not add a `runtime` export.
 - `cookies()`, `headers()`, `params`, and `searchParams` are all async — `await` every one.
-- Route handlers exist only at `/auth/callback` and `/api/health`. Everything else that mutates is a Server Action.
+- Route handlers are limited to `/auth/callback`, `/api/health` and the read-only `/reports/export` file download (F34). Application mutations use Server Actions; the explicit exceptions are listed in `code-standards.md`.
 
 ---
 
 ## Tailwind CSS v4
 
-**Check first:** Context7 `/tailwindlabs/tailwindcss.com`, then https://tailwindcss.com/docs/installation/framework-guides/nextjs
+Check first: Context7 `/tailwindlabs/tailwindcss.com`, then https://tailwindcss.com/docs/installation/framework-guides/nextjs
 
-Version 4.3.3. There is **no `tailwind.config.js`** in v4 — configuration is CSS.
+Version 4.3.3. This project configures Tailwind v4 in CSS, with no `tailwind.config.js`.
+Design tokens are named CSS values that generate utilities such as `bg-surface`.
 
 ### Setup
+
+The CSS example below records the original token set. The app's complete token definitions are
+in `src/app/globals.css`; use those when implementing UI. Later accessibility changes (F38)
+add theme-aware `--color-up-text` / `--color-down-text` and light-theme muted tones. The fixed
+`--color-up` / `--color-down` values below remain valid for fills, not price text. Read the rules
+and adaptations after the example before copying it.
 
 ```js
 // postcss.config.mjs
@@ -428,33 +451,34 @@ const plex = IBM_Plex_Sans({
 })
 ```
 
-**Rules:**
+Rules:
 
 - Never create `tailwind.config.js`. Any request to "add a colour to the config" means adding a token under `@theme` in `globals.css`.
 - `@import "tailwindcss"` replaces the three `@tailwind` directives; never write `@tailwind base`.
-- **Dark is the base theme, not a variant.** The dark values live on bare `:root` via `@theme`, and `.light` overrides them. `next-themes` runs with `attribute="class"` and `defaultTheme="dark"`. Because of this inversion there is a `light:` variant and **no `dark:` variant** — components must not write `dark:` colour utilities. They use tokens, and the tokens flip.
-- **`next-themes` accepts no server-supplied theme.** Its injected script reads `localStorage` and `setTheme` is the only write path, so a theme stored per *account* has to be applied client-side after mount — `ThemeSync` does this once per full load. `unoptimized` on `next/image` likewise returns before the default loader runs, which is why `ProfileAvatar` does not set it: the `remotePatterns` allowlist is only checked inside that loader. (F35)
-- Every colour in a component comes from a `--color-*` token (`bg-surface`, `text-muted`, `border-hairline`). **No raw hex in `className`, ever** — the theme swap depends entirely on tokens.
-- **Fixed semantic mappings, identical across the whole app:** gain / up-tick is `text-up`, loss / down-tick is `text-down`, and the primary action of any screen is `bg-brand text-on-brand`. Never repurpose `--color-up` or `--color-down` for decoration, category encoding, or a non-price meaning.
-- **One accent only.** There is no secondary brand colour. If a design seems to need one, it needs hierarchy instead — surface elevation, muted text, or a hairline.
-- Numbers render in `font-numeric` with `tabular-nums`: prices, quantities, P&L, percentages, stat counters. Editorial text renders in `font-sans`. Mixing them is not optional — the split is what gives the interface its trading-terminal character.
-- Depth comes from **flat colour blocks and 1px hairlines**, not shadows. The only shadow in the system is the focus ring, `0 0 0 2px --color-info` at 50% alpha. No glassmorphism, no gradient surfaces.
+- Dark values are the default on `:root`, defined through `@theme`. `.light` overrides them. `next-themes` uses `attribute="class"` and `defaultTheme="dark"`. Use tokens that change with the theme. The project provides `light:` for explicit exceptions; do not write `dark:` colour utilities.
+- `next-themes` reads the browser's `localStorage` and writes through `setTheme`; it does not accept a server-supplied theme. `ThemeSync` therefore applies the account preference after mounting, once per full page load. Separately, `ProfileAvatar` must not set `next/image`'s `unoptimized`: that option skips the default loader and its `remotePatterns` allowlist check. (F35)
+- Every colour in a component comes from a `--color-*` token (`bg-surface`, `text-muted`, `border-hairline`). No raw hex in `className`, ever — the theme swap depends entirely on tokens.
+- Keep price-direction meanings consistent: gains use `text-up-text`, losses use `text-down-text`. The earlier `text-up` / `text-down` foreground mapping was replaced in F38 because its contrast failed. `--color-up` / `--color-down` remain the fixed fill colours for candles, filled trading buttons and status dots. Never use them for decoration, chart categories or another meaning. The primary action remains `bg-brand text-on-brand`.
+- Use one brand accent. Create visual hierarchy with lighter surfaces, muted text or thin borders rather than adding a second brand colour.
+- Use `font-numeric` with `tabular-nums` for prices, quantities, profit and loss (P&L), percentages and statistics. Equal-width digits align in columns. Use `font-sans` for reading text.
+- Separate surfaces with flat colour blocks and 1px borders. The only shadow is the keyboard focus ring, `0 0 0 2px --color-info` at 50% alpha. Do not add blurred translucent panels (glassmorphism) or gradient surfaces.
 - Radius: `--radius-sm` for dense in-table buttons, `--radius-md` for standard CTAs and inputs, `--radius-lg` for cards and search, `--radius-xl` for elevated containers. Pill radius (`rounded-full`) is reserved for the top-of-page sign-up action and nothing else.
-- Vertical rhythm between marketing bands is `--spacing-section` (80px), uniform — the system uses contrast rather than variable whitespace to separate sections.
+- Keep vertical spacing between marketing sections uniform at `--spacing-section` (80px). Use colour contrast to separate them.
 
 ### Adapting the system to this project
 
-`context/DESIGN.md` is the source system. Three deliberate deviations, each with a reason:
+`context/DESIGN.md` describes the reference system. ZerodhaRebuild adapts it as follows:
 
-- **Branding is ZerodhaRebuild's, not Binance's.** Tokens, type scale, spacing, elevation and component shapes are adopted; the wordmark, product names, marketing copy and claims are not. Reproducing another company's live brand on a public portfolio site is a trademark problem, and the same call was already made for Zerodha.
-- **Fonts are substituted**, per DESIGN.md's own substitution note: **Inter** for BinanceNova, **IBM Plex Sans** for BinancePlex. Both are on Google Fonts and load through `next/font`. Plex is chosen over JetBrains Mono because dense P&L cards read better in humanist proportions than in monospace, and `tabular-nums` recovers the column alignment. Reduce display line-height by ~3% against the DESIGN.md figures to match BinanceNova's tighter cap height.
-- **Both the marketing site and the terminal default to dark.** DESIGN.md maps marketing to dark and transactional surfaces to light; a trading terminal belongs on the dark canvas, so light becomes a user preference stored in `profiles.theme` rather than a per-surface rule.
+- Use ZerodhaRebuild branding. Adopt the colours, type sizes, spacing, surface levels and component shapes, but not Binance's wordmark, product names, marketing copy or claims. The project made the same choice for Zerodha to avoid presenting another company's brand as its own on a public portfolio site.
+- Substitute Inter for BinanceNova and IBM Plex Sans for BinancePlex, as allowed by DESIGN.md. Load both from Google Fonts through `next/font`. IBM Plex Sans has more natural letter proportions than JetBrains Mono for dense P&L cards; `tabular-nums` still aligns digits. Reduce display line-height by ~3% from DESIGN.md to match BinanceNova's tighter capital-letter height.
+- Default both the marketing site and terminal to dark. DESIGN.md changes theme by page type; this project instead stores the user's light/dark preference in `profiles.theme`.
+- Accessibility changes override reference styling. Price figures use `--color-up-text` / `--color-down-text`, which change by theme; the original green/red remain fills. Inline links in text blocks have a persistent underline (F04). Brand-yellow text uses `text-brand light:text-ink` except on decorative `aria-hidden` glyphs; `--color-info` is a focus-ring colour, not a normal text colour. Muted tones change in `.light`, and paragraph copy uses `--color-body`, not `--color-muted`. See `constraints.md` → Theming for the measured contrast rules (F38).
 
 ---
 
 ## shadcn/ui
 
-**Check first:** https://ui.shadcn.com/docs — CLI version 4.18.0.
+Check first: https://ui.shadcn.com/docs — CLI version 4.18.0.
 
 ### Setup
 
@@ -470,55 +494,57 @@ pnpm dlx shadcn@4.18.0 add button dialog dropdown-menu tabs input select command
 #   yes n | pnpm dlx shadcn@4.18.0 add sheet
 ```
 
-`init` writes `components.json`, creates `src/lib/utils.ts`, **rewrites `globals.css`**, and
-**injects Geist into the root layout** — the last two must be reverted, since this project's tokens
-and fonts are its own.
+`init` writes `components.json`, creates `src/lib/utils.ts`, replaces `globals.css` and adds Geist
+to the root layout. Revert the last two changes to preserve this project's tokens and fonts.
 
-`shadcn` is a **runtime dependency**, not only a CLI: `globals.css` imports `shadcn/tailwind.css`
-for the scroll-fade, shimmer and no-scrollbar utilities its components use. It defines no colour
-tokens, so it does not collide with the palette.
+Keep `shadcn` as a runtime dependency, not just a command-line tool (CLI). `globals.css` imports
+`shadcn/tailwind.css` for the components' scroll-fade, shimmer and no-scrollbar utilities. That
+stylesheet defines no colour tokens, so it does not conflict with the palette.
 
-**Rules:**
+Rules:
 
-- Components land in `src/components/ui/` and are **ours** — restyle them freely to match the system's density: `--text-body` (14px) defaults, `--radius-md` corners, 1px `--color-hairline` borders, 40px control height.
-- Change styling, never a component's public API. A `Button` that takes different props than upstream breaks every future `shadcn add`.
+- Components are copied into `src/components/ui/` and belong to this project. Restyle them for the compact layout: `--text-body` (14px), `--radius-md` corners, 1px `--color-hairline` borders and 40px control height.
+- Change styles without changing the component's public props. A `Button` accepting different props from the upstream version breaks future `shadcn add` updates.
 - No domain logic and no Supabase imports inside `src/components/ui/`. Trading components compose these primitives from `src/components/terminal/`.
 - The order ticket is a `Dialog`; stock search is `Command`; Orders page tabs are `Tabs`; notifications are `sonner`, not the deprecated shadcn toast.
 
 ### The token bridge — run this on every `shadcn add`
 
-shadcn's components are written against their own token vocabulary. `globals.css` carries a
-`@theme inline` bridge mapping it onto this project's palette, so most components work untouched.
-Three things still need doing by hand after every add, and a component that skips them fails
-silently rather than loudly:
+shadcn components expect different token names. The `@theme inline` block in `globals.css`
+maps those names to this project's palette. After every add, make the class and custom-property
+changes below; skipping them can produce incorrect styling without an error:
 
-| Found in an added component | Rewrite to | Why |
-| --- | --- | --- |
-| `dark:*` (any utility) | delete it | Tailwind v4 binds `dark:` to `prefers-color-scheme`. This project's dark is the *base* and `.light` overrides, so a `dark:` class would follow the visitor's OS instead of the theme. The variant is also redefined to match nothing, so these are inert — but they must still go |
-| `bg-muted`, `bg-muted/50` | `bg-surface-elevated` | shadcn means a *surface* by `muted`; this project means the *text* grey. `--color-muted` is deliberately absent from the bridge for exactly this reason |
-| `var(--secondary)` | `var(--color-surface-elevated)` | Bare custom properties are **not** defined here. Our tokens are `--color-*` via `@theme`, so each of these resolves to nothing |
-| `var(--foreground)` | `var(--color-body)` | as above |
-| `var(--popover)` | `var(--color-surface)` | as above |
-| `var(--popover-foreground)` | `var(--color-body)` | as above |
-| `var(--border)` | `var(--color-hairline)` | as above |
-| `var(--radius)` | `var(--radius-lg)` | this project defines `--radius-xs…xl`, never a bare `--radius` |
+| Found in an added component | Rewrite to                      | Why                                                                                                                                                                                                                                                                               |
+| --------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dark:*` (any utility)      | delete it                       | Tailwind v4 binds `dark:` to `prefers-color-scheme`. This project's dark is the _base_ and `.light` overrides, so a `dark:` class would follow the visitor's OS instead of the theme. The variant is also redefined to match nothing, so these are inert — but they must still go |
+| `bg-muted`, `bg-muted/50`   | `bg-surface-elevated`           | shadcn means a _surface_ by `muted`; this project means the _text_ grey. `--color-muted` is deliberately absent from the bridge for exactly this reason                                                                                                                           |
+| `var(--secondary)`          | `var(--color-surface-elevated)` | Bare custom properties are not defined here. Our tokens are `--color-*` via `@theme`, so each of these resolves to nothing                                                                                                                                                        |
+| `var(--foreground)`         | `var(--color-body)`             | as above                                                                                                                                                                                                                                                                          |
+| `var(--popover)`            | `var(--color-surface)`          | as above                                                                                                                                                                                                                                                                          |
+| `var(--popover-foreground)` | `var(--color-body)`             | as above                                                                                                                                                                                                                                                                          |
+| `var(--border)`             | `var(--color-hairline)`         | as above                                                                                                                                                                                                                                                                          |
+| `var(--radius)`             | `var(--radius-lg)`              | this project defines `--radius-xs…xl`, never a bare `--radius`                                                                                                                                                                                                                    |
 
-`var(--radius-md)` and friends **are** defined and need no rewrite.
+`var(--radius-md)` and friends are defined and need no rewrite.
 
 Density pass on controls: `h-8`/`h-9` → `h-10` (40px), `rounded-lg` → `rounded-md` (6px),
 `border-input` → `border-hairline`.
 
-**Scope any bulk rewrite to double-quoted string literals.** A whitespace regex run over a whole
-source file mangles the code around the class strings — this cost a full regeneration once already.
+Limit any bulk rewrite to double-quoted string literals. A whitespace-based regular expression
+applied to the whole file can damage code around the class strings; that previously required
+regenerating the components.
 
 - `text-muted-foreground` needs no rewrite: the bridge aliases it to this project's `--color-muted`.
-- **Overriding a variant-prefixed class needs the same prefix.** Several primitives style themselves through attribute variants — `sheet` sizes itself with `data-[side=right]:w-3/4`. A plain `w-full` passed via `className` loses on specificity and is silently ignored, because `tailwind-merge` treats the two as different keys and keeps both. Write `data-[side=right]:w-full`. This fails visually rather than loudly, so check the rendered width, not the class list (F03).
+- Match the prefix when overriding a conditional class. For example, `sheet` uses `data-[side=right]:w-3/4`. A plain `w-full` in `className` does not override it: the conditional rule is more specific, and `tailwind-merge` retains both. Use `data-[side=right]:w-full`, then check the displayed width. The class list alone cannot prove the override worked. (F03)
 
 ---
 
 ## Zustand
 
-**Check first:** Context7 `/pmndrs/zustand` — version 5.0.15.
+Check first: Context7 `/pmndrs/zustand` — version 5.0.15.
+
+Zustand stores the browser's current quote values and lets components subscribe to the values they need.
+It does not own account balances or other database state.
 
 ### Setup
 
@@ -583,21 +609,21 @@ const { ltp, direction } = useQuoteStore(
 )
 ```
 
-**Rules:**
+Rules:
 
-- Never call `useQuoteStore()` with no selector in a component. The store updates several times a second; an unselected subscription re-renders the entire terminal on every tick.
-- Selectors returning a new object or array **must** be wrapped in `useShallow` — this is a v5 requirement and the most common cause of infinite render loops here.
-- The store holds live prices only. Orders, holdings, funds and positions are server state and never enter Zustand.
-- **`ltp` may be interpolated; `anchor` never is.** The order ticket, order confirmation, stock detail header, and every monetary total read `anchor`. Only ambient surfaces read `ltp`, and today that is the watchlist alone. **The dashboard summary tiles are not among them** — they are monetary totals, and F21 resolved `architecture.md`'s contradiction on that point in the invariant's favour.
-- Never store a derived `source` in the store. Compute it on render with `deriveSource(provider, providerTs, new Date())`; freshness changes with the clock, so a stored value goes wrong without any state change.
-- The interpolation loop runs in exactly one `requestAnimationFrame` driver mounted once in the terminal layout — never one per row.
+- Always pass a selector to `useQuoteStore()` in a component. A selector chooses the part of the store that component watches. Without one, each of the several updates per second re-renders the whole terminal.
+- Wrap selectors that return a new object or array in `useShallow`. It compares the selected values rather than the newly created container. Zustand v5 requires this to avoid repeated or infinite rendering here.
+- The store holds current quote values only. Orders, holdings, funds and positions are server state and never enter Zustand.
+- `ltp` (last traded price) may include browser interpolation; `anchor` always remains the last server price. The order ticket, confirmation, stock-detail header and every monetary total read `anchor`. Only the watchlist reads the moving `ltp` for visual updates. Dashboard summary tiles are monetary totals and therefore use `anchor`; F21 resolved the earlier architecture contradiction in favour of that invariant.
+- Compute `source` while rendering with `deriveSource(provider, providerTs, new Date())`; do not store it. Quote freshness changes as time passes, even when the store has not received another update.
+- Run the interpolation loop in one `requestAnimationFrame` driver, mounted once in the terminal layout. Do not create a loop for each row.
 - Read outside React with `useQuoteStore.getState()`; never subscribe from a non-component module.
 
 ---
 
 ## Quote providers
 
-**Check first:** these are undocumented public endpoints. Verify the live response shape with `curl` before writing a parser, and re-verify whenever parsing starts failing.
+Check first: these public endpoints are undocumented. Before writing a parser, inspect a live response with `curl`; repeat that check if parsing fails. The external-provider examples below are retained reference only. The shipped chain uses the simulator alone (6.00.05).
 
 ### Yahoo Finance — primary, keyless
 
@@ -634,40 +660,39 @@ const YahooChartSchema = z.object({
 })
 ```
 
-**Rules:**
+Rules:
 
-- **One symbol per request.** The batched `v7/finance/quote` and `v7/finance/spark` endpoints return `429` — they are crumb-walled and must not be used.
-- Yahoo rate-limits aggressively per IP: a burst of 8 sequential requests returned seven `429`s. Stagger requests, cap each tick at `MAX_SYMBOLS_PER_TICK`, and trip the circuit breaker for 5 minutes on the first `429`.
+- Request one symbol at a time. The batched `v7/finance/quote` and `v7/finance/spark` endpoints returned `429` and require Yahoo's session verification (a "crumb"); do not use them.
+- Yahoo limits requests by IP address: a burst of 8 sequential requests produced seven `429`s. If this provider is ever enabled, stagger requests, cap each tick at `MAX_SYMBOLS_PER_TICK`, and open the circuit breaker for 5 minutes after the first `429`. The breaker temporarily stops requests to a failing provider.
 - Send a realistic browser `User-Agent`; requests without one are refused more often.
-- Map NSE symbols to Yahoo symbols through `instruments.yahoo_symbol`, never by appending `.NS` in code — some symbols do not follow the pattern.
-- Map NSE symbols to Yahoo symbols through `instruments.yahoo_symbol` (see the rule above); the same mapping serves candles.
+- Use `instruments.yahoo_symbol` to map NSE symbols to Yahoo symbols for both quotes and candles. Do not append `.NS` in code; some symbols use a different pattern.
 
 ### Yahoo Finance — historical candles
 
-The same `v8/finance/chart` endpoint returns OHLC series when given `interval` and `range`. One request
+The same `v8/finance/chart` endpoint returns OHLC (open, high, low, close) price series when given `interval` and `range`. One request
 per symbol per interval, subject to the same rate limiter and circuit breaker as quotes.
 
-| UI range | `interval` | `range` | Stored as |
-| -------- | ---------- | ------- | --------- |
-| 1D | `5m` | `1d` | `FIVE_MIN` |
-| 1W | `30m` | `5d` | `THIRTY_MIN` |
-| 1M | `1d` | `1y` | `ONE_DAY` |
-| 1Y | `1d` | `1y` | `ONE_DAY` |
+| UI range | `interval` | `range` | Stored as    |
+| -------- | ---------- | ------- | ------------ |
+| 1D       | `5m`       | `1d`    | `FIVE_MIN`   |
+| 1W       | `30m`      | `5d`    | `THIRTY_MIN` |
+| 1M       | `1d`       | `1y`    | `ONE_DAY`    |
+| 1Y       | `1d`       | `1y`    | `ONE_DAY`    |
 
 1M and 1Y are served from one stored daily series — fetch `range=1y` once and window it, rather than
 issuing two requests for overlapping data.
 
-**Rules:**
+Rules:
 
-- **TODO: verify the candle response shape with a live request before implementing the parser.** The expected location is `chart.result[0].timestamp[]` alongside parallel arrays in `chart.result[0].indicators.quote[0]` (`open`, `high`, `low`, `close`, `volume`), but **three attempts to confirm it were rate-limited (HTTP 429)** and nothing about this shape has been verified. Write the Zod schema from an observed response, not from this table.
-- Candle arrays are **parallel and sparse**: entries can be `null` for gaps and halts. Drop any index where `close` is null rather than forward-filling — an invented candle is worse than a shorter series.
-- Times are unix **seconds**. Lightweight Charts wants seconds for intraday and `'YYYY-MM-DD'` strings for daily; convert at the boundary, per the Lightweight Charts rules below.
-- A failed or rate-limited candle fetch serves the existing cached rows with their true age shown. Never render an empty chart when stale data exists, and never synthesise candles to fill a gap in a real series — the simulator produces a whole series or nothing.
+- TODO: verify the candle response with a live request before implementing a parser. The expected shape is `chart.result[0].timestamp[]` with parallel `open`, `high`, `low`, `close`, `volume` arrays in `chart.result[0].indicators.quote[0]`. Three verification attempts received HTTP 429, so this shape remains unverified. Write the Zod schema from an observed response rather than this table.
+- Candle arrays use matching indexes for each timestamp, but may contain `null` during gaps or trading halts. Drop any index with a null `close`; do not fill it with the previous value and invent a candle.
+- Times are unix seconds. Lightweight Charts wants seconds for intraday and `'YYYY-MM-DD'` strings for daily; convert at the boundary, per the Lightweight Charts rules below.
+- If a candle request fails or is rate-limited, show cached rows and their true age. Keep stale data visible instead of an empty chart. Do not invent candles to patch gaps in a real series; the simulator supplies a whole series or none.
 - NSE's own API (`nseindia.com/api/equity-stockIndices`) is behind an Akamai bot wall and returned `403` even with cookie priming. Do not build against it.
 
 ### Twelve Data — optional secondary
 
-**Verified against the live API on 2026-08-21 with a real free-tier key, and the result is disqualifying: the free plan does not carry NSE symbols at all.**
+Live verification on 2026-08-21 with a free-tier key found that the free plan provides no NSE symbols:
 
 ```
 GET https://api.twelvedata.com/quote?symbol=AAPL&apikey=…
@@ -680,24 +705,27 @@ GET https://api.twelvedata.com/quote?symbol=RELIANCE&apikey=…      → same 40
 GET https://api.twelvedata.com/quote?symbol=RELIANCE.NS&apikey=…   → 404, invalid symbol format
 ```
 
-The US control proves the key and the endpoint shape are fine, so this is a **plan entitlement**, not a symbol-format problem. Every instrument this project trades is on NSE, so a free-tier Twelve Data provider can serve **none** of them.
+The successful US request confirmed that the key and endpoint worked. Access to NSE symbols depends on the paid plan, not the spelling of the symbol. Since this project trades only NSE instruments, the free tier serves none of them.
 
-- **Rate limits, confirmed from the account and from response headers**: 8 requests per minute, 800 API credits per day. `/quote` costs 1 credit per symbol; responses carry `api-credits-used`, `api-credits-left` and `api-credits-request`. Even with NSE access, 800/day cannot sustain a one-minute tick across a ~375-minute session — that is ~2 requests per minute sustained, for ~200 symbols.
-- **Decided (6.00.05): the chain is the simulator alone.** Twelve Data is unusable on its free plan and Yahoo is out of scope, so no external provider is wired and every quote badges `SIMULATED`. `architecture.md`'s stack table and `project-overview.md`'s scope both say so. The sections below are kept as reference for a provider that might land later, not as a description of what runs.
-- The provider must report `isAvailable() === false` when `TWELVE_DATA_API_KEY` is unset, so the chain skips it silently. On the free plan it would also have to report false **with** a key set, since the key entitles nothing this project can use.
+- Rate limits, confirmed from the account and from response headers: 8 requests per minute, 800 API credits per day. `/quote` costs 1 credit per symbol; responses carry `api-credits-used`, `api-credits-left` and `api-credits-request`. Even with NSE access, 800/day cannot sustain a one-minute tick across a ~375-minute session — that is ~2 requests per minute sustained, for ~200 symbols.
+- The scope decision in 6.00.05 makes the simulator the entire quote chain. Twelve Data's free tier cannot serve NSE and Yahoo is out of scope. No external provider is connected; every quote displays `SIMULATED`. See the stack in `architecture.md` and scope in `project-overview.md`. External-provider material in this file remains reference for possible future work.
+- The provider must report `isAvailable() === false` when `TWELVE_DATA_API_KEY` is unset, so the chain skips it silently. On the free plan it would also have to report false with a key set, since the key entitles nothing this project can use.
 
 ### Simulator — final fallback, always available
 
-- **The walk's starting point and the band's anchor are two different things**, and conflating them removes the band. It *starts* from the last known `quotes.ltp`, falling back to `instruments.prev_close`; it is *clamped* to ±5% of `quotes.prev_close`, falling back to that same seed only on a cold start.
-- "Per session" is load-bearing. `quotes.prev_close` is rolled at the first in-session tick by `roll_previous_close()`, so each session's band is measured from the previous session's close. Anchoring on `instruments.prev_close` instead — which never moves — pins every price within 5% of the day the universe was seeded, forever; anchoring on the *last price* removes the bound altogether, because the band then re-centres on the walk every tick.
-- A symbol with no previous close at all is **declined**, not walked unbounded. `isAvailable` reports false for it.
-- Always writes `provider = 'SIMULATOR'` and a null `provider_ts`, which `deriveSource()` renders as `SIMULATED`. Never label simulated data as anything else — the badge is the project's honesty guarantee.
+- The random walk starts from the last `quotes.ltp`, or `instruments.prev_close` if no quote exists. Its allowed range is separate: clamp it to ±5% of `quotes.prev_close`, using the same seed only on a cold start. Do not use the walk's changing starting price as the centre of that range.
+- The range resets per trading session. `roll_previous_close()` updates `quotes.prev_close` at the first in-session tick, so the range uses the previous session's close. Using the fixed `instruments.prev_close` forever traps prices within 5% of the original seed. Using the latest price instead lets the range move every tick and removes the overall bound.
+- If a symbol has no previous close, `isAvailable` reports false. Do not generate an unbounded price walk.
+- Always write `provider = 'SIMULATOR'` and null `provider_ts`. `deriveSource()` displays that provenance (where the price came from) as `SIMULATED`. Never label it as another source.
 
 ---
 
 ## Zod
 
-**Check first:** Context7 `/colinhacks/zod` — version 4.4.3.
+Check first: Context7 `/colinhacks/zod` — version 4.4.3.
+
+A Zod schema defines the fields and valid values expected from a form or external response.
+Validation checks the actual input against that definition before the app uses it.
 
 ### Setup
 
@@ -722,18 +750,21 @@ export const placeOrderSchema = z
 export type PlaceOrderInput = z.infer<typeof placeOrderSchema>
 ```
 
-**Rules:**
+Rules:
 
-- Server Actions use `safeParse` and return the standard error shape. Never `parse` in an action — a throw becomes an opaque production digest.
+- Use `safeParse` in Server Actions and return the standard error shape. `parse` throws on invalid input; in production the user would receive an unreadable error identifier instead of a useful validation message.
 - Form number fields need `z.coerce.number()`; HTML inputs hand over strings.
 - Cross-field rules (limit price required for limit orders) belong in `.refine()` on the schema, not in the component.
-- Every upstream API response gets a schema. A provider whose shape drifted must fail its parse and fall through the chain, not write garbage into `quotes`.
+- Validate every upstream API response with a schema. If a provider changes its response format, parsing must fail and the chain must try its next provider rather than write invalid data into `quotes`.
 
 ---
 
 ## react-hook-form + @hookform/resolvers
 
-**Check first:** Context7 `/react-hook-form/resolvers` — `react-hook-form` 7.85.0, `@hookform/resolvers` 5.9.1.
+Check first: Context7 `/react-hook-form/resolvers` — `react-hook-form` 7.85.0, `@hookform/resolvers` 5.9.1.
+
+`react-hook-form` tracks form fields, errors and submission state. The resolver connects it to
+the Zod schema so both browser and server can use the same validation rules.
 
 ### Setup
 
@@ -763,20 +794,26 @@ export function OrderTicket({ symbol }: { symbol: string }) {
 }
 ```
 
-**Rules:**
+Rules:
 
 - `@hookform/resolvers` v5 detects Zod 4 schemas automatically — keep using `zodResolver` from `@hookform/resolvers/zod`. (`standardSchemaResolver` from `@hookform/resolvers/standard-schema` also works; do not mix both in one codebase.)
 - Register numeric inputs with `{ valueAsNumber: true }` or let `z.coerce.number()` handle it — never both, or the field becomes `NaN`.
-- Client validation is convenience only. The Server Action re-validates with the same schema, and the database re-checks margin. Never treat a passing form as authorisation.
-- Disable the submit button on `isSubmitting` — a double-submitted market order would place two real orders.
+- Browser validation helps the user fill out the form. The Server Action must validate again with the same schema, and the database must check margin. A valid form does not grant permission to trade.
+- Disable the submit button while `isSubmitting`. Submitting twice would create two paper-trading orders.
 
 ---
 
 ## Recharts
 
-**Check first:** Context7 `/recharts/recharts` — version 3.10.1.
+Check first: Context7 `/recharts/recharts` — version 3.10.1.
+
+Recharts renders summary charts from data supplied by the page. The holdings donut shows each
+holding's share of the portfolio; it does not calculate the portfolio totals.
 
 ### Top-10 holdings donut
+
+The example shows the chart's structure. Its `props.index` access is abbreviated: the type allows
+`undefined`, so the implementation must supply a default before indexing, as the rules below require.
 
 ```tsx
 'use client'
@@ -810,26 +847,29 @@ export function HoldingsDonut({ data }: { data: { name: string; value: number }[
 }
 ```
 
-**Rules:**
+Rules:
 
 - Use the `shape` prop with a `PieSectorShapeProps` component for per-slice colour. `<Cell>` is the legacy approach in Recharts 3 and is being replaced. `props.index` is optional on that type — default it before indexing the ramp.
-- **`<Tooltip formatter={(value: number) => …}>` does not typecheck**, though an earlier draft of this file showed it that way. Recharts 3 types the value as `ValueType | undefined`; narrow inside the callback. (F21)
+- Do not write `<Tooltip formatter={(value: number) => …}>`. Recharts 3 passes `ValueType | undefined`; check the value's type inside the callback before formatting it. The earlier annotation failed typechecking. (F21)
 - `ResponsiveContainer` needs a parent with a definite height; give the wrapper an explicit `h-[280px]`, or the chart collapses to zero.
 - Every Recharts component is client-side — the chart file carries `'use client'`, and the page passes it plain serialisable data.
 - Compute the top ten and the "Others" bucket on the server; the chart component never aggregates.
 - Colours come from the `--color-chart-*` tokens, not literals, so the donut re-themes with the app.
-- **Never colour a categorical chart with `--color-up` or `--color-down`.** They mean "price rose" and "price fell" everywhere else in the app; borrowing them for slice identity breaks that contract. Only a chart that genuinely encodes gain versus loss — the P&L breakdown bar — may use them.
-- The ramp is an extension of `DESIGN.md`, which defines no categorical palette. **It was measured before the dashboard shipped and replaced (F21)** — the original ramp failed. Two findings worth keeping:
-  - **`#3b82f6` and `#8b5cf6` were 0.8 apart under a deuteranopia simulation**, which is to say indistinguishable. Blue and violet collapse onto the same point for a deuteranope; the ramp had three colours in that family. The replacement's worst pair is 23.9.
-  - **Hue cannot separate ten categories for a deuteranope** — the discriminable axis is roughly blue↔yellow, and ten hues do not fit on it. The ramp therefore steps *lightness* as well, which is why it holds two blues and two magentas at different depths instead of ten distinct hues.
-- **The binding contrast requirement is against `--color-surface`, not `--color-canvas`.** WCAG 1.4.11's 3:1 applies to graphics *required to understand the content*, and the donut is paired with a data table listing every holding, its value and its share — remove all colour and nothing is lost. What must hold is that no arc dissolves into the card it is drawn on, in either theme, which is a ~1.7:1 floor. Requiring 3:1 against both a white and a near-black canvas forces every colour into one narrow luminance band, which is what pushed an earlier attempt at this ramp into five near-identical oranges.
-- **Never use green or red in this ramp** — not merely `--color-up` and `--color-down` themselves. Any green reads as "up" and any red as "down" to someone scanning a trading screen, whatever the exact hex.
+- Use the categorical palette, which assigns a separate colour to each holding, rather than `--color-up` or `--color-down`. Those two mean "price rose" and "price fell". Only a chart showing gains and losses, such as the P&L breakdown bar, may use them.
+- This colour ramp extends `DESIGN.md`, which has no palette for categories. Measurement before the dashboard shipped found that the original ramp failed, so F21 replaced it. Keep these findings in mind:
+  - `#3b82f6` and `#8b5cf6` measured only 0.8 apart in a deuteranopia simulation (a form of red-green colour blindness), making them indistinguishable. The original ramp had three colours in that blue/violet family. The replacement's closest pair measures 23.9.
+  - Hue alone does not separate ten categories for someone with deuteranopia: the useful colour difference is roughly blue↔yellow. The ramp also varies lightness, using two blues and two magentas at different brightness levels rather than relying on ten distinct hues.
+- Measure the donut against `--color-surface`, the card behind it, rather than `--color-canvas`. WCAG 1.4.11 requires 3:1 for graphics needed to understand content. Here a table also lists every holding, value and share, so the colours carry no information that the table lacks. The project requires each arc to remain visible on its card in both themes, with a ~1.7:1 floor. Requiring 3:1 against both white and near-black forced an earlier palette into a narrow brightness range and produced five almost identical oranges.
+- Keep all greens and reds out of this category palette, not just `--color-up` and `--color-down`. On a trading screen those colours imply a gain or loss even when their hex values differ.
 
 ---
 
 ## Lightweight Charts
 
-**Check first:** Context7 `/websites/tradingview_github_io_lightweight-charts_5_0` — version 5.2.1.
+Check first: Context7 `/websites/tradingview_github_io_lightweight-charts_5_0` — version 5.2.1.
+
+Lightweight Charts draws the stock price chart in a canvas, a browser drawing surface. Each
+candlestick summarizes the opening, highest, lowest and closing prices for one interval.
 
 ### Setup
 
@@ -871,16 +911,16 @@ export function PriceChart({ candles }: { candles: CandleData[] }) {
 }
 ```
 
-**Rules:**
+Rules:
 
 - v5 uses `chart.addSeries(CandlestickSeries, options)`. The v4 helpers (`chart.addCandlestickSeries(...)`) no longer exist — do not copy v4 examples.
 - Always `chart.remove()` in the effect cleanup. The chart is a canvas outside React's tree and leaks on every navigation otherwise.
 - Set `autoSize: true` rather than wiring a manual `ResizeObserver`; the library handles it.
 - The container needs an explicit height class — the chart fills its parent and renders nothing in a zero-height box.
-- `time` is unix **seconds** for intraday and `'YYYY-MM-DD'` strings for daily. Mixing the two in one series silently drops points.
-- **Shift both forms into IST at the render boundary.** The library has no time-zone support and treats every value as UTC — its own docs prescribe shifting the data — so an NSE session drew an axis reading 03:45–10:00 in a browser that was itself in `Asia/Calcutta`. The shifted value is a wall-clock instant for labels only; the true UTC instant stays in `candles.ts`. (F33)
+- `time` is unix seconds for intraday and `'YYYY-MM-DD'` strings for daily. Mixing the two in one series silently drops points.
+- Shift both time formats into IST just before rendering. The library has no timezone support and treats values as UTC; its documented solution is to shift the data. Without that shift, an NSE session displayed 03:45–10:00 even in an `Asia/Calcutta` browser. Shift only the values used for chart labels; retain true UTC timestamps in `candles.ts`. (F33)
 - Theme colours are passed in as resolved values from a `'use client'` wrapper that reads `next-themes` and calls `getComputedStyle(document.documentElement).getPropertyValue('--color-up')` — the chart draws to canvas and cannot resolve CSS variables itself.
 - Re-create or re-apply options when the theme toggles; a chart built under dark tokens keeps them after a switch to light otherwise.
-- Candles use `--color-up` and `--color-down` — this is the one place those tokens are load-bearing rather than semantic decoration.
+- Use `--color-up` and `--color-down` for candles, where colour directly represents the price direction. These are the fixed fill tokens, not the theme-aware price-text tokens.
 
 ---
